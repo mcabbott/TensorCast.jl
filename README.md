@@ -1,6 +1,6 @@
 # TensorSlice.jl
 
-The one macro which slices and dices, squeezes and spices!
+The one macro which slices and dices, squeezes and splices!
 
 It uses easy notation you already know from [`@tensor`](https://github.com/Jutho/TensorOperations.jl)
 and [`@einsum`](https://github.com/ahwillia/Einsum.jl) to express all kinds of reshaping and slicing of tensors, no matter how complicated!
@@ -20,7 +20,7 @@ Slicing works the same way:
 @shape A[i][j] == B[j,i]       # create views A = collect(eachcol(B))
 ```
 
-Only for `=` is it necessary to name the output. And you can combine these operations, to the following extent:
+You only need to name the output if you are writing into it, with `=`. You may also combine these basic operations:
 
 ```julia
 A = @shape [(i,j)] := B[j][i]  # vcat a vector of vectors
