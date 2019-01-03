@@ -1,6 +1,6 @@
 # TensorSlice.jl
 
-The one macro which slices and dices, squeezes and glues!
+The one macro which slices and dices, squeezes and spices!
 
 It uses easy notation you already know from [`@tensor`](https://github.com/Jutho/TensorOperations.jl)
 and [`@einsum`](https://github.com/ahwillia/Einsum.jl) to express all kinds of reshaping and slicing of tensors, no matter how complicated!
@@ -140,6 +140,15 @@ M = rand(Int, 2,3)
 
 M[1,2]=42; N[2,1]==42          # all views of the original matrix
 ```
+
+If they aren't literal integers, such sizes should be fixed by the types.
+For example, this function is about 100x slower if not given `Val(2)`:
+
+```julia
+cols(M::Matrix, ::Val{N}=Val(size(M,1))) where N = @shape A[j]{i} == M[i,j] i:N
+@code_warntype cols(M, Val(2))
+```
+
 <!--
 The re-gluing doesn't really need to be told the dimensions, but giving them tells `@shape` to try.
 Perhaps this should be more explicit... some options:
