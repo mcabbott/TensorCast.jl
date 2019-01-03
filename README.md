@@ -127,7 +127,7 @@ using JuliennedArrays
 
 Second, [StaticArrays.jl](https://github.com/JuliaArrays/StaticArrays.jl) allows us to reinterpret a Matrix as a Vector of SVectors,
 and so on, which is fast for small slices of fixed size.
-This is only possible if fist indices of the array are the indices of the slice (such that they share a memory layout),
+This is only possible if the first indices of the array are the indices of the slice (such that they share a memory layout),
 and if dimensions of the slice are known to the macro (by annotations like `i:2, j:3` again).
 By slight abuse of notation, such slices are written as curly brackets:
 
@@ -141,8 +141,9 @@ M = rand(Int, 2,3)
 M[1,2]=42; N[2,1]==42          # all views of the original matrix
 ```
 
-If they aren't literal integers, such sizes should be fixed by the types.
-For example, this function is about 100x slower if not given `Val(2)`:
+If they aren't literal integers, such sizes ought to be fixed by the types.
+For example, this function is about 100x slower if not given the 
+[value type](https://docs.julialang.org/en/latest/manual/types/index.html#"Value-types"-1) `Val(2)`:
 
 ```julia
 cols(M::Matrix, ::Val{N}=Val(size(M,1))) where N = @shape A[j]{i} == M[i,j] i:N
@@ -206,24 +207,26 @@ BUT these are junk, with `@btime` like 90ms... and above 20μs -> 80ns too...
   so far this happens only for `transpose`, and only for slicing.
   (E.g. `@pretty @shape A[(i,j)] := B[i][j]` could be just `vec(glue(B, (*, :)))`.)
 
-* Now ` @shape A[i]{j} = B[i,j] j;3` is allowed, but in-place writing to (or replacing of) ordinary sub-arrays `A[i][j]` is not.
+* Now `@shape A[i]{j} = B[i,j] j:3` is allowed, but in-place writing to (or replacing of) ordinary sub-arrays `A[i][j]` is not.
 
 * Would be nice if `copyto!(A, glue(B, ...))` could be just use `glue!(A, B, ...)`.
 
 Wishlist:
 
-* Support `+=` and `*=` etc. like [Einsum.jl](https://github.com/ahwillia/Einsum.jl) does, should be fairly easy.
+* Support mutating operators `+=` and `*=` etc. like [Einsum.jl](https://github.com/ahwillia/Einsum.jl) does. Should be fairly easy.
+
+* Add reductions like `sum!(A,B)` and `sum(A, dims=...)`, maybe not so hard.
 
 * Allow constant indices:
 ```julia
 @shape A[i,j] := B[j,3,i]      # allow constants
-@shape A[i,j,$k] = B[j,i]     # ... including k interpolated
+@shape A[i,j,$k] = B[j,i]      # ... including k interpolated
 ```
 
 * Treat reverse, and shifts, in this notation:
 ```julia
 @shape A[i,j] := B[i,-j]       # reverse(B, dims=2)
-@shape A[i,j] = B[i+1,j+3]    # circshift!(A, B, (1,3))
+@shape A[i,j] = B[i+1,j+3]     # circshift!(A, B, (1,3))
 ```
 <!--<img src="as-seen-on-tv.png?raw=true" width="167" height="130" align="right" alt="As Seen On TV!" padding="20">-->
 
