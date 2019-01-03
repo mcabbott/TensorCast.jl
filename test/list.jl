@@ -128,6 +128,11 @@ end
         @test size(first(DEbc)) == (2,3)
         @test first(DEbc) isa StaticArray
 
+        A = rand(3,3,4)
+        @shape B[k]{i,j} == A[i,j,k]  i:3, j:3
+        @shape C[(j,k),i] := B[k][i,j]
+        @test C[1,2] == B[1][2,1] ==  A[2,1,1]
+
     end
 
 end

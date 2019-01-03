@@ -7,7 +7,7 @@ using StaticArrays
     IN = length(tup) # number of dimensions of the slice
     IT = SArray{Tuple{tup...}, T, IN, prod(tup)}
     if finalshape
-        out_sizes = ntuple(d -> size(A,d+N-IN), Val(N-IN)) # reinterpret makes a vector!
+        out_sizes = ntuple(d -> size(A,d+IN), Val(N-IN)) # reinterpret makes a vector!
         reshape(reinterpret(IT, vec(A)), out_sizes)
     else
         println("static_slice without reshape")
