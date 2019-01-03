@@ -60,8 +60,8 @@ To see what's going on, we include (at no extra charge!) another macro which wor
 ```
 
 This is in fact just like the `@macroexpand` you already have, but shinier
-(thanks to animal names from [MacroTools](https://github.com/MikeInnes/MacroTools.jl))
-and less functional (deleting out line number comments, and most module qualifiers).
+(thanks to animal names from [MacroTools.jl](https://github.com/MikeInnes/MacroTools.jl))
+and less functional (deleting line number comments, and most module qualifiers).
 Here `TensorSlice.sliceview(D, (:,:,*)) = collect(eachslice(D, dims=3))`
 using the new  [eachcol & eachrow](https://github.com/JuliaLang/julia/blob/master/HISTORY.md#new-library-functions) functions,
 but allowing also things like `sliceview(D, (:,*,:,*) ≈ eachslice(D, dims=(2,4))`.
@@ -113,7 +113,7 @@ The vector of matrices `C[k][i,j]` also has the same order, if the slices are St
 
 Some of the work will be out-sourced to various clever packages if you load them.
 
-First, [JuliennedArrays](https://github.com/bramtayl/JuliennedArrays.jl) gives fast slices,
+First, [JuliennedArrays.jl](https://github.com/bramtayl/JuliennedArrays.jl) gives fast slices,
 and is also able to re-assemble more complicated slices than something like `reduce(cat,...)` can handle.
 There is no downside to this, perhaps it should be the default:
 
@@ -125,7 +125,7 @@ using JuliennedArrays
 @shape A[i,j,k,l] := B[k,l][i,j]  # error without JuliennedArrays
 ```
 
-Second, [StaticArrays](https://github.com/JuliaArrays/StaticArrays.jl) allows us to reinterpret a Matrix as a Vector of SVectors,
+Second, [StaticArrays.jl](https://github.com/JuliaArrays/StaticArrays.jl) allows us to reinterpret a Matrix as a Vector of SVectors,
 and so on, which is fast for small slices of fixed size.
 This is only possible if fist indices of the array are the indices of the slice (such that they share a memory layout),
 and if dimensions of the slice are known to the macro (by annotations like `i:2, j:3` again).
@@ -150,8 +150,8 @@ Perhaps this should be more explicit... some options:
 ```
 -->
 
-Third, [Strided](https://github.com/Jutho/Strided.jl) contains (among other things) faster methods for permuting dimensions,
-especially for large arrays, as used by [`TensorOperations`](https://github.com/Jutho/TensorOperations.jl).
+Third, [Strided.jl](https://github.com/Jutho/Strided.jl) contains (among other things) faster methods for permuting dimensions,
+especially for large arrays, as used by [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl).
 Loading it will cause `@shape` to call these methods.
 
 ```julia
@@ -203,7 +203,7 @@ BUT these are junk, with `@btime` like 90ms... and above 20μs -> 80ns too...
 
 Wishlist:
 
-* Support `+=` and `*=` etc. like [Einsum](https://github.com/ahwillia/Einsum.jl) does, should be fairly easy.
+* Support `+=` and `*=` etc. like [Einsum.jl](https://github.com/ahwillia/Einsum.jl) does, should be fairly easy.
 
 * Allow constant indices:
 ```julia
@@ -228,12 +228,12 @@ Our minions are standing by for your call! For your convenience, they are locate
 (and are heavy users of google translate) so please open an issue if you have found a way to break your gadget.
 We guarantee a 100% refund... and double your money back if you open a pull request!
 
-No need to wait for international shipping:
+No need to wait for international shipping, just press the `]` key:
 
 ```julia
 pkg> add https://github.com/mcabbott/TensorSlice.jl
 
-pkg> add StaticArrays, JuliennedArrays, Strided
+pkg> add StaticArrays JuliennedArrays Strided
 
 julia> using TensorSlice
 ```
