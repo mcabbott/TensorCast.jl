@@ -82,15 +82,18 @@ end
 
     @shape BCde[b,c][d,e] := bcde[b,c,d,e] !
     @test size(BCde) == (2,3)
-    @test size(first(BCde)) == (4,5)
+    # @test size(first(BCde)) == (4,5)
+    @test size(BCde[1,1]) == (4,5) # new julienne
 
     @shape DBec[d,b][e,c] := bcde[b,c,d,e] !
     @test size(DBec) == (4,2)
-    @test size(first(DBec)) == (5,3)
+    # @test size(first(DBec)) == (5,3)
+    @test size(DBec[1,1]) == (5,3) # new julienne
 
     @shape DEbc[d,e][b,c] == bcde[b,c,d,e] # this order can be a view
     @test size(DEbc) == (4,5)
-    @test size(first(DEbc)) == (2,3)
+    # @test size(first(DEbc)) == (2,3)
+    @test size(DEbc[1,1]) == (2,3)
 
     DEbc[3,4][1,2] = 99
     @test bcde[1,2,3,4] == 99 # view not a copy

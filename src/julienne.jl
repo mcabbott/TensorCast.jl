@@ -11,16 +11,18 @@ if isdefined(JuliennedArrays, :julienne) # old notation
     @inline glue(A::AbstractArray{IT,N}, code::Tuple, sizes=nothing) where {IT,N} =
         align(A, code)
 
-elseif isdefined(JuliennedArrays, :Slices) # new notation, just saw it
+elseif isdefined(JuliennedArrays, :Slices) # new notation
 
-    @warn "haven't yet tried out JuliennedArrays's new notation!" # TODO
+    @warn "TensorSlice only partially works with the new version of JuliennedArrays, sorry."
 
     @inline sliceview(A::AbstractArray{T,N}, code::Tuple, sizes=nothing) where {T,N} =
-        Slices(A, code .== (*) )
+        Slices(A, newcode(code)...)
 
     @inline glue(A::AbstractArray{IT,N}, code::Tuple, sizes=nothing) where {IT,N} =
-        Align(A, code .== (*) )
+        collect(Align(A, newcode(code)...))
+
+    @generated newcode(code::Tuple) = Expr(:tuple, [ c == Colon ? True() : False() for c in code.parameters ]...)
 
 else
-    throw(ErrorException("@shape can't seem to find functions from JuliennedArrays"))
+    @warn "@shape can't seem to find functions from JuliennedArrays. It should fall back to base methods in most cases."
 end
