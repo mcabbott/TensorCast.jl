@@ -147,7 +147,7 @@ macro reduce(expr, right, rex=nothing)
     end
 
     if @capture(red, redfun_(oi__) )
-        if sign == :(:=)
+        if sign == :(=)
             if !endswith(string(redfun), '!')
                 redfun = Symbol(redfun, '!')
             end
@@ -281,7 +281,7 @@ function tensor_slice_main(outn, oind, oi,
                 push!(iflat, i)
                 d = findcheck(i, oflat)
                 push!(isz, :(sz[$d])) # osh is for reshaping stage -- has only the sizes of outer indices, and products
-            elseif @capture(i, (tind__,)) || @capture(o, t1_\ t2_\ t3_ ) || @capture(o, t1_\ t2_ )
+            elseif @capture(i, (tind__,)) || @capture(i, t1_\ t2_\ t3_ ) || @capture(i, t1_\ t2_ )
                 if tind == nothing
                     tind = t3==nothing ? (t1,t2) : (t1,t2,t3)
                 end
