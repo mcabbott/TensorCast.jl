@@ -9,7 +9,7 @@ W = false # printouts where I'm working on things
 
 """
     @shape A[i...] := B[j...]  opt
-Reshaping and slicing macro. Understands the following things:
+Tensor reshaping and slicing macro. Understands the following things:
 * `A[i,j,k]` is a 3-tensor with these indices
 * `B[(i,j),k]` is the same thing, reshaped to a matrix
 * `C[k][i,j]` is a vector of matrices
@@ -93,7 +93,8 @@ macro shape(expr, rex=nothing)
         willslice, willstaticslice,   # flags from LHS of @shape
         false, nothing,               # info from LHS of @reduce
         sign, right, rex,             # RHS still to be done
-        usingstatic, usingstrided)    # what's loaded
+        usingstatic, usingstrided,    # what's loaded
+        "@shape")
 end
 
 """
@@ -108,7 +109,6 @@ macro reduce(expr, right, rex=nothing)
 
     if @capture(expr, left_ = red_ )
         sign = :(=)
-        error("@reduce doesn't work for in-place operations yet, try :=")
     elseif @capture(expr, left_ := red_ )
         sign = :(:=)
     else
@@ -147,6 +147,11 @@ macro reduce(expr, right, rex=nothing)
     end
 
     if @capture(red, redfun_(oi__) )
+        if sign == :(:=)
+            if !endswith(string(redfun), '!')
+                redfun = Symbol(redfun, '!')
+            end
+        end
         V && println("will reduce using redfun = ", redfun, ", inner indices = ", oi)
     else
         throw(ArgumentError("@reduce can't understand reduction formula $red"))
@@ -156,7 +161,8 @@ macro reduce(expr, right, rex=nothing)
         false, false,                 # flags from LHS of @shape
         true, redfun,                 # info from LHS of @reduce
         sign, right, rex,             # RHS still to be done
-        usingstatic, usingstrided)    # what's loaded
+        usingstatic, usingstrided,    # what's loaded
+        "@reduce")
 end
 
 ############################### GIANT MONO-FUNCTION ################################
@@ -165,18 +171,20 @@ function tensor_slice_main(outn, oind, oi,
         willslice, willstaticslice,   # flags from LHS of @shape
         willreduce, redfun,           # info from LHS of @reduce
         sign, right, rex,             # RHS still to be done
-        usingstatic, usingstrided)    # what's loaded
+        usingstatic, usingstrided,    # what's loaded
+        macroname)
 
-    if willreduce && willslice
-        error("impossible!")
-    end
+    ## make sign == :(:=) mean simple whatever is easiest:
+    mustcopy =    sign == :(|=)
+    mustnotcopy = sign == :(==)
+    inplace =     sign == :(=)
 
     #==================== LEFT = OUTPUT, CONTINUED ====================#
 
     if outn == nothing
         hasoutputname = false
         outn = gensym()
-        sign == :(=) && throw(ArgumentError("@shape must have an output name for in-place operations. Try with := instead"))
+        sign == :(=) && throw(ArgumentError("$macroname must have an output name for in-place operations. Try with := instead"))
     else
         hasoutputname = true
         outn = esc(outn)
@@ -200,7 +208,10 @@ function tensor_slice_main(outn, oind, oi,
             if o isa Symbol
                 push!(oflat, o)
                 push!(osz, :(sz[$(length(oi) + length(oflat))]))
-            elseif @capture(o, (tind__,))
+            elseif @capture(o, (tind__,)) || @capture(o, t1_\ t2_\ t3_ ) || @capture(o, t1_\ t2_ )
+                if tind == nothing
+                    tind = t3==nothing ? (t1,t2) : (t1,t2,t3)
+                end
                 append!(oflat, tind)
                 d = length(oi) + length(oflat) - length(tind) + 1 # d is index of _final_ oflat, the canonical list
                 tsz = :(sz[$d])
@@ -210,7 +221,7 @@ function tensor_slice_main(outn, oind, oi,
                 end
                 push!(osz, tsz)
             else
-                throw(ArgumentError("@shape can't understand $o on left hand side"))
+                throw(ArgumentError("$macroname can't understand $o on left hand side"))
             end
         end
         # ocode for slicing needs length of oflat without the sliced-off indices oi
@@ -238,19 +249,19 @@ function tensor_slice_main(outn, oind, oi,
     if @capture(right, inn_[iind__][ii__] )
         willglue = true
         V && println("will glue, inner indicies = ", ii)
-        sign == :(==) && throw(ArgumentError("@shape can't create a view of glued-together slices, unless they are StaticArrays"))
+        sign == :(==) && throw(ArgumentError("$macroname can't create a view of glued-together slices, unless they are StaticArrays"))
 
     elseif @capture(right, inn_[iind__]{ii__} )
         willstaticglue = true
         V && println("will static glue, inner indicies = ", ii)
-        usingstatic || throw(ArgumentError("@shape can't statically glue slice without using StaticArrays"))
+        usingstatic || throw(ArgumentError("$macroname can't statically glue slice without using StaticArrays"))
 
     elseif @capture(right, inn_[iind__] ) # this must be tested last, else inn_ matches A[] outer indices too!
         ii = Any[]
         V && println("no glue")
 
     else
-        throw(ArgumentError("@shape can't understand right hand side $right"))
+        throw(ArgumentError("$macroname can't understand right hand side $right"))
     end
     inn = esc(inn)
 
@@ -270,14 +281,17 @@ function tensor_slice_main(outn, oind, oi,
                 push!(iflat, i)
                 d = findcheck(i, oflat)
                 push!(isz, :(sz[$d])) # osh is for reshaping stage -- has only the sizes of outer indices, and products
-            elseif @capture(i, (tind__,))
+            elseif @capture(i, (tind__,)) || @capture(o, t1_\ t2_\ t3_ ) || @capture(o, t1_\ t2_ )
+                if tind == nothing
+                    tind = t3==nothing ? (t1,t2) : (t1,t2,t3)
+                end
                 for ti in tind
                     push!(iflat, ti)
                     d = findcheck(ti, oflat) # d is the index of oflat, the canonical list
                     push!(isz, :(sz[$d])) # sz isn't defined yet, will be indexed like oflat
                 end
             else
-                throw(ArgumentError("@shape can't understand $i on $side hand side"))
+                throw(ArgumentError("$macroname can't understand $i on right hand side"))
             end
         end
         # if we are gluing, we do this after reshaping, thus need length of flattened iind
@@ -320,7 +334,7 @@ function tensor_slice_main(outn, oind, oi,
             elseif r == :(_) # also allowed but already dealt with above
                 nothing
             else
-                throw(ArgumentError("@shape doesn't know what to do with $r. Index lengths should be  i:3  or else  (i:3, j:4)"))
+                throw(ArgumentError("$macroname doesn't know what to do with $r. Index lengths should be  i:3  or else  (i:3, j:4)"))
             end
         end
         V && println("rind =  ",rind, "   rsz = ",rsz)
@@ -368,7 +382,7 @@ function tensor_slice_main(outn, oind, oi,
 
     if count(isequal(:), slist) >1
         ns = findall(isequal(:), slist)
-        throw(ArgumentError(string("@shape can't infer ranges of indices ",join(oflat[ns],", "))))
+        throw(ArgumentError(string("$macroname can't infer ranges of indices ",join(oflat[ns],", "))))
     end
 
     szall = Any[:(sz[$d]) for d=1:length(oflat)]
@@ -389,7 +403,7 @@ function tensor_slice_main(outn, oind, oi,
     if willstaticslice # already checked usingstatic
         for i in oi # check that all sizes were given
             if findfirst(isequal(i), rind) == nothing
-                throw(ArgumentError("@shape needs explicit size for $i, to perform StaticArray slicing"))
+                throw(ArgumentError("$macroname needs explicit size for $i, to perform StaticArray slicing"))
             end
         end
         osdimex = :( Size($(slist[1:length(oi)]...)) )
@@ -528,6 +542,38 @@ function tensor_slice_main(outn, oind, oi,
             ex = :( $outn = $ex )
         end
 
+    elseif sign == :(=) && willreduce
+        V && println("... one more step forwards, then reduce!() ...")
+
+        ## 3. PERMUTEDIMS
+        if willpermute
+            # only difference is that willstaticslice = false
+            if usingstrided
+                ex = :( strided_permutedims($ex, $perm) ) # this is lazy
+            elseif perm==(2,1)
+                ex = :( transpose($ex) )
+            else
+                ex = :( permutedims($ex, $perm) )
+                havecopied = true
+            end
+            V && println("step 3:  ex = ",ex)
+        end
+
+        rout = outn
+
+        ## 5. UN-RESHAPE
+        if willshapeout
+            rout =  :( reshape($rout, sz) ) # resize FROM osz to sz, the canonical sizes alla oflat TODO is this right? outer sz only?
+            needsizes = true  # this surely needs sz to be defined
+
+            V && println("step 5 backward:  rout = ",rout)
+        end
+
+        redfun = esc(redfun) # already has ! added
+        ex = :( $redfun($rout, $ex) )
+        V && println("step 4 reduction:  ex = ",ex)
+
+
     elseif sign == :(=)
         V && println("... now working backwards for in-place output ...")
 
@@ -535,7 +581,7 @@ function tensor_slice_main(outn, oind, oi,
 
         ## 5. UN-RESHAPE
         if willshapeout
-            rout =  :( reshape($rout, sz) ) # resize FROM osz to sz, the canonical sizes alla oflat
+            rout =  :( reshape($rout, sz) ) # resize FROM osz to sz, the canonical sizes alla oflat TODO is this right? outer sz only?
             needsizes = true  # this surely needs sz to be defined
 
             V && println("step 5 backward:  rout = ",rout)
@@ -614,7 +660,7 @@ function tensor_slice_main(outn, oind, oi,
     if mustcheck && length(schecks) > 0
         ex = quote
             if !$chex
-                throw(DimensionMismatch("@shape failed explicit size checks"))
+                throw(DimensionMismatch("$macroname failed explicit size checks"))
             end
             $ex
         end
@@ -626,14 +672,14 @@ end
 
 ############################### HELPER FUNCTIONS ################################
 
-function findcheck(i::Symbol, ind::Vector, side="left")
+function findcheck(i::Symbol, ind::Vector, side="left", macroname="@shape")
     d = findfirst(isequal(i), ind)
-    d isa Nothing && throw(ArgumentError("@shape can't find index $i on $side hand side"))
+    d isa Nothing && throw(ArgumentError("$macroname can't find index $i on $side hand side"))
     return d
 end
 
-function findcheck(i::Expr, ind::Vector, side="left")
-    throw(ArgumentError("@shape doesn't know what to do with $i, possibly nested brackets?"))
+function findcheck(i::Expr, ind::Vector, side="left", macroname="@shape")
+    throw(ArgumentError("$macroname doesn't know what to do with $i, possibly nested brackets?"))
 end
 
 function push_checks!(checks::Vector, s1v, s2, s3=nothing)
@@ -738,7 +784,7 @@ glue(A::AbstractArray{IT,N}, code::Tuple, sizes=nothing) where {IT,N} = cat_glue
     elseif count(isequal(*), code) == 1 && code[end] == (*)
         reduce((x,y) -> cat(x,y; dims = length(code)), A)
     else
-        throw(ArgumentError("@shape doesn't know how to glue code = $(pretty(code)) with cat, try using JuliennedArrays"))
+        throw(ArgumentError("Don't know how to glue code = $(pretty(code)) with cat, try using JuliennedArrays"))
         # now that glue! works, you could just use that?
         glue!(Array{eltype(first(A))}(undef, final_size), A, code)
     end
