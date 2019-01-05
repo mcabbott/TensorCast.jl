@@ -11,14 +11,15 @@ W = false # printouts where I'm working on things
     @shape A[i...] := B[j...]  opt
 Tensor reshaping and slicing macro. Understands the following things:
 * `A[i,j,k]` is a 3-tensor with these indices
-* `B[(i,j),k]` is the same thing, reshaped to a matrix
+* `B[(i,j),k]` is the same thing, reshaped to a matrix. This may also be written `B[i\\j,k]`.
 * `C[k][i,j]` is a vector of matrices
 * `D[j,k]{i}` is an ordinary matrix of StaticVectors, reinterpreted from `A`.
 
-They can be related in three ways:
-* `:=` creates a new object
+They can be related in a few ways:
 * `=` writes into an existing object
-* `==` creates a view of the old object.
+* `:=` creates a new object... which may or may not be a view:
+* `==` insists on a view of the old object
+* `|=` insists on a copy. 
 
 Options can be specified at the end (if several, separated by `,`)
 * `i:3` fixes the range of index `i`
@@ -190,7 +191,7 @@ function tensor_slice_main(outn, oind, oi,
         outn = esc(outn)
     end
 
-    if all(isa.(oind, Symbol)) # outer indices oind already flat i,j,k
+    if all(isoneindex.(oind)) # outer indices oind already flat i,j,k
         willshapeout = false
 
         oflat = vcat(oi, oind) # inner indices first, if any
@@ -205,7 +206,7 @@ function tensor_slice_main(outn, oind, oi,
         oflat = Any[]
         osz = Any[]
         for o in oind
-            if o isa Symbol
+            if isoneindex(o)
                 push!(oflat, o)
                 push!(osz, :(sz[$(length(oi) + length(oflat))]))
             elseif @capture(o, (tind__,)) || @capture(o, t1_\ t2_\ t3_ ) || @capture(o, t1_\ t2_ )
@@ -249,7 +250,7 @@ function tensor_slice_main(outn, oind, oi,
     if @capture(right, inn_[iind__][ii__] )
         willglue = true
         V && println("will glue, inner indicies = ", ii)
-        sign == :(==) && throw(ArgumentError("$macroname can't create a view of glued-together slices, unless they are StaticArrays"))
+        mustnotcopy && throw(ArgumentError("$macroname can't create a view of glued-together slices, unless they are StaticArrays"))
 
     elseif @capture(right, inn_[iind__]{ii__} )
         willstaticglue = true
@@ -265,20 +266,21 @@ function tensor_slice_main(outn, oind, oi,
     end
     inn = esc(inn)
 
-    if all(isa.(iind, Symbol)) # easy input, just a list of indices
+    if all(isoneindex.(iind)) # easy input, just a list of indices
         willshapeinput = false
-        iflat = vcat(ii, iind) # inner indices first, if any
+        iflat = indexpos.(vcat(ii, iind)) # inner indices first, if any 
+        isigns = indexsign.(vcat(ii, iind))
         icode = (ntuple(i -> :, length(ii))..., ntuple(i -> *, length(iind))...) # needed for gluing
         V && println("no input shaping")
 
     else # we need reshaping, BUT now only of OUTER array
         willshapeinput = true
         # iflat, isz =  flat_and_sz(iind, oflat, "right")
-        iflat = Any[]
+        iflat = Any[]; isigns = Any[]
         isz = Any[]
         for i in iind
-            if i isa Symbol
-                push!(iflat, i)
+            if isoneindex(i)
+                push_signed!(iflat, isigns, i)
                 d = findcheck(i, oflat)
                 push!(isz, :(sz[$d])) # osh is for reshaping stage -- has only the sizes of outer indices, and products
             elseif @capture(i, (tind__,)) || @capture(i, t1_\ t2_\ t3_ ) || @capture(i, t1_\ t2_ )
@@ -286,7 +288,7 @@ function tensor_slice_main(outn, oind, oi,
                     tind = t3==nothing ? (t1,t2) : (t1,t2,t3)
                 end
                 for ti in tind
-                    push!(iflat, ti)
+                    push_signed!(iflat, isigns, ti)
                     d = findcheck(ti, oflat) # d is the index of oflat, the canonical list
                     push!(isz, :(sz[$d])) # sz isn't defined yet, will be indexed like oflat
                 end
@@ -297,11 +299,15 @@ function tensor_slice_main(outn, oind, oi,
         # if we are gluing, we do this after reshaping, thus need length of flattened iind
         icode = (ntuple(i -> :, length(ii))..., ntuple(i -> *, length(iflat))...)
         # still have to glue on inner indices, if any -- iflat is for permutedims stage
-        iflat = vcat(ii, iflat)
+        iflat = vcat(indexpos.(ii), iflat)
+        isigns = vcat(indexsign.(ii), isigns)
         V && println("will reshape input, isz = ", isz, ")")
     end
 
+    willreverse = any(isigns .== -1)
+
     V && (willglue || willstaticglue) && println("icode = ", icode, " for gluing")
+    V && willreverse && println("will reverse, isigns = ", isigns)
     V && println("iind =  ", iind) # iind lists indices whose lengths are some size(B,d)
     V && println("iflat = ", iflat) # iflat is some permutation of oflat
 
@@ -347,11 +353,11 @@ function tensor_slice_main(outn, oind, oi,
     slist = Vector{Any}(undef, length(oflat)) # will be same order as oflat, canonical list
     schecks = Any[]
     for (n,i) in enumerate(oflat)
-        id = findfirst(isequal(i), iind) # index of what dimension's size
-        od = findfirst(isequal(i), oind)
+        id  = findfirst(isequal(i), indexpos.(iind)) # index of what dimension's size
+        od  = findfirst(isequal(i), oind)
         idi = findfirst(isequal(i), ii) # inner, meaning of constituent arrays
         odi = findfirst(isequal(i), something(oi,Any[]))
-        rd = findfirst(isequal(i), rind) # index of rsz
+        rd  = findfirst(isequal(i), rind) # index of rsz
 
         V && println("-- $i : id=$(something(id,"?")), idi=$(something(idi,"?")), ",
                 "od=$(something(od,"?")), odi=$(something(odi,"?")), rd=$(something(rd,"?"))")
@@ -364,7 +370,7 @@ function tensor_slice_main(outn, oind, oi,
             slist[n] = getsize(inn, id)
             push_checks!(schecks, getsize(inn, id, idi), getsize(outn, od, odi, sign))
 
-        elseif od isa Int && sign == :(=) # then you can get size from output array
+        elseif od isa Int && inplace # then you can get size from output array
             slist[n] = getsize(outn, od)
             push_checks!(schecks, getsize(inn, id, idi), getsize(outn, od, odi, sign)) # checks include sub-arrays
 
@@ -372,7 +378,7 @@ function tensor_slice_main(outn, oind, oi,
             slist[n] = getsize(inn, id, idi) # this is size(first(A),idi) since id==nothing
             push_checks!(schecks, getsize(inn, id, idi), getsize(outn, od, odi, sign))
 
-        elseif odi isa Int && sign == :(=)
+        elseif odi isa Int && inplace
             slist[n] = getsize(outn, od, odi)
 
         else
@@ -411,9 +417,6 @@ function tensor_slice_main(outn, oind, oi,
 
         V && println("static slicing sizes: osdimex = ",osdimex)
     end
-    # Here is a check that Size is working well:
-    # f(M, valn::Val{N}) where N = @shape A[j]{i} == M[i,j] i:N
-    # @code_warntype f(rand(2,3), Val(2))
 
     # TODO Think more about this -- it could also tidy up @pretty @shape A[(i,j)] := B[i][j]
     # but not for static glue
@@ -463,9 +466,18 @@ function tensor_slice_main(outn, oind, oi,
         ex = :( static_glue($ex) )
     end
 
+    if willreverse
+        revdims = filter(d -> isigns[d]==-1, 1:length(iflat)) |> Tuple
+        if length(revdims) == 1
+            revdims = revdims[1]
+        end
+        ex = :( reverse($ex, dims=$revdims) )
+        havecopied = true
+    end
+
     V && println("steps 1 & 2:  ex = ",ex)
 
-    if sign == :(:=) || sign == :(==)
+    if !inplace
         V && println("... working forwards ...")
 
         ## 3. PERMUTEDIMS
@@ -485,12 +497,12 @@ function tensor_slice_main(outn, oind, oi,
             V && println("step 3:  ex = ",ex)
         end
 
-        if havecopied && sign == :(==)
+        if havecopied && mustnotcopy
             throw(ArgumentError(string("@shape can't figure out how to do what you ask without copying... ",
                 "the problem might be gluing, or might be permutedims. using Strided may help")))
         end
 
-        needcopy = !havecopied && sign == :(:=)
+        needcopy = !havecopied && mustcopy
 
         ## 4. SLICE, OR REDUCE
         if willstaticslice
@@ -515,8 +527,14 @@ function tensor_slice_main(outn, oind, oi,
             V && println("step 4 slice:  ex = ",ex)
 
         elseif willreduce
-            redfun = esc(redfun)
-            ex = :( dropdims( $redfun($ex, dims = $odims), dims = $odims) )
+            if redfun == :sum
+                ex = :( sum_drop($ex, dims = $odims) ) # just to look tidy!
+            elseif redfun == :prod
+                ex = :( prod_drop($ex, dims = $odims) )
+            else
+                redfun = esc(redfun)
+                ex = :( dropdims( $redfun($ex, dims = $odims), dims = $odims) )
+            end
             havecopied = true
             V && println("step 4 reduction:  ex = ",ex)
         end
@@ -533,7 +551,7 @@ function tensor_slice_main(outn, oind, oi,
             V && println("step 5:  ex = ",ex)
         end
 
-        if !havecopied && sign == :(:=)
+        if !havecopied && mustcopy
             ex = :( copy($ex) )
             havecopied = true
         end
@@ -542,7 +560,7 @@ function tensor_slice_main(outn, oind, oi,
             ex = :( $outn = $ex )
         end
 
-    elseif sign == :(=) && willreduce
+    elseif inplace && willreduce
         V && println("... one more step forwards, then reduce!() ...")
 
         ## 3. PERMUTEDIMS
@@ -564,7 +582,7 @@ function tensor_slice_main(outn, oind, oi,
         ## 5. UN-RESHAPE
         if willshapeout
             rout =  :( reshape($rout, sz) ) # resize FROM osz to sz, the canonical sizes alla oflat TODO is this right? outer sz only?
-            needsizes = true  # this surely needs sz to be defined
+            needsizes = true 
 
             V && println("step 5 backward:  rout = ",rout)
         end
@@ -574,7 +592,7 @@ function tensor_slice_main(outn, oind, oi,
         V && println("step 4 reduction:  ex = ",ex)
 
 
-    elseif sign == :(=)
+    elseif inplace
         V && println("... now working backwards for in-place output ...")
 
         rout = outn
@@ -658,9 +676,10 @@ function tensor_slice_main(outn, oind, oi,
     end
 
     if mustcheck && length(schecks) > 0
+        errstring = "$macroname failed explicit size checks"
         ex = quote
             if !$chex
-                throw(DimensionMismatch("$macroname failed explicit size checks"))
+                throw(DimensionMismatch($errstring))
             end
             $ex
         end
@@ -671,6 +690,24 @@ end
 
 
 ############################### HELPER FUNCTIONS ################################
+
+
+
+function isoneindex(i)
+    isa(i, Int) && return true
+    isa(i, Symbol) && return true
+    @capture(i, -ipos_) && return true
+    return false
+end
+
+indexsign(i) = @capture(i, -ipos_) ? -1 : +1
+indexpos(i)  = @capture(i, -ipos_) ? ipos : i
+
+function push_signed!(ilist, slist, i)
+    push!(ilist, indexpos(i))
+    push!(slist, indexsign(i))
+    nothing
+end
 
 function findcheck(i::Symbol, ind::Vector, side="left", macroname="@shape")
     d = findfirst(isequal(i), ind)
@@ -689,6 +726,8 @@ function push_checks!(checks::Vector, s1v, s2, s3=nothing)
     nn = filter(!isequal(nothing), [s1, s2, s3] )
     if length(nn) == 3
         push!(checks, :( $(nn[1]) == $(nn[2]) == $(nn[3]) ) )
+        # push!(checks, :( $(nn[1]) == $(nn[2]) ) )
+        # push!(checks, :( $(nn[2]) == $(nn[3]) ) )
     elseif length(nn) == 2
         push!(checks, :( $(nn[1]) == $(nn[2]) ) )
     end
@@ -708,9 +747,11 @@ function getsize(name::Union{Expr,Symbol}, d::Union{Int,Nothing}, di::Union{Int,
 end
 
 function colonise!(isz, slist::Vector, szall::Vector)
+
     if isz == szall
         # example from tests:  @pretty @shape g[(b,c),x,y,e] := bcde[b,c,(x,y),e] x:2;
-        V && println("colonise! replaced isz/osz= ",isz, " with just sz... because that's what it is")
+        V && println("colonise! replaced isz/osz= ",isz, 
+            " with just sz... because that's what it is")
         resize!(isz, 1)
         isz[1] = :(sz...)
         return true
@@ -735,13 +776,16 @@ function colonise!(isz, slist::Vector, szall::Vector)
         MacroTools.postwalk(x -> f!(nsz, x), sprod);
         if nsz[1] > N
             isz[n] = Colon()
-            V && println("colonise! replaced isz/osz[$n]= ",sprod, " with just : because really sz[$d]=:")
+            V && println("colonise! replaced isz/osz[$n]= ",sprod, 
+                " with just : because really sz[$d]=:")
         elseif nsz[1] == N
             isz[n] = Colon()
             needsizes = false
-            V && println("colonise! replaced isz/osz[$n]= ",sprod, " with just : because it containts all N=$N of the sz[d]")
+            V && println("colonise! replaced isz/osz[$n]= ",sprod, 
+                " with just : because it containts all N=$N of the sz[d]")
         end
     end
+
     return needsizes
 end
 
@@ -825,6 +869,9 @@ end
 # @code_warntype decolonise((1,2,:,3), Val(3))
 # using BenchmarkTools
 # @btime decolonise((1,2,:,3), Val(3)) # 0.035 ns (0 allocations: 0 bytes)
+
+@inline sum_drop(A; dims) = dropdims(sum(A; dims=dims); dims=dims)
+@inline prod_drop(A; dims) = dropdims(prod(A; dims=dims); dims=dims)
 
 using Requires
 
