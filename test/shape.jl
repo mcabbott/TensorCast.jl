@@ -40,7 +40,7 @@ end
     bcde = rand(2,3,4,5);
     bcdef = rand(2,3,4,5,6);
 
-    @shape oo[d,e,b,c] := bcde[b,c,d,e];
+    @shape oo[d,e,b,c] |= bcde[b,c,d,e];
     @test size(oo) == (4,5,2,3)
     @test oo[1,3,1,3] == bcde[1,3,1,3]
 
@@ -67,7 +67,7 @@ end
     bcd = rand(2,3,4);
     bcde = rand(2,3,4,5);
 
-    @shape Bcd[b][c,d] := bcd[b,c,d] !
+    @shape Bcd[b][c,d] |= bcd[b,c,d] !
     @test size(Bcd) == (2,)
     @test size(first(Bcd)) == (3,4)
     @test Bcd[2][3,1] == bcd[2,3,1]
@@ -249,6 +249,28 @@ end
     @test Z[4,2*1][2,1] == Cdaeb[2][1,1,4,2]
 
 end
+@testset "reverse" begin
+    
+    bc = rand(2,3)
+
+    @shape A[i,-j] := bc[i,j]
+    @shape B[i,j] := bc[i,-j]
+    @shape C[i,-j] := bc[i,-j]
+    D = reverse(bc, dims=2)
+    @test A == B == D
+    @test C == bc
+
+
+end
+@testset "fixed indices" begin
+
+    W = rand(2,3,5,7);
+
+    @shape Z[_,i,_,k] := W[2,k,4,i]
+
+    @test size(Z) == (1,7,1,3)
+
+end
 @testset "random" begin
 
     A = zeros(1,2,3);
@@ -257,7 +279,7 @@ end
     @shape A[i,j,k] = B[i,(k,j)] # errored on push_checks for a while
 
     @shape A[i,j,k] = B[i,(j,k)] i:1 # @pretty looks a bit weird
-    # @pretty @shape A[l,k,j,i] = C[i,j][k,l] k:2, j:3 # this one looks weird too TODO figure out why
+    # @pretty @shape A[l,k,j,i] = C[i,j][k,l] k:2, j:3 # this looks weird too TODO figure out why
 
     @shape V[(i,j,k)] := B[i,(k,j)]  k:3, ! # was an error for recursive colon reasons
 
@@ -308,8 +330,8 @@ end
 
     ## runtime
 
-    @test_throws DimensionMismatch @shape oo[i,j] := bc[i,j] i:3
-    @test_throws DimensionMismatch @shape cb[i,j] = bc[i,j]  # this should check without !
+    @test_throws AssertionError @shape oo[i,j] := bc[i,j] i:3,!
+    @test_throws AssertionError @shape cb[i,j] = bc[i,j]  # this should check without !
 
     if !usingjulienne
 
