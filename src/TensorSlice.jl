@@ -10,7 +10,7 @@ V = false # capital V for extremely verbose
 W = false # printouts where I'm working on things
 
 """
-    @shape A[i...] := B[j...] opt
+    @shape Z[i...] := A[j...] opt
 
 Tensor reshaping and slicing macro. Undestands the following things:
 * `A[i,j,k]` is a three-tensor with these indices
@@ -56,25 +56,25 @@ macro shape(expr, rex=nothing)
     V && @info "@shape" sign left right rex
 
     #==================== LEFT = OUTPUT = STEPS 6,7 ====================#
-    # Do this first to get a list of indices in canonical order, oflat
+    # Do this first to get a list of indices in canonical order, indVflat
     # And parse expr here not in tensor_slice_main as LHS differs for @reduce
 
     willslice = false
     willstaticslice = false
 
-    if @capture(left, ( outn_[oind__][oi__] | [oind__][oi__] ) )
+    if @capture(left, ( nameZ_[indZ__][indZsub__] | [indZ__][indZsub__] ) )
         willslice = true
-    elseif @capture(left, ( outn_[oind__]{oi__} | [oind__]{oi__} ) )
+    elseif @capture(left, ( nameZ_[indZ__]{indZsub__} | [indZ__]{indZsub__} ) )
         willstaticslice = true
-    elseif @capture(left, ( outn_[oind__] | [oind__] ) )
-        oi = Any[]
+    elseif @capture(left, ( nameZ_[indZ__] | [indZ__] ) )
+        indZsub = Any[]
     else
         throw(ArgumentError("@shape can't understand left hand side $left"))
     end
 
-    V && @info "@capture LHS" outn repr(oind) repr(oi) willslice willstaticslice
+    V && @info "@capture LHS" nameZ repr(indZ) repr(indZsub) willslice willstaticslice
 
-    tensor_slice_main(outn, oind, oi, # parsing of LHS in progress
+    tensor_slice_main(nameZ, indZ, indZsub, # parsing of LHS in progress
         willslice, willstaticslice,   # flags from LHS of @shape
         false, nothing,               # info from LHS of @reduce
         sign, right, rex,             # RHS still to be done
@@ -82,7 +82,7 @@ macro shape(expr, rex=nothing)
 end
 
 """
-    @reduce A[j] := sum(i,k) B[i,j,k]
+    @reduce Z[j] := sum(i,k) A[i,j,k]
 
 Tensor reduction macro:
 * The reduction funcition can be anything which works like `sum(B, dims=(1,3))`, 
@@ -90,8 +90,8 @@ Tensor reduction macro:
 * The right side can be anything that `@shape` understands, including gluing of slices `B[i,k][j]` 
   and reshaping `B[i\\j,k]`.
 * The left side again works as in `@shape`, although slicing is not allowed.
-* In-place operations `A[j] = sum(...` will construct the banged version of the given function's name, 
-  which must work like `sum!(B, A)`.
+* In-place operations `Z[j] = sum(...` will construct the banged version of the given function's name, 
+  which must work like `sum!(Z, A)`.
 * Index ranges may be given afterwards (as for `@shape`) or inside the reduction `sum(i:3, k:4)`. 
 * All indices appearing on the right must appear either within `sum(...)` etc, or on the left. 
 """
@@ -110,15 +110,15 @@ macro reduce(expr, right, rex=nothing)
     V && @info "@reduce" sign left right rex
 
     #==================== LEFT = OUTPUT = STEPS 6,7 ====================#
-    # Do this first to get a list of indices in canonical order, oflat
+    # Do this first to get a list of indices in canonical order, indVflat
     # And parse expr here not in tensor_slice_main as LHS differs for @shape
 
-    if @capture(left, ( outn_[oind__] | [oind__] ) )
+    if @capture(left, ( nameZ_[indZ__] | [indZ__] ) )
     else
         throw(ArgumentError("@reduce can't understand left hand side $left"))
     end
 
-    if @capture(red, redfun_(oi__) )
+    if @capture(red, redfun_(indZsub__) )
         if sign == :(=) # inplace=true, later
             if !endswith(string(redfun), '!')
                 redfun = Symbol(redfun, '!')
@@ -128,9 +128,9 @@ macro reduce(expr, right, rex=nothing)
         throw(ArgumentError("@reduce can't understand reduction formula $red"))
     end
 
-    V && @info "@capture LHS" outn redfun repr(oind) repr(oi)
+    V && @info "@capture LHS" nameZ redfun repr(indZ) repr(indZsub)
 
-    tensor_slice_main(outn, oind, oi, # parsing of LHS in progress
+    tensor_slice_main(nameZ, indZ, indZsub, # parsing of LHS in progress
         false, false,                 # flags from LHS of @shape
         true, redfun,                 # info from LHS of @reduce
         sign, right, rex,             # RHS still to be done
@@ -142,35 +142,37 @@ end
 
 After getting hopelessly confused, I decided to aphabet-ise my notation: 
 
-nameA, indA, indAsub   -- given RHS            -- inn, iind, ii
+nameA, indA, indAsub   -- given RHS
 sizeA      -- known & used for fixing ranges
 nameAesc   -- unglified
 
 getB, numB -- for view(A, get), and number of fixed indices
-sizeC      -- after reshaping outer indices    -- "isz"
-codeD      -- for gluing                       -- icode
-indEflat   -- after gluing                     -- iflat
+sizeC      -- after reshaping outer indices, in terms of sz[]
+codeD      -- for gluing
+indEflat   -- after gluing 
 revFdims   -- done before permutedims
 shiftG     -- ditto, but not yet written
 
-permM      -- perm(indEflat -> infVflat)
-storeAZ    -- information from parse! both     -- sdict
+permHU     -- permHU(indEflat -> infVflat)
+storeAZ    -- information from parse! both
 
-indVflat   -- canonical list                   -- oflat
-sizeV      -- filled in... at most one (:)     -- slist
+indVflat   -- canonical list
+sizeVlist  -- filled in... at most one (:)
 
-codeW      -- for slicing                      -- ocode
-sizeX      -- after                            -- "osz"
+codeW      -- for slicing. sizeWstatic is Size() of the slice.
+redWdims   -- if reducing instead, over these dims
+
+sizeX      -- after slicing, container size, in sz[]
 getY, numY -- for view(Z, get) in-place, and number fixed
 
 nameZesc
-sizeZ      -- for final reshape                -- "fsz"
-nameZ, indZ, indZsub   -- given LHS            -- outn, oind, oi
+sizeZ      -- for final reshape, in sz[]
+nameZ, indZ, indZsub   -- given LHS
 
 =#
 ############################### GIANT MONO-FUNCTION ################################
 
-function tensor_slice_main(outn, oind, oi,
+function tensor_slice_main(nameZ, indZ, indZsub,
         willslice, willstaticslice,   # flags from LHS of @shape
         willreduce, redfun,           # info from LHS of @reduce
         sign, right, rex,             # RHS still to be done
@@ -188,47 +190,42 @@ function tensor_slice_main(outn, oind, oi,
     mustnotcopy = sign == :(==)
     inplace =     sign == :(=)
 
-    V && @info "todo & packages" mustcopy mustnotcopy inplace  usingstatic usingstrided
+    V && @info "todo & packages" mustcopy mustnotcopy inplace usingstatic usingstrided
 
     #==================== LEFT, CONTINUED ====================#
 
-    if outn == nothing
+    if nameZ == nothing
         hasoutputname = false
-        outn = gensym()
+        nameZesc = gensym()
         inplace && throw(ArgumentError("$macroname must have an output name for in-place operations. Try with := instead"))
     else
         hasoutputname = true
-        outn = esc(outn)
+        nameZesc = esc(nameZ)
     end
 
     ## new parsing code! 
-    # "o" refers to stage 5, right after permutedims, all indices "flat"
-    # "f" refers to step 7, final reshaping to size fsz... or in-place, view fget.
-    #     maybe oind is really find, but I can't have that!
-    # szdict contains things like size(H,3) which will only be useful if in-place... 
-    # willreduce tells parse! whether to allow i:3 annotations on inner indices. 
 
-    sdict = SizeDict()
+    storeAZ = SizeDict()
 
-    oflat, fget, fsz, oneg = parse!(sdict, ifelse(inplace, outn, nothing), oind, oi, willreduce)
+    indVflat, getY, sizeZ, negZ = parse!(storeAZ, ifelse(inplace, nameZesc, nothing), indZ, indZsub, willreduce)
 
-    V && @info "parse! LHS -- including canonical oflat" repr(oflat) repr(fget) repr(fsz) repr(oneg) length(sdict.dict) length(sdict.checks)
+    V && @info "parse! LHS -- including canonical indVflat" repr(indVflat) repr(getY) repr(sizeZ) repr(negZ) length(storeAZ.dict) length(storeAZ.checks)
 
     # for step 6, slicing:
-    ocode = sorted_starcode(length(oflat), length(oi)) # star for each outer dim, at the right 
+    codeW = sorted_starcode(length(indVflat), length(indZsub)) # star for each outer dim, at the right 
     # or else step 6', reduce: 
-    if length(oi) ==1
-        odims = 1  # reduction, like inner indices, is leftmost
+    if length(indZsub) ==1
+        redWdims = 1  # reduction, like inner indices, is leftmost
     else
-        odims = Tuple( 1 : length(oi) )
+        redWdims = Tuple( 1 : length(indZsub) )
     end
 
     # for step 8, only used if working in-place:
-    fnum_fixed = count(!isequal(:), fget) # fnum_fixed = count(i -> i != (:), fget)
-    willfinalview = fnum_fixed > 0
+    numY = count(!isequal(:), getY) # numY = count(i -> i != (:), getY)
+    willfinalview = numY > 0
 
     if willfinalview && !inplace
-        for i in fget
+        for i in getY
             if i != (:) && i != 1
                 throw(ArgumentError("$macroname can't create an array with constant index $i != 1"))
             end
@@ -237,12 +234,12 @@ function tensor_slice_main(outn, oind, oi,
 
     # for step 7 reshape when working in-place: very simple? 
     # the relevant lenghts are the canonical ones, skipping any inner indices
-    osz = Any[:(sz[$d]) for d=length(oi)+1:length(oflat)]
+    sizeX = Any[:(sz[$d]) for d=length(indZsub)+1:length(indVflat)]
 
-    # for step 7, reshape -> fsz. Only needed if ndims differs:
-    willshapeout = (length(fsz) + fnum_fixed) != length(oflat) - length(oi)
+    # for step 7, reshape -> sizeZ. Only needed if ndims differs:
+    willshapeout = (length(sizeZ) + numY) != length(indVflat) - length(indZsub)
 
-    V && @info "left..." willslice ocode willreduce odims repr(osz) fnum_fixed willshapeout repr(fsz)
+    V && @info "left..." willslice codeW willreduce redWdims repr(sizeX) numY willshapeout repr(sizeZ)
 
     #==================== RIGHT = INPUT = STEPS 1,2,3 ====================#
 
@@ -250,40 +247,38 @@ function tensor_slice_main(outn, oind, oi,
     willstaticglue = false
     mustcheck = false
 
-    if @capture(right, inn_[iind__][ii__] )
+    if @capture(right, nameA_[indA__][indAsub__] )
         willglue = true
         mustnotcopy && throw(ArgumentError("$macroname can't create a view of glued-together slices, unless they are StaticArrays"))
-    elseif @capture(right, inn_[iind__]{ii__} )
+    elseif @capture(right, nameA_[indA__]{indAsub__} )
         willstaticglue = true
         usingstatic || throw(ArgumentError("$macroname can't statically glue slice without using StaticArrays"))
-    elseif @capture(right, inn_[iind__] ) # this must be tested last, else inn_ matches A[] outer indices too!
-        ii = Any[]
+    elseif @capture(right, nameA_[indA__] ) # this must be tested last, else nameA_ matches A[] outer indices too!
+        indAsub = Any[]
     else
         throw(ArgumentError("$macroname can't understand right hand side $right"))
     end
-    inn = esc(inn)
+    nameAesc = esc(nameA)
 
-    V && @info "@capture RHS" inn repr(iind) repr(ii) willglue willstaticglue
+    V && @info "@capture RHS" nameAesc repr(indA) repr(indAsub) willglue willstaticglue
 
     ## new parsing code! 
-    # "i" means input as before, meaning stage 3-ish, before/after gluing
-    # "a" means step 1, where the very first thing to do is view(A, aget...)
-    # Writing into the same dictionary etc sdict.
+    # Writing into the same dictionary etc storeAZ.
 
-    iflat, aget, _, ineg = parse!(sdict, inn, iind, ii)
+    indEflat, getB, _, negA = parse!(storeAZ, nameAesc, indA, indAsub)
 
-    V && @info "parse! RHS" repr(iflat) repr(aget) repr(ineg) length(sdict.dict) length(sdict.checks)
+    V && @info "parse! RHS" repr(indEflat) repr(getB) repr(negA) length(storeAZ.dict) length(storeAZ.checks)
 
-    if sort(oflat) != sort(iflat)
-        throw(ArgumentError("mismatched indices on left & right: $(Tuple(oflat)) <- $(Tuple(iflat))"))
+    if sort(indVflat) != sort(indEflat)
+        throw(ArgumentError("mismatched indices on left & right: $(Tuple(indVflat)) <- $(Tuple(indEflat))"))
     end
 
     ## finally we can parse "rex" too, done last as its dimensions are prettier (and stabler).
     rflags = Any[]
     @capture(rex, (rexi__,)) || (rexi = Any[rex])
-    parse!(sdict, nothing, [], rexi, true, rflags)
+    parse!(storeAZ, nothing, [], rexi, true, rflags)
 
-    V && @info "parse! OPT, mostly into dict" repr(rexi) repr(rflags) length(sdict.dict) length(sdict.checks)
+    V && @info "parse! OPT, mostly into dict" repr(rexi) repr(rflags) length(storeAZ.dict) length(storeAZ.checks)
 
     if :base in rflags || :_ in rflags
         usingstatic = false
@@ -294,61 +289,61 @@ function tensor_slice_main(outn, oind, oi,
     end
 
     # for step 1, view:
-    anum_fixed = count(!isequal(:), aget) # count(i -> i != (:), aget)
-    willinitview = anum_fixed > 0
+    numB = count(!isequal(:), getB) # count(i -> i != (:), getB)
+    willinitview = numB > 0
 
     # for step 2, shape
-    isz = Any[]
-    for i in iflat[length(ii)+1 : end]  # outer directions just before glue
-        d = findcheck(i, oflat)         # look up in canonical list
-        push!(isz, :( sz[$d] ) )
+    sizeC = Any[]
+    for i in indEflat[length(indAsub)+1 : end]  # outer directions just before glue
+        d = findcheck(i, indVflat)         # look up in canonical list
+        push!(sizeC, :( sz[$d] ) )
     end
-    willshapeinput = (length(isz) + anum_fixed) != length(iind) # if equal then no tuples
+    willshapeinput = (length(sizeC) + numB) != length(indA) # if equal then no tuples
 
     # for step 3, gluing:
-    icode = sorted_starcode(length(iflat), length(ii)) # star for each outer dim, at the right 
+    codeD = sorted_starcode(length(indEflat), length(indAsub)) # star for each outer dim, at the right 
 
     # for step 4 reversing: along these indices: 
-    neg_ind = oddunique(vcat(ineg, oneg))
+    neg_ind = oddunique(vcat(negA, negZ))
     willreverse = length(neg_ind) > 0 
     if willreverse
-        # this is before permutedims, hence need iflat's numbers
-        revdims = Tuple(sort([ findcheck(i, iflat) for i in neg_ind ]))
+        # this is before permutedims, hence need indEflat's numbers
+        revFdims = Tuple(sort([ findcheck(i, indEflat) for i in neg_ind ]))
     else
-        revdims = ()
+        revFdims = ()
     end
 
-    V && @info "right..." willshapeinput repr(isz) icode willreverse revdims willinitview anum_fixed
+    V && @info "right..." willshapeinput repr(sizeC) codeD willreverse revFdims willinitview numB
 
     #==================== MIDDLE = STEP 4,5 ====================#
     # Or perhaps 3,4,5,6: glue, reverse, permute, slice/reduce
 
     willpermute = false
-    if iflat != oflat
-        perm = sortperm(oflat)[invperm(sortperm(iflat))] |> invperm |> Tuple # surely can be more concise!
+    if indEflat != indVflat
+        permHU = sortperm(indVflat)[invperm(sortperm(indEflat))] |> invperm |> Tuple # surely can be more concise!
         willpermute = true
 
-        V && println("will permute, perm = ", perm)
+        V && println("will permute, permHU = ", permHU)
     end
 
     if willstaticslice && usingstatic
-        for i in oi # check that all sizes were given
-            if @capture(sdict.dict[i], size(__)) # then not from rex
+        for i in indZsub # check that all sizes were given
+            if @capture(storeAZ.dict[i], size(__)) # then not from rex
                 throw(ArgumentError("$macroname needs explicit size for $i, to perform StaticArray slicing"))
             end
         end
-        osdimex = :( Size($([sdict.dict[i] for i in oi]...)) ) # construct Size() object for SArray
+        sizeWstaticex = :( Size($([storeAZ.dict[i] for i in indZsub]...)) ) # construct Size() object for SArray
         mustcheck = true
 
-        V && println("static slicing sizes: osdimex = ",osdimex)
+        V && println("static slicing sizes: sizeWstaticex = ",sizeWstaticex)
     end
 
     # TODO think more -- see "simplicode" function now
     if willpermute && willslice # hence not willstaticslice
-        if perm==(2,1)
-            ocode = (ocode[2],ocode[1])
+        if permHU==(2,1)
+            codeW = (codeW[2],codeW[1])
             willpermute = false
-            W && println("removed permutation by changing slicing: now ocode = ",ocode)
+            W && println("removed permutation by changing slicing: now codeW = ",codeW)
             # W && println("... for expr = ",expr)
         else
             V && println("am going to slice a permuted array. Can I remove permutation by re-ordering slice?")
@@ -358,36 +353,36 @@ function tensor_slice_main(outn, oind, oi,
     ## Sizes: most of the hard work is now done by parse! and friends. 
     # but we still need a few things:
 
-    slist = sizeinfer(sdict, oflat) # canonical size list -- expressions like size(A,d)
-    slistex = :(($(slist...) ,))    # if needsizes=true,  sz = $slistex  will be inserted
-                                    # and all my reshapes isz, fsz (or in-place, osz) refer to sz[d].
-    szall = Any[:(sz[$d]) for d=1:length(oflat)]
-    szex = :(($(szall...) ,))       # this complete list is helpful to colonise! function,
-                                    # whose job in life is to simplify reshape size arguments.
+    sizeVlist = sizeinfer(storeAZ, indVflat) # canonical size list -- expressions like size(A,d)
+    sizeVlistex = :(($(sizeVlist...) ,))    # if needsizes=true,  sz = $sizeVlistex  will be inserted
+                                    # and all my reshapes sizeC, sizeZ (or in-place, sizeX) refer to sz[d].
+    # szall = Any[:(sz[$d]) for d=1:length(indVflat)]
+    # szex = :(($(szall...) ,))       # this complete list is helpful to colonise! function,
+    #                                 # whose job in life is to simplify reshape size arguments.
 
     #==================== ASSEMBLE ====================#
 
     needsizes = false
     havecopied = false
     
-    ex = inn
+    ex = nameAesc
 
     ## 1. VIEW I.E. DISCARD FIXED DIMENSIONS 
     if willinitview
-        agetex = :(($(aget...) ,))
-        ex = :( view($ex, $(agetex)...) )
+        getBex = :(($(getB...) ,))
+        ex = :( view($ex, $(getBex)...) )
     end
 
     ## 2. RESHAPE CONTAINER
     if willshapeinput
-        needsizes |= colonise!(isz, slist)
-        iszex = :(($(isz...) ,))
-        ex = :( reshape($ex, $iszex) )
+        needsizes |= colonise!(sizeC, sizeVlist)
+        sizeCex = :(($(sizeC...) ,))
+        ex = :( reshape($ex, $sizeCex) )
     end
 
     ## 3. GLUE SLICES
     if willglue
-        ex = :(glue($ex, $icode))
+        ex = :(glue($ex, $codeD))
         havecopied = true
     elseif willstaticglue
         ex = :( static_glue($ex) )
@@ -395,11 +390,11 @@ function tensor_slice_main(outn, oind, oi,
 
     ## 4. REVERSE
     if willreverse
-        # revdims = filter(d -> isigns[d]==-1, 1:length(iflat)) |> Tuple
-        if length(revdims) == 1
-            revdims = revdims[1]
+        # revFdims = filter(d -> isigns[d]==-1, 1:length(indEflat)) |> Tuple
+        if length(revFdims) == 1
+            revFdims = revFdims[1]
         end
-        ex = :( reverse($ex, dims=$revdims) )
+        ex = :( reverse($ex, dims=$revFdims) )
         havecopied = true
     end
 
@@ -409,14 +404,14 @@ function tensor_slice_main(outn, oind, oi,
         ## 5. PERMUTEDIMS
         if willpermute
             if willstaticslice # then we cannot use lazy permutedims, including transpose
-                ex = :( permutedims($ex, $perm) )
+                ex = :( permutedims($ex, $permHU) )
                 havecopied = true
-            elseif perm==(2,1)
+            elseif permHU==(2,1)
                 ex = :( transpose($ex) )
             elseif usingstrided
-                ex = :( strided_permutedims($ex, $perm) ) # this is lazy # TODO maybe not always!!  @pretty @shape N[k,i] == S[k]{i} from readme with Strided ??
+                ex = :( strided_permutedims($ex, $permHU) ) # this is lazy # TODO maybe not always!!  @pretty @shape N[k,i] == S[k]{i} from readme with Strided ??
             else
-                ex = :( permutedims($ex, $perm) )
+                ex = :( permutedims($ex, $permHU) )
                 havecopied = true
             end
             V && println("step 5:  ex = ",ex)
@@ -435,31 +430,31 @@ function tensor_slice_main(outn, oind, oi,
                 havecopied = true
             end
             if willshapeout
-                ex = :( static_slice($ex, $osdimex, false) ) # TODO invent a case where this happens?
+                ex = :( static_slice($ex, $sizeWstaticex, false) ) # TODO invent a case where this happens?
             else
-                ex = :( static_slice($ex, $osdimex) )
+                ex = :( static_slice($ex, $sizeWstaticex) )
             end
             V && println("step 6 static:  ex = ",ex)
 
         elseif willslice
             if needcopy
-                ex = :( slicecopy($ex, $ocode) )
+                ex = :( slicecopy($ex, $codeW) )
                 havecopied = true
             else
-                ex = :( sliceview($ex, $ocode) )
+                ex = :( sliceview($ex, $codeW) )
             end
             V && println("step 6 slice:  ex = ",ex)
 
         elseif willreduce
             if redfun == :sum
-                ex = :( sum_drop($ex, dims = $odims) ) # just to look tidy!
+                ex = :( sum_drop($ex, dims = $redWdims) ) # just to look tidy!
             elseif redfun == :prod
-                ex = :( prod_drop($ex, dims = $odims) )
+                ex = :( prod_drop($ex, dims = $redWdims) )
             elseif redfun == :maximum
-                ex = :( max_drop($ex, dims = $odims) )
+                ex = :( max_drop($ex, dims = $redWdims) )
             else
                 redfun = esc(redfun)
-                ex = :( dropdims( $redfun($ex, dims = $odims), dims = $odims) )
+                ex = :( dropdims( $redfun($ex, dims = $redWdims), dims = $redWdims) )
             end
             havecopied = true
             V && println("step 6' reduction:  ex = ",ex)
@@ -467,12 +462,12 @@ function tensor_slice_main(outn, oind, oi,
 
         ## 7. RESHAPE
         if willshapeout
-            needsizes |= colonise!(fsz, slist) # simplify fsz
-            if fsz == [Colon()]
+            needsizes |= colonise!(sizeZ, sizeVlist) # simplify sizeZ
+            if sizeZ == [Colon()]
                 ex = :( vec($ex) )
             else
-                fszex = :(($(fsz...) ,))
-                ex = :( reshape($ex, $fszex) )
+                sizeZex = :(($(sizeZ...) ,))
+                ex = :( reshape($ex, $sizeZex) )
             end
             V && println("step 7:  ex = ",ex)
         end
@@ -483,7 +478,7 @@ function tensor_slice_main(outn, oind, oi,
         end
 
         if hasoutputname # only uncertain in forward case, remember
-            ex = :( $outn = $ex )
+            ex = :( $nameZesc = $ex )
         end
 
     elseif inplace && willreduce
@@ -492,28 +487,28 @@ function tensor_slice_main(outn, oind, oi,
         ## 5. PERMUTEDIMS -- same as fowards, except willstaticslice = false
         if willpermute
             if usingstrided
-                ex = :( strided_permutedims($ex, $perm) ) # this is lazy
-            elseif perm==(2,1)
+                ex = :( strided_permutedims($ex, $permHU) ) # this is lazy
+            elseif permHU==(2,1)
                 ex = :( transpose($ex) )
             else
-                ex = :( permutedims($ex, $perm) )
+                ex = :( permutedims($ex, $permHU) )
                 havecopied = true
             end
             V && println("step 5:  ex = ",ex)
         end
 
         # now backwards
-        rout = outn
+        rout = nameZesc
 
         ## -8. VIEW
         if willfinalview
-            ex = :( view($ex, $fget) )
+            ex = :( view($ex, $getY) )
         end
 
         ## -7. RESHAPE
         if willshapeout
-            oszex = :(($(osz...) ,))
-            rout =  :( reshape($rout, $oszex) ) # osz now means exactly this, not used if going forwards 
+            sizeXex = :(($(sizeX...) ,))
+            rout =  :( reshape($rout, $sizeXex) ) # sizeX now means exactly this, not used if going forwards 
             needsizes = true 
 
             V && println("step 7 backward:  rout = ",rout)
@@ -527,17 +522,17 @@ function tensor_slice_main(outn, oind, oi,
     elseif inplace
         V && @info "steps 1-4 done, now working BACKWARDS" ex willfinalview willshapeout willslice willpermute
 
-        rout = outn
+        rout = nameZesc
 
         ## -8. VIEW -- same as above
         if willfinalview
-            ex = :( view($ex, $fget) )
+            ex = :( view($ex, $getY) )
         end
 
         ## -7. RESHAPE -- same as above
         if willshapeout
-            oszex = :(($(osz...) ,))
-            rout =  :( reshape($rout, $oszex) ) # osz now means exactly this, not used if going forwards 
+            sizeXex = :(($(sizeX...) ,))
+            rout =  :( reshape($rout, $sizeXex) ) # sizeX now means exactly this, not used if going forwards 
             needsizes = true 
 
             V && println("step 7 backward:  rout = ",rout)
@@ -557,13 +552,13 @@ function tensor_slice_main(outn, oind, oi,
         if willpermute
             if usingstrided
                 ex = quote
-                    strided_permutedims!($rout, $ex, $perm)
-                    $outn
+                    strided_permutedims!($rout, $ex, $permHU)
+                    $nameZesc
                 end
             else
                 ex = quote
-                    permutedims!($rout, $ex, $perm) # Couldn't find transpose!
-                    $outn
+                    permutedims!($rout, $ex, $permHU) # Couldn't find transpose!
+                    $nameZesc
                 end
             end
             V && println("step 5 backward:  ex = ",ex)
@@ -571,9 +566,9 @@ function tensor_slice_main(outn, oind, oi,
         else # throw out some steps...
             # best case is that we had nothing but reshaping -- go back to beginning!
             if !willslice && !willstaticslice && !willglue && !willstaticglue
-                W && println("step 3' throwing out ex = ",ex, "  and rout = ", rout, "  to go back to inn = ", inn)
+                W && println("step 3' throwing out ex = ",ex, "  and rout = ", rout, "  to go back to nameAesc = ", nameAesc)
                 W && println("... had needsizes = ",needsizes," -> false, and mustcheck = ",mustcheck, " -> true")
-                ex = :( copyto!($outn, $inn) )
+                ex = :( copyto!($nameZesc, $nameAesc) )
                 needsizes = false
                 mustcheck = true
                 W && println("... finally ex = ",ex)
@@ -583,7 +578,7 @@ function tensor_slice_main(outn, oind, oi,
             elseif !willslice && !willstaticslice
                 W && println("step 3'' throwing away rout = ", rout, "  to go back to ex = ", ex) ## WTF?
                 W && println("... had needsizes = ",needsizes," -> false, and mustcheck = ",mustcheck, " left alone")
-                ex = :( copyto!($outn, $ex) )
+                ex = :( copyto!($nameZesc, $ex) )
                 needsizes = false # not very confident about this
                 W && println("... finally ex = ",ex)
                 # W && println("... for expr = ",expr)
@@ -602,14 +597,14 @@ function tensor_slice_main(outn, oind, oi,
 
     if needsizes
         ex = quote
-            local sz = $slistex
+            local sz = $sizeVlistex
             $ex
         end
     end
 
-    if mustcheck && length(sdict.checks) > 0
+    if mustcheck && length(storeAZ.checks) > 0
         ex = quote
-            $(sdict.checks...)
+            $(storeAZ.checks...)
             $ex
         end
     end
