@@ -1,5 +1,5 @@
 
-export @check, check!, @einsum!, @tensor!
+export @check!, check!, @einsum!, @tensor!
 
 """
     @check!(A[i, j, μ, ν])
@@ -11,9 +11,9 @@ from the saved ones. This happens while parsing your source code, there is zero 
 In addition, it can insert size checks to be performed at run-time. 
 At the first occurrange these save `length(i:) == size(A,1)`, and on subsequent uses of 
 the same index (even on different tensors) give an error if the sizes do not match. 
-If turned on, this will need to look up indices in a dictionary, which takes about ??μs.
+If turned on, this will need to look up indices in a dictionary, which takes ... 50ns, really? 
 
-Returns either `A` or `check!(A, (:i,:j))`. 
+Returns either `A` or `check!(A, stuff)`. 
 
     @check! B[i,j] C[μ,ν]
 
@@ -21,7 +21,7 @@ Checks several tensors, returns nothing.
 
     @check!  alpha=true  tol=3  size=false  throw=false  info  empty
 
-Controls options for `@check` and related macros, these are the defaults:
+Controls options for `@check!` and related macros, these are the defaults:
 * `alpha=true` turns on the parse-time checking, based on index letters
 * `tol=3` sets how close together letters must be: `B[j,k]` is not an error but `B[a,b]` will be
 * `size=false` turns off run-time size checking
@@ -95,7 +95,7 @@ function check_one(ex)
             check_err("@check! $ex now has fewer indices than previous $got")
         else
             for (i, j) in zip(ind, got)
-                isa(i,Int) && continue
+                isa(i,Int) || i==(:_) && continue
                 si = String(i)
                 sj = String(j)
                 length(si)>1 || length(sj)>1 && continue    
@@ -107,16 +107,18 @@ function check_one(ex)
     end
 
     if check_options.size
-        Astring = string(A,"[",join(ind,","),"]")
-        return :(check!($A, $Astring, $ind))
+        Astring = string(A,"[",join(ind," ,"),"]")
+        Aesc = esc(A)
+        return :(check!($Aesc, $Astring, $ind))
     else
         return A
     end
 end
 
 """
-    check!(A, (:i,:j))
+    check!(A, "A[i,j]", (:i,:j))
 Performs run-time size checking, on behalf of the `@check!` macro, returns `A`. 
+The string is just for the error message. 
 """
 function check!(A::AbstractArray, str::String, ind::Tuple)
     sizeA = size(A)
@@ -156,23 +158,29 @@ macro tensor!(ex)
 end
 
 function check_tensor(ex)
-    if @capture(ex, lhs_ := *(rhs__)) || @capture(ex, lhs_ = *(rhs__)) 
-        outex = quote end
+    if @capture(ex, lhs_ := rhs_ ) || @capture(ex, lhs_ = rhs_ )  
 
-        push!(outex.args, check_one(lhs))
-        for tensor in rhs
-            push!(outex.args, check_one(tensor))
-        end
-        
-        if check_options.size
-            push!(outex.args, :(@tensor $ex) )
+        outex = quote end
+        function f(exi)                                                         
+            if @capture(exi, A_[ijk__] )   
+                push!(outex.args, check_one(exi))                                      
+            end                                                                    
+            exi                                                                    
+        end   
+        MacroTools.prewalk(f, rhs)
+
+        if check_options.size == false
+            check_one(lhs) # then these are only parse checks, outex is trash
+        else
+            push!(outex.args, :(out = TensorOperations.@tensor $ex) )
+            push!(outex.args, check_one(lhs)) # lhs size may not be known until after @tensor
+            push!(outex.args, :out )          # make sure we still return what @tensor did
             return outex
         end
-
     else
         @warn "@tensor! not smart enough to process $ex yet, so ignoring it"
     end
-    return :(@tensor $ex)
+    return :(TensorOperations.@tensor $ex)
 end
 
 function check_einsum(ex)
@@ -181,7 +189,7 @@ function check_einsum(ex)
 
         push!(outex.args, check_one(lhs))
         for tensor in rhs
-            push!(outex.args, check_one(tensor))
+            push!(outex.args, check_one(tensor)) # TODO same prewalk as @tensor
         end
 
         if check_options.size
@@ -192,8 +200,7 @@ function check_einsum(ex)
     else
         @warn "@einsum! not smart enough to process $ex yet, so ignoring it"
     end
-    println(ex)
-    return Einsum._einsum(ex)
+    return esc(Einsum._einsum(ex))
 end
 
 #==
@@ -204,8 +211,11 @@ A = B * C
 @einsum A[i,j] := B[i,k] * C[k,j]
 @tensor A[i,j] := B[i,k] * C[k,j]
 
-@einsum A[i,j] := B[i,k] * C[k,zz] # not an error, WTF?
+@einsum A[i,j] := B[i,k] * C[k,zz] # not an error... will be fixed soon, https://github.com/ahwillia/Einsum.jl/pull/31
 
+
+
+## pasting the above code, this works... but not from inside module, esc() problems
 
 
 
@@ -215,6 +225,8 @@ A = B * C
 
 @tensor! A[i,j] := B[i,k] * C[k,j]
 
+@check! info   # has ABC and ijk
+
 @check! A[z,j] # compains about z
 @check! B[i]   # complains about number
 
@@ -223,7 +235,7 @@ B5 = rand(2,5); C5 = rand(5,2);
 @tensor! A[i,j] := B5[i,k] * C5[k,j]
 
 @einsum! A[i,j] := B5[i,k] * C5[k,zz] # complains about zz
-@tensor! A[i,j] := B5[i,k] * C5[k,zz]
+@tensor! A[i,j] := B5[i,k] * C5[k,zz] # and errors
 
 
 ==#
