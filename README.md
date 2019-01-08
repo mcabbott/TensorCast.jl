@@ -1,22 +1,26 @@
 
-<a href="https://travis-ci.org/mcabbott/TensorSlice.jl"><img src="https://travis-ci.org/mcabbott/TensorSlice.jl.svg?branch=master" align="right" alt="Build Status" padding="20"></a>
-
 # TensorSlice.jl
+
+<a href="https://travis-ci.org/mcabbott/TensorSlice.jl"><img src="https://travis-ci.org/mcabbott/TensorSlice.jl.svg?branch=master" align="right" alt="Build Status" padding="20"></a>
 
 The package which slices and dices, squeezes and splices!
 
-It provides two macros: `@shape` performs reshaping and slicing of tensors,
-and `@reduce` takes sums (or other reductions) over some directions:
+Many calculations involving N-dimensional arrays are least-confusingly written in index notation,
+and this package aims to help make this easy. 
+It defines a number of macros: `@shape` performs reshaping, and conversions to and from an array of arrays, 
+and while `@reduce` takes sums (or other reductions) over some directions:
 
 ```julia
-@shape A[j][i] := B[i,j]            # slice a matrix
+@shape A[j][i] := B[i,j]            # slice a matrix into its rows
 @shape A[i,(j,k)] := B[i,j,k]       # reshape 3-tensor to a matrix
 
 @reduce A[i] := sum(j,k) B[i,j,k]   # sum over dims=(2,3)
+@reduce A[μ,ν,J] := prod(i:2) B[(i,J)][μ,ν] # products of pairs of matrices, stacked
 ```
 
 These are intended to complement the macro from [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl),
-which instead performs Einstein-convention contractions and traces:
+which instead performs Einstein-convention contractions and traces, in a very similar notation. 
+Here it is implicit that repeated indices are summed over: 
 
 ```julia
 @tensor A[i,k] := B[i,j] * C[j,k]   # matrix multiplication, A = B * C
@@ -24,21 +28,71 @@ which instead performs Einstein-convention contractions and traces:
 ```
 
 More general operations can also be performed with the macro from [Einsum.jl](https://github.com/ahwillia/Einsum.jl),
-which sums over all indices appearing only on the right, and allows arbitrary functions:
+again in a similar notation. This sums over all indices appearing only on the right, 
+and allows us to insert arbitrary (element-wise) functions:
 
 ```julia
-@einsum S[i] := - P[i,n] * log( P[i,n] )  # sum over n, for each i
+@einsum S[i] := -P[i,n] * log(P[i,n])  # sum over n, for each i
 ```
 
-These three packages work in very different ways. The original `@einsum` simply writes the nested loops,
-`@tensor` performs a series of optimised contraction and trace operations,
-while `@shape` and `@reduce` instead write basic Julia commands.
-This means that they will work equally well on [Flux](https://github.com/FluxML/Flux.jl)'s TrackedArrays, 
-on the GPU via [CuArrays](https://github.com/JuliaGPU/CuArrays.jl),
-and probably on almost any other kind of N-dimensional array. 
+<!--
+When writing complicated index expressions by hand, it is conventional to use different groups of letters 
+for indices which mean different things. If `a,b,c...` label some objects, while `μ,ν,...` are components 
+of their positions (in units of meters) then any expression which mixes these up is probably a mistake. 
+This package also can automate checks for such mistakes: 
 
-This package is roughly the equivalent of [`einops`](https://github.com/arogozhnikov/einops) in Python,
-while TensorOperations is more like [`opt_einsum`](https://github.com/dgasmith/opt_einsum).
+```julia
+@reduce! A[α] := sum(k) B[α,k]      # memorises that A takes α, etc.
+@tensor! C[α,β] := A[α] * A[β]      # no problem: β is close to α
+@shape! D[n][β] := C[n,β]           # error! C does not accept n
+```
+
+If you need to leave index notation and return, you can insert `@check!` to confirm. 
+(The `!` is because it alters a dictionary, off-stage somewhere.)
+Also, this is how you place axes where desired for broadcasting:
+
+```julia
+@shape! D[α,_,β,_] := C[α,β]        # reshape to size(D,2) == size(D,4) == 1
+@check! E[n,α]                      # just the check, with no calculation
+```
+
+These macros are (by definition) run when your code is loaded, not during the calculation, and thus such checks 
+have zero speed penalty. You can turn on explicit run-time size checks too, if you wish.
+--->
+
+The macros these from different packages produce very different code for actually 
+doing the calculation you requested. The original `@einsum` simply writes the necessary set of nested loops. 
+Instead `@tensor` works out a sequence of contraction and trace operations, calling optimised BLAS routines where possible. 
+The  macros from this package, `@shape` and `@reduce`, aim to produce simple Julia commands, just
+a string of `reshape` and `permutedims` and `eachslice` and so on. 
+This means that they are very generic, and will work equally well for instance on [Flux](https://github.com/FluxML/Flux.jl)'s
+TrackedArrays, on the GPU via [CuArrays](https://github.com/JuliaGPU/CuArrays.jl),
+and probably on almost any other kind of N-dimensional array.
+
+For those who speak Python, this package is similar to [`einops`](https://github.com/arogozhnikov/einops),
+while Einsum / TensorOperations map very roughly to [`einsum`](http://numpy-discussion.10968.n7.nabble.com/einsum-td11810.html) 
+/ [`opt_einsum`](https://github.com/dgasmith/opt_einsum).
+
+<!--
+(for reshaping etc.)
+plus perhaps [`tsalib`](https://github.com/ofnote/tsalib) (shape annotations).
+
+Projects like [`xarray`](http://xarray.pydata.org/en/stable/) and 
+[`LabeledTensors`](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/contrib/labeled_tensor) are closer to
+Julia's [`NamedArrays`] / [`AxisArrays`] / [`DimArrays`].
+-->
+
+## Installation
+
+You need [Julia](https://julialang.org/downloads/) 1.0. This package is not yet registered, install it like this: 
+
+```julia
+pkg> add https://github.com/mcabbott/TensorSlice.jl # press ] for pkg, backspace to leave.
+                                                    # all packages for examples... get a coffee:
+pkg> add StaticArrays JuliennedArrays Strided  TensorOperations Einsum  Flux ImageView FileIO
+
+julia> using TensorSlice
+```
 
 ## Examples
 
@@ -50,7 +104,7 @@ mat = (1:4)' .+ rand(2,4)
 @shape rows[r][c] := mat[r,c]
 @shape cols[♜][🚣] := rows[🚣][♜]
 
-@reduce sum_r[c] := sum(r) mat[r,c]
+@reduce sum_r[c] := sum(r) mat[r,c] # this is a vector, not a 1×N matrix
 
 sum_r == sum(rows) # true
 ```
@@ -59,7 +113,8 @@ This reshapes a matrix into a 3-tensor. The ranges of `i` and `k` would be ambig
 (at least) one of them, which is written like so:
 
 ```julia
-M = rand(2*5, 3)
+M = randn(Float16, 2*5, 3)
+
 
 @shape A[i,j,k] := M[(i,k),j]  i:2, k:5
 size(A) == (2,3,5)
@@ -109,9 +164,9 @@ kron(A[:,:,1], B[:,:,1])  # matrix, same values
 ```
 
 While *tensor* is often just a fancy word for *N-dimensional array*, it has more specific meanings, 
-and one of them is that the the tensor product of two vector spaces `V⊗V` is the one with the product of 
-their dimensions (as opposed to `V⊕V = V×V` which has the sum). The Kronecker product 
-`kron` maps to such a tensor product space (as `vcat` maps into the direct sum `V⊕V`). 
+and one of them is that the the tensor product of two vector spaces `V ⊗ V` is the one with the product of 
+their dimensions (as opposed to `V × V` which has the sum). The Kronecker product 
+`kron` maps to such a tensor product space (as `vcat` maps into `V × V`). 
 We can always think of these combined indices `(i,I) = i\I` in this way.
 <!--- in fact perhaps `i⊗I` ought to be another accepted notation. --->
 
@@ -120,13 +175,10 @@ This does max-pooling on the above image grid `G`:
 <img src="test/famous-digits-2.png?raw=true" width="224" height="112" align="right" alt="MNIST" padding="20">
 
 ```julia
-@reduce H[a, b] := maximum(α,β)  G[α\a, β\b]  α:2,β:2
-size(G) == 2 .* size(H)
+@reduce H[a, b] := maximum(α:2,β:2)  G[α\a, β\b]  
 
-@reduce H4[a, b] := maximum(α:4,β:4)  G[α\a, β\b]
-size(G) == 4 .* size(H4)   # ↑ also notice ranges
-
-imshow(H); imshow(H4)
+size(G) == 2 .* size(H) # true
+imshow(H)
 ```
 
 In words: consider a horizontal line of pixels in `G` and re-arrange them into two rows, 
@@ -134,15 +186,13 @@ so that each column contains two formerly-neighbouring pixes. The horizontal pos
 vertical is `α ∈ 1:2`. Take the maximum along these new columns, giving us one line again (half as long). 
 Do this to every line, and also to every vertical line, to obtain `H`. 
 
-<!---
-Notice that ranges `α:2, β:2` can be specified inside the reduction function, instead of at the end. 
---->
+Notice also that ranges `α:2, β:2` can be specified inside the reduction function, instead of at the end. 
 
-This takes a 2D slice `W[2,:,4,:]` of a 4D array, transposes it, and then forms it into a 4D array
+Finally, this takes a 2D slice `W[2,:,4,:]` of a 4D array, transposes it, and then forms it into a 4D array
 with two trivial dimensions -- such output can be useful for interacting with broadcasting:
 
 ```julia
-W = rand(2,3,5,7);
+W = randn(2,3,5,7);
 
 @shape Z[_,i,_,k] := W[2,k,4,i]  # equivalent to Z[1,i,1,k] on left
 
@@ -151,7 +201,7 @@ size(Z) == (1,7,1,3)
 
 ## Inside
 
-To inspect what this package produces, there is a third macro `@pretty` which works like this:
+To inspect what this package produces, there is another macro `@pretty` which works like this:
 
 ```julia
 @pretty @shape A[(i,j)] = B[i,j]
@@ -189,7 +239,7 @@ and some tidying up.
 
 ## Notation
 
-The complete list: 
+The complete list has grown quite long!
 
 * `A[i][j,k]` indicates a vector of matrices, like `[rand(2,2) for i=1:3]`.
 
@@ -335,18 +385,7 @@ Z = @arrow [Y / sum, i:2, j:3]  i\k  j\l n  =>  k l n
 
 * A mullet as awesome as [Rich DuLaney](https://www.youtube.com/watch?v=Ohidv69WfNQ) had.
 
-
 ## About
-
-You need [Julia](https://julialang.org/downloads/) 1.0. This package is not yet registered, install like this: 
-
-```julia
-pkg> add https://github.com/mcabbott/TensorSlice.jl # press ] for pkg, backspace to leave
-                                                    # these image packages will take a while:
-pkg> add StaticArrays JuliennedArrays Strided  TensorOperations Einsum  Flux ImageView FileIO
-
-julia> using TensorSlice
-```
 
 First uploaded January 2019.
 
