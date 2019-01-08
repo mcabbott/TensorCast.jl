@@ -82,7 +82,7 @@ function parse!(sdict::SizeDict, A, outer, inner, allowranges=false, flags=nothi
     # but do allow tuples etc.
     for (dout, ind) in enumerate(outer)
         if isconstant(ind)              # then it's a constant slice,
-            i = (ind == :_) ? 1 : ind   # with _ indicating the same as 1 -- TODO make _ add a check size(A,d)==1, if A known.
+            i = (ind == :_) ? 1 : ind   # with _ indicating the same as 1 -- TODO make _ add a check size(A,d)==1, if A known.  Also TODO is to deal with $c correctly.
             push!(getafix, i)           # so when we view(A, getafix...) we need it
             push!(putsz, 1)             # or if driving the other direction, make size=1.
         else

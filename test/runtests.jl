@@ -14,6 +14,7 @@ using JuliennedArrays
 
 @testset "advertising" begin
     @testset "new readme" begin
+
         
         mat = (1:4)' .+ rand(2,4)
         @shape rows[r][c] := mat[r,c]
@@ -41,6 +42,14 @@ using JuliennedArrays
 
         @reduce H4[a, b] := maximum(α:4,β:4)  G[α\a, β\b]
         @test size(G) == 4 .* size(H4) 
+
+        W = randn(2,3,5,7);
+        @shape Z[_,i,_,k] := W[2,k,4,i]  # equivalent to Z[1,i,1,k] on left
+        @test size(Z) == (1,7,1,3)
+
+        B = [ i .* ones(2,2) for i=1:4 ]
+        @reduce A[μ,ν,J] := prod(i:2) B[(i,J)][μ,ν]
+        @test size(A) == (2, 2, 2)
 
 
     end

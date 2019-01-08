@@ -5,6 +5,7 @@ export @shape, @reduce, @pretty
 using MacroTools
 
 include("parse.jl")
+include("icheck.jl")
 
 V = false # capital V for extremely verbose
 W = false # printouts where I'm working on things
@@ -40,7 +41,20 @@ These are disabled by the Base option `_`.
 If `using JuliennedArrays` then slicing and gluing will be done by this package.
 """
 macro shape(expr, rex=nothing)
+    _shape(expr, rex; icheck=false)
+end
 
+"""
+    @shape! Z[i...] := A[j...] opt
+
+Variant of `@shape` which effectively runs `@check!()` on each tensor.
+"""
+macro shape!(expr, rex=nothing)
+    _shape(expr, rex; icheck=true)
+    @warn "@shape! doesn't work well yet"
+end
+
+function _shape(expr, rex=nothing; icheck=false)
     if @capture(expr, left_ = right_ )
         sign = :(=)
     elseif @capture(expr, left_ := right_ )
@@ -78,7 +92,7 @@ macro shape(expr, rex=nothing)
         willslice, willstaticslice,   # flags from LHS of @shape
         false, nothing,               # info from LHS of @reduce
         sign, right, rex,             # RHS still to be done
-        "@shape")
+        "@shape", icheck)
 end
 
 """
@@ -96,7 +110,19 @@ Tensor reduction macro:
 * All indices appearing on the right must appear either within `sum(...)` etc, or on the left. 
 """
 macro reduce(expr, right, rex=nothing)
+    _reduce(expr, right, rex; icheck=false)
+end
 
+"""
+    @reduce! Z[j] := sum(i,k) A[i,j,k]
+
+Variant of `@reduce` which effectively runs `@check!()` on each tensor.
+"""
+macro reduce!(expr, right, rex=nothing)
+    _reduce(expr, right, rex; icheck=true)
+end
+
+function _reduce(expr, right, rex=nothing; icheck=false)
     if @capture(expr, left_ = red_ )
         sign = :(=)
     elseif @capture(expr, left_ := red_ )
@@ -134,7 +160,7 @@ macro reduce(expr, right, rex=nothing)
         false, false,                 # flags from LHS of @shape
         true, redfun,                 # info from LHS of @reduce
         sign, right, rex,             # RHS still to be done
-        "@reduce")
+        "@reduce", icheck)
 end
 
 ############################### NOTATION ################################
@@ -176,7 +202,7 @@ function tensor_slice_main(nameZ, indZ, indZsub,
         willslice, willstaticslice,   # flags from LHS of @shape
         willreduce, redfun,           # info from LHS of @reduce
         sign, right, rex,             # RHS still to be done
-        macroname)
+        macroname, icheck)
 
     ## test what packages are loaded
     usingstrided = isdefined(TensorSlice, :Strided)
@@ -390,11 +416,9 @@ function tensor_slice_main(nameZ, indZ, indZsub,
 
     ## 4. REVERSE
     if willreverse
-        # revFdims = filter(d -> isigns[d]==-1, 1:length(indEflat)) |> Tuple
-        if length(revFdims) == 1
-            revFdims = revFdims[1]
+        for d in revFdims # reverse cannot take dims=(2,3), surprisingly
+            ex = :( reverse($ex, dims=$d) )
         end
-        ex = :( reverse($ex, dims=$revFdims) )
         havecopied = true
     end
 
@@ -446,15 +470,20 @@ function tensor_slice_main(nameZ, indZ, indZsub,
             V && println("step 6 slice:  ex = ",ex)
 
         elseif willreduce
-            if redfun == :sum
-                ex = :( sum_drop($ex, dims = $redWdims) ) # just to look tidy!
-            elseif redfun == :prod
-                ex = :( prod_drop($ex, dims = $redWdims) )
-            elseif redfun == :maximum
-                ex = :( max_drop($ex, dims = $redWdims) )
-            else
+            if willshapeout # then no need for dropdims
                 redfun = esc(redfun)
-                ex = :( dropdims( $redfun($ex, dims = $redWdims), dims = $redWdims) )
+                ex = :( $redfun($ex, dims = $redWdims) )
+            else
+                if redfun == :sum
+                    ex = :( sum_drop($ex, dims = $redWdims) ) # just to look tidy!
+                elseif redfun == :prod
+                    ex = :( prod_drop($ex, dims = $redWdims) )
+                elseif redfun == :maximum
+                    ex = :( max_drop($ex, dims = $redWdims) )
+                else
+                    redfun = esc(redfun)
+                    ex = :( dropdims( $redfun($ex, dims = $redWdims), dims = $redWdims) )
+                end
             end
             havecopied = true
             V && println("step 6' reduction:  ex = ",ex)

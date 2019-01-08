@@ -260,6 +260,13 @@ end
     @test A == B == D
     @test C == bc
 
+    ccbb = rand(0:99, 3,3,2,2)
+    @shape A[b,c,d,e] := ccbb[-b,c,-d,e]
+    B = similar(A);
+    @test_broken (@shape B[-b,c,d,e] = ccbb[b,c,-d,e] ; false) # in-place is WRONG
+    @shape B[-b,c,d,e] := ccbb[b,c,-d,e]
+    C = reverse(reverse(ccbb, dims=1), dims=3)
+    @test A == B == C
 
 end
 @testset "fixed indices" begin
