@@ -60,7 +60,7 @@ These macros are (by definition) run when your code is loaded, not during the ca
 have zero speed penalty. You can turn on explicit run-time size checks too, if you wish.
 --->
 
-The macros these from different packages produce very different code for actually 
+These three packages produce very different code for actually 
 doing the calculation you requested. The original `@einsum` simply writes the necessary set of nested loops. 
 Instead `@tensor` works out a sequence of contraction and trace operations, calling optimised BLAS routines where possible. 
 The  macros from this package, `@shape` and `@reduce`, aim to produce simple Julia commands, just
@@ -114,7 +114,6 @@ This reshapes a matrix into a 3-tensor. The ranges of `i` and `k` would be ambig
 
 ```julia
 M = randn(Float16, 2*5, 3)
-
 
 @shape A[i,j,k] := M[(i,k),j]  i:2, k:5
 size(A) == (2,3,5)
