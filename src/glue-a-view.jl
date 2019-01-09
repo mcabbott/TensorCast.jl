@@ -27,3 +27,7 @@ end
         throw(ArgumentError("@shape can't static_glue slices which aren't StaticArrays"))
     end
 end
+
+# Issues I should read:
+# https://github.com/JuliaArrays/StaticArrays.jl/pull/496
+# https://github.com/JuliaArrays/StaticArrays.jl/issues/501

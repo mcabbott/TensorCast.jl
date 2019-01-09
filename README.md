@@ -11,11 +11,11 @@ It defines a number of macros: `@shape` performs reshaping, and conversions to a
 and while `@reduce` takes sums (or other reductions) over some directions:
 
 ```julia
-@shape A[j][i] := B[i,j]            # slice a matrix into its rows
+@shape A[j][i] := B[-i,j]           # slice a matrix into its rows, and reverse them
 @shape A[i,(j,k)] := B[i,j,k]       # reshape 3-tensor to a matrix
 
 @reduce A[i] := sum(j,k) B[i,j,k]   # sum over dims=(2,3)
-@reduce A[μ,ν,J] := prod(i:2) B[(i,J)][μ,ν] # products of pairs of matrices, stacked
+@reduce A[μ,ν,J] := prod(i:2) B[(i,J)][μ,ν]  # products of pairs of matrices, stacked
 ```
 
 These are intended to complement the macro from [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl),
@@ -32,7 +32,7 @@ again in a similar notation. This sums over all indices appearing only on the ri
 and allows us to insert arbitrary (element-wise) functions:
 
 ```julia
-@einsum S[i] := -P[i,n] * log(P[i,n])  # sum over n, for each i
+@einsum S[i] := -P[i,n] * log(P[i,n]/Q[n])  # sum over n, for each i
 ```
 
 <!--
@@ -60,16 +60,19 @@ These macros are (by definition) run when your code is loaded, not during the ca
 have zero speed penalty. You can turn on explicit run-time size checks too, if you wish.
 --->
 
-These three packages produce very different code for actually 
+There is a small overlap of operations which could be done with any of these three packages. 
+However they produce very different code for actually 
 doing the calculation you requested. The original `@einsum` simply writes the necessary set of nested loops. 
 Instead `@tensor` works out a sequence of contraction and trace operations, calling optimised BLAS routines where possible. 
+
 The  macros from this package, `@shape` and `@reduce`, aim to produce simple Julia commands, just
 a string of `reshape` and `permutedims` and `eachslice` and so on. 
 This means that they are very generic, and will work equally well for instance on [Flux](https://github.com/FluxML/Flux.jl)'s
 TrackedArrays, on the GPU via [CuArrays](https://github.com/JuliaGPU/CuArrays.jl),
 and probably on almost any other kind of N-dimensional array.
 
-For those who speak Python, this package is similar to [`einops`](https://github.com/arogozhnikov/einops),
+For those who speak Python, this package is similar to [`einops`](https://github.com/arogozhnikov/einops)
+(only without the cool video),
 while Einsum / TensorOperations map very roughly to [`einsum`](http://numpy-discussion.10968.n7.nabble.com/einsum-td11810.html) 
 / [`opt_einsum`](https://github.com/dgasmith/opt_einsum).
 
@@ -104,7 +107,7 @@ mat = (1:4)' .+ rand(2,4)
 @shape rows[r][c] := mat[r,c]
 @shape cols[♜][🚣] := rows[🚣][♜]
 
-@reduce sum_r[c] := sum(r) mat[r,c] # this is a vector, not a 1×N matrix
+@reduce sum_r[c] := sum(r) mat[r,c] # this is a vector, not a 1×4 matrix
 
 sum_r == sum(rows) # true
 ```
@@ -253,17 +256,16 @@ The complete list has grown quite long!
   The in-place version `A[...] = sum(...) B[...]` is instead `sum!(A, B)`.
   This works for any function `f` which takes the keyword `dims`; the in-place form assumes that `f!` exists.  
 
-* `... = A[i, ...]  k:5` indicates that `k` runs over 5 values: `size(A, 1) == 5`.
+* `... = A[k, ...]  k:5` indicates that `k` runs over 5 values: `size(A, 1) == 5`.
   It is only necessary to specify this when ranges would otherwise be ambiguous.
-  You can also write `prod(i, k:5)` with `@reduce`. 
+  You can also write this inside `prod(k:5)` if using `@reduce`. 
 
 * `A[i,-j]` means just `reverse(A, dims=2)`.
 
 * All indices must appear both on the left (or inside a reduction function) and on the right.  
 
-* Inserting a `1` in the output `A[i,1,j] := ...` ensures `size(A) = (N, 1, M)`. 
-  You may also use an underscore. Constants indices in the input can be more general, 
-  `... := B[i,2,j,4]` means `view(B, :,2,:,4)`.  <!-- $c ... 
+* Inserting an underscore (or a `1`) in the output `A[i,_,j] := ...` ensures `size(A) = (N, 1, M)`. 
+  Constants indices in the input can be more general, `... := B[i,2,j,4]` means `view(B, :,2,:,4)`.  <!-- $c ... 
   An underscore in the input instead simply asserts (or assumes) that the size of this dimension is `1`. -->
   (Note that numbers [mean something else entirely](http://jutho.github.io/TensorOperations.jl/latest/indexnotation/) in `@tensor`.)
 
