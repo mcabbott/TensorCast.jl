@@ -6,8 +6,10 @@ using StaticArrays # you can't actually test without this, as macros using it ge
 using JuliennedArrays
 # using Strided # TODO using this creates errors...
 
-@testset "shape" begin include("shape.jl") end
-@testset "reduce" begin include("reduce.jl") end
+@testset "@shape"  begin include("shape.jl")   end
+@testset "@reduce" begin include("reduce.jl")  end
+@testset "@cast"   begin include("casting.jl") end
+@testset "@check!" begin include("check.jl")   end
 
 @testset "helper functions" begin include("parse.jl") end
 @testset "data functions" begin include("cat.jl") end
