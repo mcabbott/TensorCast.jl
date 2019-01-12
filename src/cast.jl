@@ -1,6 +1,10 @@
 
 export @cast, @cast!
 
+# TODO allow A[_,i,_,j] output, and B[i,3] input
+# TODO think about @strided here
+# TODO lazy sum etc
+
 """
     @cast A[i,j] := B[i] + γ * D[j]             # A = B .+ γ .* D'
     @cast A[i,j] =  B[i] * log( C[i,j] / D[j] ) # A .= B .* log.(C ./ D')
@@ -29,17 +33,18 @@ macro cast!(ex...)
     _cast(ex...; icheck=true, where=where)
 end
 
-function _cast(ex; icheck=false, where=nothing)
+function _cast(ex; icheck=false, where=nothing) # one expression = un-reduced
     if @capture(ex, left_ := right_ )
         sign = :( := )
     elseif @capture(ex, left_ = right_ )
         sign = :( = )
-    else error("@cast can't understand $ex")
+    else 
+        error("@cast can't understand $ex")
     end
 
     outex = quote end
 
-    @capture(left, nameZ_[indZ__] ) || error("@cast can't understand $left")
+    @capture(left, nameZ_[indZ__] ) || error("@cast can't understand $left, expected something like A[i,j]")
     if icheck && check_options.size # then check_one returns check!(Z)
         nameZcheck = check_one(left, where)
         push!(outex.args, nameZcheck)
@@ -58,6 +63,43 @@ function _cast(ex; icheck=false, where=nothing)
     end
 
     # length(outex.args) == 1 && return esc(outex.args[1]) # it has #= ... =# in it too
+    esc(outex)
+end
+
+function _cast(redleft, right; icheck=false, where=nothing) # two expressions = reduce
+    if @capture(redleft, nameZ_[indZ__] := redfun_(indZred__))
+        sign = :( := )
+    elseif @capture(redleft, nameZ_[indZ__] = redfun_(indZred__))
+        sign = :( = )
+    else 
+        error("@cast can't understand $redleft, expected something like A[i] := sum(j)")
+    end
+
+    indVall = vcat(indZ, indZred) # reduced indices now go at the right
+    redWdims = Tuple(length(indZ)+1:length(indVall))
+
+    outex = quote end
+
+    if icheck && check_options.size # then check_one returns check!(Z)
+        nameZcheck = check_one(left, where)
+        push!(outex.args, nameZcheck)
+    elseif icheck # only parse-time check
+        check_one(left, where)
+    end
+
+    new_right = MacroTools.prewalk(x -> walker!(outex, x, indVall, icheck, where), right)
+
+    bc = Broadcast.__dot__(new_right)
+    if sign == :(=)
+        if !endswith(string(redfun), '!')
+            redfun = Symbol(redfun, '!')
+        end
+        push!(outex.args, :( $redfun($nameZ, $bc) ))
+        push!(outex.args, nameZ)
+    else
+        push!(outex.args, :( $nameZ = dropdims($redfun($bc; dims=$redWdims), dims=$redWdims) ))
+    end
+
     esc(outex)
 end
 
@@ -152,13 +194,6 @@ by inserting axes on which `size(B, d) == 1` as needed.
     str = join(pretty, ", ")
     d-1 == ndims(A) || throw(ArgumentError("orient(A, ($str)) got ndims(A) = $(ndims(A)), expeceted n = $(d-1)"))
     :(reshape(A, ($(list...),))) 
-end
-
-
-
-function _cast(ex1, rhs; icheck=false)
-    @capture(ex1, nameZ_[indZ__] := red_(indZred__)) || @capture(ex1, nameZ_[indZ__] = red_(indZred__)) || error("can't read $ex1")
-    @info "@cast reducing" nameZ indZ red indZred rhs
 end
 
 
