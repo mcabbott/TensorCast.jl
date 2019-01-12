@@ -1,5 +1,5 @@
 
-using JuliennedArrays
+using .JuliennedArrays
 
 # import TensorSlice: sliceview, glue # because Revise doesn't track these
 

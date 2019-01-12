@@ -1,8 +1,4 @@
 julia 0.7
 
 MacroTools
-
 Requires
-JuliennedArrays
-StaticArrays
-Strided

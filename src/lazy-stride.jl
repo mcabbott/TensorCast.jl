@@ -1,5 +1,5 @@
 
-using Strided
+using .Strided
 
 # import TensorSlice: strided_permutedims, strided_permutedims!, maybecopy # because Revise doesn't track these
 
@@ -27,5 +27,5 @@ end
 
 maybecopy(A::StridedView) = copy(A)
 
-# If you ask for :=, this may be able to guarantee a copy -- tidier thing for slicecopy?
+# If you ask for |=, this may be able to guarantee a copy -- tidier thing for slicecopy?
 # it won't help with permutedims fallback story... maybe that should be stricter? spermutedims?
