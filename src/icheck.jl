@@ -30,7 +30,8 @@ Controls options for `@check!` and related macros, these are the defaults:
 * `info` prints what's currently saved.
 """
 macro check!(exs...)
-    _check!(exs...)
+    where = (mod=__module__, src=__source__)
+    _check!(exs...; where=where)
 end
 
 const index_store = Dict{Symbol, Tuple}()
@@ -45,13 +46,13 @@ end
 
 const check_options = CheckOptions(true, 3, false, false)
 
-function _check!(exs...)
+function _check!(exs...; where=nothing)
     for ex in exs
         if @capture(ex, A_[vec__])
             if length(exs)==1
-                return esc(check_one(ex))
+                return esc(check_one(ex, where))
             else
-                check_one(ex)
+                check_one(ex, where)
             end
 
         elseif @capture(ex, alpha=val_Bool)
@@ -82,17 +83,17 @@ function _check!(exs...)
     return nothing
 end
 
-function check_one(ex)
-    @capture(ex, A_[vec__]) || error("@check! can't understand $ex")
+function check_one(ex, where=nothing)
+    @capture(ex, A_[vec__]) || error("check_one can't understand $ex, expected something like A[i,j]")
     ind = Tuple(vec)
 
     if check_options.alpha
         got = get!(index_store, A, ind)
 
         if length(ind) > length(got)
-            check_err("@check! $ex now has more indices than previous $got")
+            check_err("@check! $ex now has more indices than previous $got", where)
         elseif length(ind) < length(got)
-            check_err("@check! $ex now has fewer indices than previous $got")
+            check_err("@check! $ex now has fewer indices than previous $got", where)
         else
             for (i, j) in zip(ind, got)
                 isa(i,Int) || i==(:_) && continue # TODO better handling of (1, $c, word)
@@ -100,7 +101,7 @@ function check_one(ex)
                 sj = String(j)
                 length(si)>1 || length(sj)>1 && continue    
                 if abs(Int(si[1])-Int(sj[1])) > check_options.tol
-                    check_err("@check! $ex now has index $i where previously it had $j")
+                    check_err("@check! $ex now has index $i where previously it had $j", where)
                 end
             end
         end
@@ -108,28 +109,35 @@ function check_one(ex)
 
     if check_options.size
         Astring = string(A,"[",join(ind," ,"),"]")
-        return :( TensorSlice.check!($A, $Astring, $ind) )
+        return :( TensorSlice.check!($A, $ind, $Astring, $where) )
     else
         return A
     end
 end
 
-check_err(str::String) = check_options.throw ? error(str) : @error str
-# TODO make @error give line number... _file=string and _line=integer can be used to override... 
+function check_err(str::String, where=nothing)
+    if check_options.throw
+        error(str)
+    elseif where==nothing
+        @error str
+    else
+        @error str  _module=where.mod  _line=where.src.line  _file=string(where.src.file)
+    end
+end
 
 """
-    check!(A, "A[i,j]", (:i,:j))
+    check!(A, (:i,:j), "A[i,j]", (mod=..., src=...))
 Performs run-time size checking, on behalf of the `@check!` macro, returns `A`. 
-The string is just for the error message. 
+The string and tuple are just for the error message. 
 """
-function check!(A::AbstractArray{T,N}, str::String, ind::Tuple) where {T,N}
+function check!(A::AbstractArray{T,N}, ind::Tuple, str::String, where=nothing) where {T,N}
     if N != length(ind)
-        check_err("check! expected $str, but got ndims = $N")
+        check_err("check! expected $str, but got ndims = $N", where)
     else
         for (d,i) in enumerate(ind)
             sizeAd = size(A,d)
             got = get!(size_store, i, sizeAd)
-            got == sizeAd || check_err("check! $str, index $i now has range $sizeAd instead of $got")
+            got == sizeAd || check_err("check! $str, index $i now has range $sizeAd instead of $got", where)
         end
     end
     A
@@ -142,7 +150,8 @@ Variant of `@einsum` from package Einsum.jl,
 equivalent to wrapping every tensor with `@check!()`.
 """
 macro einsum!(ex)
-    _einsum!(ex)
+    where = (mod=__module__, src=__source__)
+    _einsum!(ex, where)
 end
 
 """
@@ -152,18 +161,19 @@ Variant of `@tensor` from package TensorOperations.jl,
 equivalent to wrapping every tensor with `@check!()`.
 """
 macro tensor!(ex)
-    _tensor!(ex)
+    where = (mod=__module__, src=__source__)
+    _tensor!(ex, where)
 end
 
-function _tensor!(ex)
+function _tensor!(ex, where=nothing)
     if @capture(ex, lhs_ := rhs_ ) || @capture(ex, lhs_ = rhs_ )  
 
         outex = quote end
-        function f(exi)                                                         
-            if @capture(exi, A_[ijk__] )   
-                push!(outex.args, check_one(exi))                                      
+        function f(x)                                                         
+            if @capture(x, A_[ijk__] )   
+                push!(outex.args, check_one(x, where))                                      
             end                                                                    
-            exi                                                                    
+            x                                                                    
         end   
         MacroTools.prewalk(f, rhs)
 
@@ -171,32 +181,38 @@ function _tensor!(ex)
             check_one(lhs) # then these are only parse checks, outex is trash
         else
             push!(outex.args, :(out = TensorOperations.@tensor $ex) )
-            push!(outex.args, check_one(lhs)) # lhs size may not be known until after @tensor
-            push!(outex.args, :out )          # make sure we still return what @tensor did
+            push!(outex.args, check_one(lhs, where)) # lhs size may not be known until after @tensor
+            push!(outex.args, :out )                 # make sure we still return what @tensor did
             return esc(outex)
         end
     else
-        @warn "@tensor! not smart enough to process $ex yet, so ignoring it"
+        @warn "@tensor! not smart enough to process $ex yet, so ignoring checks"
     end
     return esc(:( TensorOperations.@tensor $ex ))
 end
 
-function _einsum!(ex)
-    if @capture(ex, lhs_ := *(rhs__)) || @capture(ex, lhs_ = *(rhs__)) 
+function _einsum!(ex, where=nothing)
+    if @capture(ex, lhs_ := rhs_ ) || @capture(ex, lhs_ = rhs_ ) 
+
         outex = quote end
+        function f(x)                                                         
+            if @capture(x, A_[ijk__] )   
+                push!(outex.args, check_one(x, where))                                      
+            end                                                                    
+            x                                                                    
+        end   
+        MacroTools.prewalk(f, rhs)
 
-        push!(outex.args, check_one(lhs))
-        for tensor in rhs
-            push!(outex.args, check_one(tensor)) # TODO same prewalk as @tensor
-        end
-
-        if check_options.size
-            push!(outex.args, :( Einsum.@einsum $ex ))
+        if check_options.size == false
+            check_one(lhs) # then these are only parse checks, outex is trash
+        else
+            push!(outex.args, :(out = Einsum.@einsum $ex) )
+            push!(outex.args, check_one(lhs, where)) # lhs size may not be known until after @einsum
+            push!(outex.args, :out )                 # make sure we still return what @einsum did
             return esc(outex)
         end
-
     else
-        @warn "@einsum! not smart enough to process $ex yet, so ignoring it"
+        @warn "@einsum! not smart enough to process $ex yet, so ignoring checks"
     end
     return esc(:( Einsum.@einsum $ex ))
 end
