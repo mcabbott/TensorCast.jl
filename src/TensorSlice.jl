@@ -6,6 +6,7 @@ using MacroTools
 
 include("parse.jl")
 include("icheck.jl")
+include("cast.jl")
 
 V = false # capital V for extremely verbose
 W = false # printouts where I'm working on things
@@ -50,11 +51,12 @@ end
 Variant of `@shape` which effectively runs `@check!()` on each tensor.
 """
 macro shape!(expr, rex=nothing)
-    _shape(expr, rex; icheck=true)
+    where = (mod=__module__, src=__source__)
     @warn "@shape! doesn't work well yet"
+    _shape(expr, rex; icheck=true, where=where)
 end
 
-function _shape(expr, rex=nothing; icheck=false)
+function _shape(expr, rex=nothing; icheck=false, where=nothing)
     if @capture(expr, left_ = right_ )
         sign = :(=)
     elseif @capture(expr, left_ := right_ )
@@ -92,7 +94,7 @@ function _shape(expr, rex=nothing; icheck=false)
         willslice, willstaticslice,   # flags from LHS of @shape
         false, nothing,               # info from LHS of @reduce
         sign, right, rex,             # RHS still to be done
-        "@shape", icheck)
+        "@shape", icheck, where)
 end
 
 """
@@ -119,10 +121,11 @@ end
 Variant of `@reduce` which effectively runs `@check!()` on each tensor.
 """
 macro reduce!(expr, right, rex=nothing)
-    _reduce(expr, right, rex; icheck=true)
+    where = (mod=__module__, src=__source__)
+    _reduce(expr, right, rex; icheck=true, where=where)
 end
 
-function _reduce(expr, right, rex=nothing; icheck=false)
+function _reduce(expr, right, rex=nothing; icheck=false, where=nothing)
     if @capture(expr, left_ = red_ )
         sign = :(=)
     elseif @capture(expr, left_ := red_ )
@@ -160,7 +163,7 @@ function _reduce(expr, right, rex=nothing; icheck=false)
         false, false,                 # flags from LHS of @shape
         true, redfun,                 # info from LHS of @reduce
         sign, right, rex,             # RHS still to be done
-        "@reduce", icheck)
+        "@reduce", icheck, where)
 end
 
 ############################### NOTATION ################################
@@ -202,7 +205,7 @@ function tensor_slice_main(nameZ, indZ, indZsub,
         willslice, willstaticslice,   # flags from LHS of @shape
         willreduce, redfun,           # info from LHS of @reduce
         sign, right, rex,             # RHS still to be done
-        macroname, icheck)
+        macroname, icheck, where)
 
     ## test what packages are loaded
     usingstrided = isdefined(TensorSlice, :Strided)
@@ -645,7 +648,7 @@ end
 ############################### DATA FUNCTIONS ################################
 
 if VERSION < v"1.1.0"
-    include("eachslice.jl") # functions from the future
+    include("eachslice.jl") # functions from the future, TODO figure out Compat
 end
 
 include("cat-and-slice.jl") # my simple functions
