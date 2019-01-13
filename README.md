@@ -12,10 +12,20 @@ and while `@reduce` takes sums (or other reductions) over some directions:
 
 ```julia
 @shape A[j][i] := B[-i,j]           # slice a matrix into its rows, and reverse them
-@shape A[i,(j,k)] := B[i,j,k]       # reshape 3-tensor to a matrix
+@shape C[i,(j,k)] := D[i,j,k]       # reshape 3-tensor to a matrix
 
-@reduce A[i] := sum(j,k) B[i,j,k]   # sum over dims=(2,3)
-@reduce A[μ,ν,J] := prod(i:2) B[(i,J)][μ,ν]  # products of pairs of matrices, stacked
+@reduce E[i] := sum(j,k) F[i,j,k]   # sum over dims=(2,3), and dropdims
+@reduce G[μ,ν,J] := prod(i:2) H[(i,J)][μ,ν]  # products of pairs of matrices, stacked
+```
+
+The macro `@cast` writes broadcasting operations, 
+where again you must explicitly specify reductions:
+
+```julia
+@cast A[i,j] := B[i] * log(C[j])    # A = B .* log.(C')
+
+@cast S[i] := sum(n) -P[i,n] * log(P[i,n]/Q[n])  # sum and dropdims
+@cast D[i] := sum(j,k) E[k,i,j] * exp( -α * ( F[j] - F[k] )^2 )
 ```
 
 These are intended to complement the macro from [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl),
@@ -24,62 +34,37 @@ Here it is implicit that repeated indices are summed over:
 
 ```julia
 @tensor A[i,k] := B[i,j] * C[j,k]   # matrix multiplication, A = B * C
-@tensor A[i] := B[i,k,k]            # partial trace, Aᵢ = Σⱼ Bᵢⱼⱼ
+@tensor D[i] := E[i] + F[i,k,k]     # partial trace of F only, Dᵢ = Eᵢ + Σⱼ Fᵢⱼⱼ
 ```
 
-More general operations can also be performed with the macro from [Einsum.jl](https://github.com/ahwillia/Einsum.jl),
-again in a similar notation. This sums over all indices appearing only on the right, 
-and allows us to insert arbitrary (element-wise) functions:
+Similar notation is also used by the macro from [Einsum.jl](https://github.com/ahwillia/Einsum.jl),
+where again it is implicit that all indices appearing only on the right are summed over. 
+This allows arbitrary (element-wise) functions:
 
 ```julia
-@einsum S[i] := -P[i,n] * log(P[i,n]/Q[n])  # sum over n, for each i
+@einsum S[i] := -P[i,n] * log(P[i,n]/Q[n])  # sum over n, for each i (also with @cast above)
+@einsum G[i] := E[i] + F[i,k,k]     # the sum includes everyting:  Gᵢ = Σⱼ (Eᵢ + Fᵢⱼⱼ)
 ```
 
-<!--
-When writing complicated index expressions by hand, it is conventional to use different groups of letters 
-for indices which mean different things. If `a,b,c...` label some objects, while `μ,ν,...` are components 
-of their positions (in units of meters) then any expression which mixes these up is probably a mistake. 
-This package also can automate checks for such mistakes: 
-
-```julia
-@reduce! A[α] := sum(k) B[α,k]      # memorises that A takes α, etc.
-@tensor! C[α,β] := A[α] * A[β]      # no problem: β is close to α
-@shape! D[n][β] := C[n,β]           # error! C does not accept n
-```
-
-If you need to leave index notation and return, you can insert `@check!` to confirm. 
-(The `!` is because it alters a dictionary, off-stage somewhere.)
-Also, this is how you place axes where desired for broadcasting:
-
-```julia
-@shape! D[α,_,β,_] := C[α,β]        # reshape to size(D,2) == size(D,4) == 1
-@check! E[n,α]                      # just the check, with no calculation
-```
-
-These macros are (by definition) run when your code is loaded, not during the calculation, and thus such checks 
-have zero speed penalty. You can turn on explicit run-time size checks too, if you wish.
---->
-
-There is a small overlap of operations which could be done with any of these three packages. 
+There is some overlap of operations which can be done with two (or all three) of these packages. 
 However they produce very different code for actually 
-doing the calculation you requested. The original `@einsum` simply writes the necessary set of nested loops. 
+performing the calculation you requested. The original `@einsum` simply writes the necessary set of nested loops. 
 Instead `@tensor` works out a sequence of contraction and trace operations, calling optimised BLAS routines where possible. 
 
-The  macros from this package, `@shape` and `@reduce`, aim to produce simple Julia commands, just
-a string of `reshape` and `permutedims` and `eachslice` and so on. 
+The  macros from this package aim to produce simple Julia commands. 
+Thus `@shape` and `@reduce` just write a string of `reshape` and `permutedims` and `eachslice` and so on,
+while `@cast` writes a native broadcasting expression (after orienting the axes appropriately).
 This means that they are very generic, and will work equally well for instance on [Flux](https://github.com/FluxML/Flux.jl)'s
 TrackedArrays, on the GPU via [CuArrays](https://github.com/JuliaGPU/CuArrays.jl),
 and probably on almost any other kind of N-dimensional array.
 
-For those who speak Python, this package is similar to [`einops`](https://github.com/arogozhnikov/einops)
+For those who speak Python, `@shape` and `@reduce` are similar to [`einops`](https://github.com/arogozhnikov/einops)
 (only without the cool video),
 while Einsum / TensorOperations map very roughly to [`einsum`](http://numpy-discussion.10968.n7.nabble.com/einsum-td11810.html) 
 / [`opt_einsum`](https://github.com/dgasmith/opt_einsum).
+The function of `@check!` (see [below](#checking)) is similar to [`tsalib`](https://github.com/ofnote/tsalib)'s shape annotations.
 
 <!--
-(for reshaping etc.)
-plus perhaps [`tsalib`](https://github.com/ofnote/tsalib) (shape annotations).
-
 Projects like [`xarray`](http://xarray.pydata.org/en/stable/) and 
 [`LabeledTensors`](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/contrib/labeled_tensor) are closer to
 Julia's [`NamedArrays`] / [`AxisArrays`] / [`DimArrays`].
@@ -107,7 +92,8 @@ mat = (1:4)' .+ rand(2,4)
 @shape rows[r][c] := mat[r,c]
 @shape cols[♜][🚣] := rows[🚣][♜]
 
-@reduce sum_r[c] := sum(r) mat[r,c] # this is a vector, not a 1×4 matrix
+@reduce sum_r[c] := sum(r) mat[r,c]  # this is a vector, not a 1×4 matrix
+@cast   sum_r[c] := sum(r) mat[r,c]  # trivial use of @cast, identical
 
 sum_r == sum(rows) # true
 ```
@@ -150,11 +136,9 @@ The alternative notation `(i,I) == i\I` used here is meant to help me remember w
 This defines a function which extends [`kron(A,B)`](https://docs.julialang.org/en/latest/stdlib/LinearAlgebra/#Base.kron) one step beyond vectors & matrices: 
 
 ```julia
-using TensorOperations, TensorSlice
-
 function tensorkron(A::Array{T,3}, B::Array{T,3}) where {T}
-    @tensor C[i,I, j,J, k,K] := A[I,J,K] * B[i,j,k]   # no indices are summed over
-    @shape  D[i\I, j\J, k\K] == C[i,I, j,J, k,K]      # @shape with == demands a view
+    @cast  C[i,I, j,J, k,K] := A[I,J,K] * B[i,j,k]   # could use @tensor instead
+    @shape D[i\I, j\J, k\K] == C[i,I, j,J, k,K]      # @shape with == demands a view
 end
 
 A = rand(-20:20, 2,3,1); B = ones(Int, 5,7,1);  # test with 3rd index trivial
@@ -239,54 +223,37 @@ This is really just a variant of the built-in `@macroexpand1`, with animal names
 [MacroTools.jl](https://github.com/MikeInnes/MacroTools.jl) in place of generated symbols, 
 and some tidying up.
 
-## Notation
+## Checking
 
-The complete list has grown quite long!
+When writing complicated index expressions by hand, it is conventional to use different groups of letters 
+for indices which mean different things. If `a,b,c...` label some objects, while `μ,ν,...` are components 
+of their positions (in units of meters) then any expression which mixes these up is probably a mistake. 
+This package also can automate checks for such mistakes: 
 
-* `A[i][j,k]` indicates a vector of matrices, like `[rand(2,2) for i=1:3]`.
+```julia
+@reduce! A[α] := sum(k) B[α,k]      # memorises that A takes α, etc.
+@tensor! C[α,β] := A[α] * A[β]      # no problem: β is close to α
+@shape! D[n][β] := C[n,β]           # error! C does not accept n
+```
 
-* `A[(i,j),k]` is a matrix whose first axis (the bracket) is indexed by `n = i + (j-1) * N` where `i ∈ 1:N`.
-  You can write this more compactly as `A[i\j, k]`.
+If you need to leave index notation and return, you can insert `@check!` to confirm. 
+(The `!` is because it alters a dictionary, off-stage somewhere.)
+Also, this is how you place axes where desired for broadcasting:
 
-* `A[...] := B[...]` creates a new object, like `A = f(B)`,
-  while `A[...] = B[...]` writes into an existing object, like `A .= f.(B)`.
-  (The same notation is used by [`@einsum`](https://github.com/ahwillia/Einsum.jl#basics) and [`@tensor`](http://jutho.github.io/TensorOperations.jl/latest/indexnotation/).)
+```julia
+@shape! D[α,_,β,_] := C[α,β]        # reshape to size(D,2) == size(D,4) == 1
+@check! E[n,α]                      # just the check, with no calculation
+```
 
-* `A[...] := sum(i,j) B[...]` applies `sum(B, dims=...)` over the indicated dimensions.
-  The in-place version `A[...] = sum(...) B[...]` is instead `sum!(A, B)`.
-  This works for any function `f` which takes the keyword `dims`; the in-place form assumes that `f!` exists.  
+These macros are (by definition) run when your code is loaded, not during the calculation, and thus such checks 
+have zero speed penalty. But you can turn on explicit run-time size checks too, if you wish, by passing these options:
 
-* `... = A[k, ...]  k:5` indicates that `k` runs over 5 values: `size(A, 1) == 5`.
-  It is only necessary to specify this when ranges would otherwise be ambiguous.
-  You can also write this inside `prod(k:5)` if using `@reduce`. 
+```julia
+@check!  size=true  throw=true
+```
 
-* `A[i,-j]` means just `reverse(A, dims=2)`.
-
-* All indices must appear both on the left (or inside a reduction function) and on the right.  
-
-* Inserting an underscore (or a `1`) in the output `A[i,_,j] := ...` ensures `size(A) = (N, 1, M)`. 
-  Constants indices in the input can be more general, `... := B[i,2,j,4]` means `view(B, :,2,:,4)`.  <!-- $c ... 
-  An underscore in the input instead simply asserts (or assumes) that the size of this dimension is `1`. -->
-  (Note that numbers [mean something else entirely](http://jutho.github.io/TensorOperations.jl/latest/indexnotation/) in `@tensor`.)
-
-* These operations can be combined, with some limits: you can only reshape the outer container
-  of slices `A[(i,j),k][l,m]` (whether we are creating them, on the left, or gluing the given slices, on the right),
-  and only the un-reduced indices `A[i,(j,k)] = prod(l,m) = ...`.
-
-* For `@shape` operations, writing `==` demands that the object created is a view of the original data. 
-  If this cannot be done, the macro will give an error.
-  And using `|=` demands that it is a copy instead, if necessary literally `copy(B)`.
-  Slices, `reshape`ing, and `transpose` are typically views,
-  while gluing and `permutedims` usually require a copy. Using `:=` expresses indifference.
-
-* The output array need not have a name: `A = @shape [i,j] := ...` is fine, except for in-place operations `=`.
-
-* Appending `assert` or `!` will check all sizes, 
-  and appending `base` or `_` will disable the use of other packages (see below). 
-  These go with the dimensions, like `A[i,j]  i:2, _, !`.
-
-* `A[...]{j,k}` indicates slicing into a `SMatrix`-es, discussed below. 
-  Dimensions must always be given to create such slices, `j:2,k:2`.
+This saves the range of every distinct index letter, and gives an error if it is subsequently used to indicate
+a dimension of different size. (For now there is one global cache of index names, and sizes.)
 
 ## ¬ Base
 
@@ -301,7 +268,7 @@ using JuliennedArrays
 
 @shape S[i][j] == M[i,j]       # S = julienne(M, (*,:)) creates views, S[i] == M[i,:]
 @shape Z[i,j] := S[i][j]       # Z = align(S, (*,:)) makes a copy
-@shape A[i,j,k,l] := B[k,l][i,j]  # error without JuliennedArrays
+@shape A[i,j,k,l] := B[k,l][i,j]  # error without using JuliennedArrays
 ```
 
 Second, [StaticArrays.jl](https://github.com/JuliaArrays/StaticArrays.jl) allows us to reinterpret a Matrix as a Vector of SVectors,
@@ -335,14 +302,33 @@ cols_fast(M::Matrix, ::Val{N}) where N = @shape A[j]{i} == M[i,j] i:N
 @code_warntype cols_fast(M, Val(2))
 ```
 
-Third, [Strided.jl](https://github.com/Jutho/Strided.jl) contains (among other things) faster methods for permuting dimensions,
+Third, [LazyArrays.jl](https://github.com/JuliaArrays/LazyArrays.jl) has a lazy `BroadcastArray`. 
+For reductions like `sum(A, dims=...)` and `sum!`, this can be much faster than broadcasting out the full array: 
+
+```julia
+using LazyArrays
+V = rand(500);
+V3 = reshape(V, 1,1,:);
+
+@time sum(V .* V' .* V3; dims=(2,3));                 # 0.6 seconds, 950 MB
+@time sum(BroadcastArray(*, V, V', V3); dims=(2,3));  # 0.025 s, 5 KB
+@time @cast W[i] := sum(j,k) V[i] * V[j] * V[k];      # almost the same
+
+W = similar(V);
+@time sum!(W, V .* V' .* V3);                   # 0.5 seconds, 950 MB
+@time sum!(W, BroadcastArray(*, V, V', V3));    # 0.02 s, 576 bytes
+@time @cast W[i] = sum(j,k) V[i] * V[j] * V[k]; # almost the same
+```
+
+For complete reductions `sum(V .* V')` this is not so fast, not yet.
+
+Finally, [Strided.jl](https://github.com/Jutho/Strided.jl) contains (among other things) faster methods for permuting dimensions,
 especially for large arrays (as used by [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl)).
 Loading it will cause `@shape` to call these methods.
 
 ```julia
 using Strided
-A = rand(50,50,50,50); p = (4,3,2,1);
-B = permutedims(A, p); @strided permutedims(A, p); @strided permutedims!(B, A, p); # compile
+A = rand(50,50,50,50); 
 
 @time C = permutedims(A, (4,3,2,1));       # 130 ms,  47 MB
 @time @strided permutedims(A, (4,3,2,1));  # 0.02 ms, 400 bytes, lazy
@@ -356,6 +342,57 @@ B = permutedims(A, p); @strided permutedims(A, p); @strided permutedims!(B, A, p
 There is a slight potential for bugs here, in that `@strided permutedims` usually creates a view not a copy, and `@shape` knows this.
 But this is true only for `A::DenseArray`, and on more exotic arrays it will fall back, in which case `==` may give a copy without warning
 (as the macro cannot see the type of the array). -->
+
+<!--
+## Notation
+
+Here is the complete list of what `@shape` and `@reduce` understand: 
+
+* `A[i][j,k]` indicates a vector of matrices, like `[rand(2,2) for i=1:3]`.
+
+* `A[(i,j),k]` is a matrix whose first axis (the bracket) is indexed by `n = i + (j-1) * N` where `i ∈ 1:N`.
+  You can write this more compactly as `A[i\j, k]`.
+
+* `A[...] := B[...]` creates a new object, like `A = f(B)`,
+  while `A[...] = B[...]` writes into an existing object, like `A .= f.(B)`.
+  (The same notation is used by [`@einsum`](https://github.com/ahwillia/Einsum.jl#basics) and [`@tensor`](http://jutho.github.io/TensorOperations.jl/latest/indexnotation/).)
+
+* `A[...] := sum(i,j) B[...]` applies `sum(B, dims=...)` over the indicated dimensions.
+  The in-place version `A[...] = sum(...) B[...]` is instead `sum!(A, B)`.
+  This works for any function `f` which takes the keyword `dims`; the in-place form assumes that `f!` exists.  
+
+* `... = A[k, ...]  k:5` indicates that `k` runs over 5 values: `size(A, 1) == 5`.
+  It is only necessary to specify this when ranges would otherwise be ambiguous.
+  You can also write this inside `prod(k:5)` if using `@reduce`. 
+
+* `A[i,-j]` means just `reverse(A, dims=2)`.
+
+* All indices must appear both on the left (or inside a reduction function) and on the right.  
+
+* Inserting an underscore (or a `1`) in the output `A[i,_,j] := ...` ensures `size(A) = (N, 1, M)`. 
+  Constants indices in the input can be more general, `... := B[i,2,j,4]` means `view(B, :,2,:,4)`.  !-- $c ... 
+  An underscore in the input instead simply asserts (or assumes) that the size of this dimension is `1`. --
+  (Note that numbers [mean something else entirely](http://jutho.github.io/TensorOperations.jl/latest/indexnotation/) in `@tensor`.)
+
+* These operations can be combined, with some limits: you can only reshape the outer container
+  of slices `A[(i,j),k][l,m]` (whether we are creating them, on the left, or gluing the given slices, on the right),
+  and only the un-reduced indices `A[i,(j,k)] = prod(l,m) = ...`.
+
+* For `@shape` operations, writing `==` demands that the object created is a view of the original data. 
+  If this cannot be done, the macro will give an error.
+  And using `|=` demands that it is a copy instead, if necessary literally `copy(B)`.
+  Slices, `reshape`ing, and `transpose` are typically views,
+  while gluing and `permutedims` usually require a copy. Using `:=` expresses indifference.
+
+* The output array need not have a name: `A = @shape [i,j] := ...` is fine, except for in-place operations `=`.
+
+* Appending `assert` or `!` will check all sizes, 
+  and appending `base` or `_` will disable the use of other packages (see below). 
+  These go with the dimensions, like `A[i,j]  i:2, _, !`.
+
+* `A[...]{j,k}` indicates slicing into a `SMatrix`-es, discussed below. 
+  Dimensions must always be given to create such slices, `j:2,k:2`.
+-->
 
 ## Wishlist
 
@@ -376,13 +413,12 @@ Y = @arrow [X]  i j k l -n  =>  (i,k) (j,l) n   [i:2, j:3]
 Z = @arrow [Y / sum, i:2, j:3]  i\k  j\l n  =>  k l n
 ```
 
-* Support for mutating operators `+=` and `*=` etc. like [@einsum](https://github.com/ahwillia/Einsum.jl) does. Should be fairly easy.
+* Support for mutating operators `+=` and `*=` etc. like [@einsum](https://github.com/ahwillia/Einsum.jl) does. 
 
 * Ability to write shifts in this notation:
 ```julia
 @shape A[i,j] = B[i+1,j+3]     # circshift!(A, B, (1,3)) or perhaps (-1,-3)
 ```
-<!--<img src="as-seen-on-tv.png?raw=true" width="167" height="130" align="right" alt="As Seen On TV!" padding="20">-->
 
 * A mullet as awesome as [Rich DuLaney](https://www.youtube.com/watch?v=Ohidv69WfNQ) had.
 
