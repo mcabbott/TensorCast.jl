@@ -1,9 +1,7 @@
 
 export @cast, @cast!
 
-# TODO allow scalar output
 # TODO allow A[_,i,_,j] output, and B[i,3] input
-# TODO think about @strided here
 # TODO to treat rowvector-like things, perhaps always call orient, and it can know?
 
 """
@@ -18,12 +16,18 @@ The necessary re-orientations of axes (like `D'` here) are automatically inserte
 
 Reductions are specified in a syntax much like `@reduce`.
 If you are `using LazyArrays`, then `@cast` will avoid materializing a new array to store the result
-before summing. 
+before reducing. 
 
     F = @cast sum(i,j)  B[i] + γ * D[j]         # sum(B .+ γ .* D')
     @cast G[] := sum(i,j)  B[i] + γ * D[j]      # F == G[]
 
 Complete reduction to a scalar output `F`, or a zero-dim array `G`. 
+
+    @cast H[i,_,j] := I[i] / J[j]               # reshape(I ./ J, (length(I), 1, length(J)))
+    @cast K[i,3] = sum(j) L[i,j]                # K[:,3] .= dropdims(sum(L, dims=2), dims=2)
+
+Underscores (or `1`s) reshape the output to add `size = 1` dimensions. 
+When writing into an existing array, other fixed indices are OK too. 
 """
 macro cast(ex...)
     _cast(ex...; icheck=false)
@@ -39,6 +43,8 @@ macro cast!(ex...)
     _cast(ex...; icheck=true, where=where)
 end
 
+#==================== Straight @cast ====================#
+
 function _cast(ex; icheck=false, where=nothing) # one expression = un-reduced
     if @capture(ex, left_ := right_ )
         sign = :( := )
@@ -52,6 +58,7 @@ function _cast(ex; icheck=false, where=nothing) # one expression = un-reduced
 
     @capture(left, nameZ_[indZ__] ) || error(
         "@cast can't understand $left, expected something like A[i,j]")
+
     if icheck && check_options.size # then check_one returns check!(Z)
         nameZcheck = check_one(left, where)
         push!(outex.args, nameZcheck)
@@ -59,18 +66,42 @@ function _cast(ex; icheck=false, where=nothing) # one expression = un-reduced
         check_one(left, where)
     end
 
-    new_right = MacroTools.prewalk(x -> walker!(outex, x, indZ, icheck, where), right)
+    if all(isaletter.(indZ))
+        indV = indZ
+        willshapeorview = false
+    else
+        indV, getY, _, _ = parse!(SizeDict(), nameZ, indZ, [])
+        V && @info "@cast parse!" repr(indV) repr(getY)
+        willshapeorview = true
+        if sign != :(=)
+            for i in indZ
+                isa(i, Int) && i>1 && error("@cast with := can't use $i as an output index")
+            end
+        end
+    end
+
+    new_right = MacroTools.prewalk(x -> walker!(outex, x, indV, icheck, where), right)
 
     if sign == :(=)
-        bc = Broadcast.__dot__(:($nameZ = $new_right))
+        if willshapeorview
+            bc = Broadcast.__dot__(:( view($nameZ, $(getY...)) = $new_right)) |> maybestride
+        else
+            bc = Broadcast.__dot__(:($nameZ = $new_right)) |> maybestride
+        end
         push!(outex.args, bc )
     else
-        bc = Broadcast.__dot__(new_right)
-        push!(outex.args, :( $nameZ = $bc ))
+        bc = Broadcast.__dot__(new_right) |> maybestride
+        if willshapeorview
+            push!(outex.args, :( $nameZ = TensorSlice.orient($bc, $(getY...,)) ))
+        else
+            push!(outex.args, :( $nameZ = $bc ))
+        end
     end
 
     esc(outex)
 end
+
+#==================== Reduced @cast ====================#
 
 function _cast(redleft, right; icheck=false, where=nothing) # two expressions = reduce
     scalarout = false
@@ -87,9 +118,6 @@ function _cast(redleft, right; icheck=false, where=nothing) # two expressions = 
         error("@cast can't understand $redleft, expected something like A[i] := sum(j)")
     end
 
-    indVall = vcat(indZ, indZred) # reduced indices now go at the right
-    redWdims = Tuple(length(indZ)+1:length(indVall))
-
     outex = quote end
 
     left = :( $nameZ[$(indZ...)] ) # for icheck
@@ -100,11 +128,28 @@ function _cast(redleft, right; icheck=false, where=nothing) # two expressions = 
         check_one(left, where)
     end
 
+    if all(isaletter.(indZ))
+        indV = indZ
+        willshapeorview = false
+    else
+        indV, getY, _, _ = parse!(SizeDict(), nameZ, indZ, [])
+        V && @info "@cast parse!" repr(indV) repr(getY)
+        willshapeorview = true
+        if sign != :(=)
+            for i in indZ
+                isa(i, Int) && i>1 && error("@cast with := can't use $i as an output index")
+            end
+        end
+    end
+
+    indVall = vcat(indV, indZred) # reduced indices now go at the right
+    redWdims = Tuple(length(indZ)+1:length(indVall))
+
     new_right = MacroTools.prewalk(x -> walker!(outex, x, indVall, icheck, where), right)
 
     bc = Broadcast.__dot__(new_right)
     global BC = bc
-    if isdefined(TensorSlice, :LazyArrays)
+    if isdefined(TensorSlice, :LazyArrays) && isa(bc, Expr) # i.e. not just a symbol
         V && @info "before LazyArrays" bc
         @assert bc.head == :(.)      # always a dot
         oprator = bc.args[1]         # is the first operator 
@@ -121,10 +166,20 @@ function _cast(redleft, right; icheck=false, where=nothing) # two expressions = 
         if !endswith(string(redfun), '!')
             redfun = Symbol(redfun, '!')
         end
-        push!(outex.args, :( $redfun($nameZ, $bc) ))
+        if willshapeorview
+            push!(outex.args, :( $redfun(view($nameZ, $(getY...)), $bc) ))
+        else
+            push!(outex.args, :( $redfun($nameZ, $bc) ))
+        end
         push!(outex.args, nameZ)
     else
-        push!(outex.args, :( $nameZ = dropdims($redfun($bc; dims=$redWdims), dims=$redWdims) ))
+        if willshapeorview
+            push!(outex.args, :( $nameZ = TensorSlice.orient( 
+                dropdims($redfun($bc; dims=$redWdims), dims=$redWdims) 
+                , $(getY...,)) ))
+        else
+            push!(outex.args, :( $nameZ = dropdims($redfun($bc; dims=$redWdims), dims=$redWdims) ))
+        end
     end
 
     if scalarout
@@ -135,6 +190,9 @@ function _cast(redleft, right; icheck=false, where=nothing) # two expressions = 
 end
 
 #==================== Helper functions ====================#
+
+isaletter(s) = false
+isaletter(s::Symbol) = s != :(_)
 
 function walker!(outex, ex, indZ, icheck=false, where=nothing)
 
@@ -165,7 +223,6 @@ function walker!(outex, ex, indZ, icheck=false, where=nothing)
     ex
 end   
 
-
 function orientex(Asym, A, dirs)
     code = Vector{Any}(undef, maximum(dirs))
     code .= (*)
@@ -181,14 +238,27 @@ function orientex(Asym, A, dirs)
 
     else
         perm = Tuple(sortperm(dirs)) 
-        # r = rand(1,2,3,4); p = sortperm([8,2,6,4]); permutedims(r,p) |> summary # 2×4×3×1
         if perm==(2,1)
-            return :( local $Asym = TensorSlice.orient(transpose($A), $(code...,)) )
+            transposed = :( transpose($A) )
         else
-            return :( local $Asym = TensorSlice.orient(permutedims($A, $perm), $(code...,)) )
+            transposed = :( permutedims($A, $perm) ) |> maybestride
+        end
+        if length(code) == length(dirs)
+            return :( local $Asym = $transposed ) 
+        else
+            return :( local $Asym = TensorSlice.orient($transposed, $(code...,)) )
         end
     end
 end
+
+function maybestride(ex)
+    if isdefined(TensorSlice, :Strided)
+        :( @strided $ex )
+    else
+        ex
+    end
+end
+
 
 #==================== Data function ====================#
 
