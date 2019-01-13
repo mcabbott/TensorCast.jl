@@ -1,23 +1,29 @@
 
 export @cast, @cast!
 
+# TODO allow scalar output
 # TODO allow A[_,i,_,j] output, and B[i,3] input
 # TODO think about @strided here
-# TODO lazy sum etc
+# TODO to treat rowvector-like things, perhaps always call orient, and it can know?
 
 """
     @cast A[i,j] := B[i] + γ * D[j]             # A = B .+ γ .* D'
     @cast A[i,j] =  B[i] * log( C[i,j] / D[j] ) # A .= B .* log.(C ./ D')
 
-This macro lets you write broadcasting operations in index notation.
+Macro for writing broadcasting operations in index notation.
 The necessary re-orientations of axes (like `D'` here) are automatically inserted. 
 
     @cast E[i] := prod(j) B[i] + ε * C[i,j]     # E = vec(prod(B .+ ε .* C, dims=2))
     @cast E[i] = sum(j) exp( C[i,j] / D[j] )    # sum!(E, exp.(C ./ D') )
 
-You can specify reductions in a syntax much like `@reduce`.
-However, while the broadcast operations shown always materialises a new array to store the result
-before summing, `@cast` will avoid this, the broadcast is done lazily.
+Reductions are specified in a syntax much like `@reduce`.
+If you are `using LazyArrays`, then `@cast` will avoid materializing a new array to store the result
+before summing. 
+
+    F = @cast sum(i,j)  B[i] + γ * D[j]         # sum(B .+ γ .* D')
+    @cast G[] := sum(i,j)  B[i] + γ * D[j]      # F == G[]
+
+Complete reduction to a scalar output `F`, or a zero-dim array `G`. 
 """
 macro cast(ex...)
     _cast(ex...; icheck=false)
@@ -26,7 +32,7 @@ end
 """
     @cast! A[i,j] := B[i] + γ * D[j]
 
-Variant of `@cast` which effectively runs `@check()` on each tensor.
+Variant of `@cast` which effectively runs `@check!()` on each tensor.
 """
 macro cast!(ex...)
     where = (mod=__module__, src=__source__)
@@ -44,7 +50,8 @@ function _cast(ex; icheck=false, where=nothing) # one expression = un-reduced
 
     outex = quote end
 
-    @capture(left, nameZ_[indZ__] ) || error("@cast can't understand $left, expected something like A[i,j]")
+    @capture(left, nameZ_[indZ__] ) || error(
+        "@cast can't understand $left, expected something like A[i,j]")
     if icheck && check_options.size # then check_one returns check!(Z)
         nameZcheck = check_one(left, where)
         push!(outex.args, nameZcheck)
@@ -62,15 +69,20 @@ function _cast(ex; icheck=false, where=nothing) # one expression = un-reduced
         push!(outex.args, :( $nameZ = $bc ))
     end
 
-    # length(outex.args) == 1 && return esc(outex.args[1]) # it has #= ... =# in it too
     esc(outex)
 end
 
 function _cast(redleft, right; icheck=false, where=nothing) # two expressions = reduce
+    scalarout = false
     if @capture(redleft, nameZ_[indZ__] := redfun_(indZred__))
         sign = :( := )
     elseif @capture(redleft, nameZ_[indZ__] = redfun_(indZred__))
         sign = :( = )
+    elseif @capture(redleft, redfun_(indZred__))
+        sign = :( := )
+        nameZ = gensym(:Z)
+        indZ = Any[]
+        scalarout = true
     else 
         error("@cast can't understand $redleft, expected something like A[i] := sum(j)")
     end
@@ -80,6 +92,7 @@ function _cast(redleft, right; icheck=false, where=nothing) # two expressions = 
 
     outex = quote end
 
+    left = :( $nameZ[$(indZ...)] ) # for icheck
     if icheck && check_options.size # then check_one returns check!(Z)
         nameZcheck = check_one(left, where)
         push!(outex.args, nameZcheck)
@@ -90,6 +103,20 @@ function _cast(redleft, right; icheck=false, where=nothing) # two expressions = 
     new_right = MacroTools.prewalk(x -> walker!(outex, x, indVall, icheck, where), right)
 
     bc = Broadcast.__dot__(new_right)
+    global BC = bc
+    if isdefined(TensorSlice, :LazyArrays)
+        V && @info "before LazyArrays" bc
+        @assert bc.head == :(.)      # always a dot
+        oprator = bc.args[1]         # is the first operator 
+        bc.args[2]                   # is its tuple of arguments
+        @assert length(bc.args) == 2 # and there's nothing more
+        @assert bc.args[2].head == :tuple
+        arguments = bc.args[2].args  # is the args of first op
+        bc = Expr(:call, :(LazyArrays.BroadcastArray), oprator, arguments...)
+        global BC2 = bc
+        V && @info "after LazyArrays" bc
+    end
+
     if sign == :(=)
         if !endswith(string(redfun), '!')
             redfun = Symbol(redfun, '!')
@@ -100,11 +127,17 @@ function _cast(redleft, right; icheck=false, where=nothing) # two expressions = 
         push!(outex.args, :( $nameZ = dropdims($redfun($bc; dims=$redWdims), dims=$redWdims) ))
     end
 
+    if scalarout
+        push!(outex.args, :( $nameZ[] ) )
+    end
+
     esc(outex)
 end
 
+#==================== Helper functions ====================#
 
 function walker!(outex, ex, indZ, icheck=false, where=nothing)
+
     if @capture(ex, A_[ijk__] )
         if icheck
             A = check_one(ex, where)
@@ -119,10 +152,16 @@ function walker!(outex, ex, indZ, icheck=false, where=nothing)
             push!(outex.args, orientex(Asym, A, dirs)) # makes Asym = orient(A, code)
             ex =  :( $Asym )
         else
-            push!(outex.args, orientex(Asym, check_one(x), dirs))
+            push!(outex.args, orientex(Asym, check_one(ex), dirs))
             ex =  :( $Asym )
         end
+    
+    elseif @capture(ex, f_(x_Symbol) ) || @capture(ex, f_(x_Int) ) # want to protect these from @. 
+        fxsym = gensym(:fx)    # but not when x contains A[i,j]... crude but allows log(2) etc.
+        push!(outex.args, :( local $fxsym = $ex ))
+        ex = fxsym
     end
+
     ex
 end   
 
@@ -151,7 +190,7 @@ function orientex(Asym, A, dirs)
     end
 end
 
-
+#==================== Data function ====================#
 
 # function orient(A::AbstractArray{T,N}, code::Tuple) where {T,N}
 #     Ncode = countcolons(code)
@@ -160,7 +199,6 @@ end
 #     sz = ntuple(i -> code[i]==(:) ? (d+=1; size(A,d-1)) : 1, length(code))
 #     reshape(A, sz)::AbstractArray{T,length(code)}
 # end
-# TODO: think about rowvector like objects? 
 
 @generated function countcolons(code::Tuple) # this works well
     n = 0
@@ -192,21 +230,8 @@ by inserting axes on which `size(B, d) == 1` as needed.
         end
     end
     str = join(pretty, ", ")
-    d-1 == ndims(A) || throw(ArgumentError("orient(A, ($str)) got ndims(A) = $(ndims(A)), expeceted n = $(d-1)"))
+    d-1 == ndims(A) || throw(ArgumentError(
+        "orient(A, ($str)) got ndims(A) = $(ndims(A)), expeceted n = $(d-1)"))
     :(reshape(A, ($(list...),))) 
 end
-
-
-function padex(A, n::Int)
-    ex = :( (size($A)...,) )
-    @assert ex.head == :tuple
-    for i=1:n
-        push!(ex.args, 1)
-    end
-    ex
-end
-
-
-
-
 
