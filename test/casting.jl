@@ -31,7 +31,7 @@
 	@test A == B
 
 	## check that log(2) doesn't get broadcast
-	log_n = 0
+	global log_n = 0
 	two=2.0
 	log_count(x) = (global log_n += 1; log(x))
 	A = log.(bc) ./ log_count(2)
@@ -56,6 +56,6 @@ end
 	## complete reduction
 	@cast S[] := sum(i,j) bc[j,i] + 1
 	T = @cast sum(i,j) bc[j,i] + 1
-	@test S[] == sum(bc .+ 1) == T
+	@test S[] ≈ sum(bc .+ 1) ≈ T
 
 end
