@@ -1,4 +1,4 @@
-@testset "something!" begin
+@testset "basics" begin
 
 	bc = rand(2,3)
 	bcde = rand(2,3,4,5)
@@ -15,5 +15,12 @@
 	V = vec(mean(bcde, dims=(2,4)))
 	@test V == W
 
+end
+@testset "scalar" begin
+
+	bc = rand(2,3)
+
+	@reduce S[] := sum(i,j) bc[j,i]
+	@test S[] ≈ sum(bc)
 
 end
