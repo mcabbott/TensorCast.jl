@@ -13,6 +13,8 @@ At the first occurrange these save `i: => size(A,1)` etc., and on subsequent use
 the same index (even on different tensors) give an error if the sizes do not match. 
 If turned on, this will need to look up indices in a dictionary, which takes ... 50ns, really? 
 
+More complicated indices like `Z[(i,j), -k, _, 3]` will be ignored. 
+
 Returns either `A` or `check!(A, stuff)`. 
 
     @check! B[i,j] C[μ,ν]
@@ -23,7 +25,8 @@ Checks several tensors, returns nothing.
 
 Controls options for `@check!` and related macros, these are the defaults:
 * `alpha=true` turns on the parse-time checking, based on index letters
-* `tol=3` sets how close together letters must be: `B[j,k]` is not an error but `B[a,b]` will be
+* `tol=3` sets how close together letters must be: `B[j,k]` is not an error but `B[a,b]` will be. 
+  (Multi-letter indices are judged by their first letter)
 * `size=false` turns off run-time size checking
 * `throw=false` means that errors are given using `@error`, without interrupting your program
 * `empty` deletes all saved letters and sizes -- there is one global store for each, for now
@@ -83,9 +86,18 @@ function _check!(exs...; where=nothing)
     return nothing
 end
 
+"""
+    check_one(A[i,j,k], (mod=Module, src=...))
+Does the work of `@check!`, on one index expression, 
+returning `A` or `check!(A,...)` according to global flags. 
+"""
 function check_one(ex, where=nothing)
     @capture(ex, A_[vec__]) || error("check_one can't understand $ex, expected something like A[i,j]")
     ind = Tuple(vec)
+
+    if !isa(A, Symbol) # ignore things like f(x)[i,j]
+        return A
+    end
 
     if check_options.alpha
         got = get!(index_store, A, ind)
@@ -96,7 +108,9 @@ function check_one(ex, where=nothing)
             check_err("@check! $ex now has fewer indices than previous $got", where)
         else
             for (i, j) in zip(ind, got)
-                isa(i,Int) || i==(:_) && continue # TODO better handling of (1, $c, word)
+                if !isa(i, Symbol) || i==(:_) # ignore Int, (i,j), etc.
+                    continue
+                end
                 si = String(i)
                 sj = String(j)
                 length(si)>1 || length(sj)>1 && continue    
@@ -135,6 +149,9 @@ function check!(A::AbstractArray{T,N}, ind::Tuple, str::String, where=nothing) w
         check_err("check! expected $str, but got ndims = $N", where)
     else
         for (d,i) in enumerate(ind)
+            if !isa(i, Symbol) || i==(:_) # ignore Int, (i,j), etc.
+                continue
+            end
             sizeAd = size(A,d)
             got = get!(size_store, i, sizeAd)
             got == sizeAd || check_err("check! $str, index $i now has range $sizeAd instead of $got", where)
