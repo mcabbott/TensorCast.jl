@@ -41,7 +41,7 @@ end
 	@reduce S[] := sum(i,j) bc[j,i]
 	T = @reduce sum(i,j) bc[j,i]
 	U = @reduce sum(j,i) bc[j,i]
-	@test S[] == sum(bc) == T == U
+	@test S[] ≈ sum(bc) ≈ T ≈ U
 
 end
 @testset "inference" begin
@@ -53,10 +53,10 @@ end
 
     C = similar(A)
     @reduce C[b,c, y,z] = sum(a, x) B[a\b\c, x⊗y⊗z]  assert
-    @test C == A
+    @test C ≈ A
 
     # with a:2 given, it doesn't try product inference, just leaves a :, which is OK. 
     @reduce C[b,c, y,z] = sum(a:2, x) B[a\b\c, x⊗y⊗z]  assert
-    @test C == A
+    @test C ≈ A
 
 end
