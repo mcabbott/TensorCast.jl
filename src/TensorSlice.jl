@@ -11,6 +11,20 @@ include("icheck.jl")
 include("cast.jl")
 include("pretty.jl")
 
+@warn """Thanks for trying out my package! 
+
+I have now changed its name TensorSlice.jl -> TensorCast.jl
+
+You should probably remove this, and download again under the new name:
+
+] rm TensorSlice
+  add https://github.com/mcabbott/TensorCast.jl
+
+You will also need to replace @shape with @cast everywhere 
+(and possibly replace some @cast with @reduce, sorry.) 
+It now handles arbitrary broadcasting at the same time as 
+all previous slicing, squeezing & dicing functions. """
+
 if VERSION < v"1.1.0"
     include("eachslice.jl") # functions from the future, TODO figure out Compat
 end
