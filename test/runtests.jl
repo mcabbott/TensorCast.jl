@@ -1,10 +1,8 @@
 
-using TensorSlice
+using TensorCast
 using Test
 
-using StaticArrays # you can't actually test without this, as macros using it get run anyway
-using JuliennedArrays
-# using Strided # TODO using this creates errors...
+using StaticArrays 
 
 @testset "@shape"  begin include("shape.jl")   end
 @testset "@reduce" begin include("reduce.jl")  end
@@ -19,22 +17,22 @@ using JuliennedArrays
 
         
         mat = (1:4)' .+ rand(2,4)
-        @shape rows[r][c] := mat[r,c]
-        @shape cols[♜][🚣] := rows[🚣][♜]  # unicode 👍
+        @cast rows[r][c] := mat[r,c]
+        @cast cols[♜][🚣] := rows[🚣][♜]  # unicode 👍
         @reduce sum_r[c] := sum(r) mat[r,c]
         @test sum_r == sum(rows) # true
 
 
         B = rand(2*5, 3)
-        @shape A[i,j,k] := B[(i,k),j]  i:2
+        @cast A[i,j,k] := B[(i,k),j]  i:2
         @test size(A) == (2,3,5)
-        @shape A[i,j,k] = B[(i,k),j]; 
+        @cast A[i,j,k] = B[(i,k),j]; 
 
 
         imgs = [ rand(8,8) for i=1:16 ];
 
-        @shape G[(i,I), (j,J)] := imgs[(I,J)][i,j] J:4
-        @shape G[ i\I,   j\J ] = imgs[ I\J ][i,j] # in-place
+        @cast G[(i,I), (j,J)] := imgs[(I,J)][i,j] J:4
+        @cast G[ i\I,   j\J ] = imgs[ I\J ][i,j] # in-place
 
 
         G = rand(16,32);
@@ -46,7 +44,7 @@ using JuliennedArrays
         @test size(G) == 4 .* size(H4) 
 
         W = randn(2,3,5,7);
-        @shape Z[_,i,_,k] := W[2,k,4,i]  # equivalent to Z[1,i,1,k] on left
+        @cast Z[_,i,_,k] := W[2,k,4,i]  # equivalent to Z[1,i,1,k] on left
         @test size(Z) == (1,7,1,3)
 
         B = [ i .* ones(2,2) for i=1:4 ]
@@ -58,49 +56,49 @@ using JuliennedArrays
     @testset "old readme" begin
 
         B = rand(3,4,5);
-        @shape A[(i,j),k] := B[i,j,k]  # new matrix from tensor B
+        @cast A[(i,j),k] := B[i,j,k]  # new matrix from tensor B
 
         B = rand(3*5,4);
         A = zeros(3,4,5);
-        @shape A[i,j,k] = B[(i,k),j]   # write into an existing tensor A
+        @cast A[i,j,k] = B[(i,k),j]   # write into an existing tensor A
 
         B = rand(3,4,5);
-        @shape A[(i,j,k)] == B[i,j,k]  # reshaped view A = vec(B)
+        @cast A[(i,j,k)] == B[i,j,k]  # reshaped view A = vec(B)
 
 
         B = [rand(3) for i=1:4];
-        @shape A[i,j] := B[i][j]       # hcat a vector of vectors
+        @cast A[i,j] := B[i][j]       # hcat a vector of vectors
         @test size(A) == (4,3)
 
         B = [rand(7) for i=1:3, k=1:4];
         A = zeros(3,7,4);
-        @shape A[i,j,k] = B[i,k][j]    # write into A
+        @cast A[i,j,k] = B[i,k][j]    # write into A
 
         B = rand(2,3);
-        @shape A[i][j] == B[j,i]       # create views A = collect(eachcol(B))
+        @cast A[i][j] == B[j,i]       # create views A = collect(eachcol(B))
 
 
         B = [rand(3) for i=1:4];
-        A = @shape [(i,j)] := B[j][i]  # vcat a vector of vectors
+        A = @cast [(i,j)] := B[j][i]  # vcat a vector of vectors
         @test size(A) == (12,)
 
-        B = [rand(3,4,5,6) for i=1:7]
-        A = @shape [(i,j),l][k,m] := B[i][j,k,l,m] # glue then slice then reshape
+        B = [rand(3,4,5,6) for i=1:7];
+        A = @cast [(i,j),l][k,m] := B[i][j,k,l,m]; # glue then slice then reshape
         @test size(A) == (21,5)
 
 
         B = rand(2*5, 3);
-        @shape A[i,j,k] := B[(i,k),j]  i:2  # could give (i:2, j:3, k:5)
+        @cast A[i,j,k] := B[(i,k),j]  i:2  # could give (i:2, j:3, k:5)
         @test size(A) == (2,3,5)
 
-        @shape A[i,j,k] := B[(i,k),j]  (i:2, j:3, k:5)
+        @cast A[i,j,k] := B[(i,k),j]  (i:2, j:3, k:5)
         @test size(A) == (2,3,5)
 
 
-        @pretty @shape A[(i,j)] = B[i,j]
+        @pretty @cast A[(i,j)] = B[i,j]
         # copyto!(A, B)
 
-        @pretty @shape A[k][i,j] == B[i,(j,k)]  k:length(C)
+        @pretty @cast A[k][i,j] == B[i,(j,k)]  k:length(C)
         # begin
         #     local caterpillar = (size(B, 1), :, length(C))  # your animal may vary
         #     A = sliceview(reshape(B, (caterpillar...,)), (:, :, *))
@@ -110,7 +108,7 @@ using JuliennedArrays
         # using TestImages, ImageView, FileIO
         # V = testimage.(["mandril_gray", "cameraman", "lena_gray_512"])
         #
-        # @shape M[i,(j,J)] := V[J][i,j]
+        # @cast M[i,(j,J)] := V[J][i,j]
         #
         # imshow(M)
 
@@ -118,28 +116,27 @@ using JuliennedArrays
         # using Flux, ImageView, FileIO, JuliennedArrays
         # imgs = Flux.Data.MNIST.images()[1:32] # vector of matrices
         #
-        # @shape A[(i,I),(j,J)] := imgs[(I,J)][i,j] J:8 # eight columns
+        # @cast A[(i,I),(j,J)] := imgs[(I,J)][i,j] J:8 # eight columns
         #
         # imshow(A)
 
 
-        using JuliennedArrays
 
         M = rand(3,4)
-        @shape S[i][j] == M[i,j]       # S = julienne(M, (*,:)) creates views, S[i] == M[i,:]
-        @shape Z[i,j] := S[i][j]       # Z = align(S, (*,:)) makes a copy
+        @cast S[i][j] == M[i,j]       # S = julienne(M, (*,:)) creates views, S[i] == M[i,:]
+        @cast Z[i,j] := S[i][j]       # Z = align(S, (*,:)) makes a copy
         @test size(Z) == (3,4)
 
         B = [rand(2,3) for k=1:4, l=1:5];
-        @shape A[i,j,k,l] := B[k,l][i,j]  # error without JuliennedArrays
+        @cast A[i,j,k,l] := B[k,l][i,j]  
         @test size(A) == (2,3,4,5)
 
 
         using StaticArrays
-        M = rand(Int, 2,3)
+        M = rand(1:99, 2,3)
 
-        @shape S[k]{i} == M[i,k]  i:2  # S = reinterpret(SVector{2,Int}, vec(M)) needs the 2
-        @shape N[k,i] == S[k]{i}       # such slices can be reinterpreted back again
+        @cast S[k]{i} == M[i,k]  i:2  # S = reinterpret(SVector{2,Int}, vec(M)) needs the 2
+        @cast N[k,i] == S[k]{i}       # such slices can be reinterpreted back again
 
         M[1,2]=42; N[2,1]==42          # all views of the original matrix
         @test N[2,1]==42
@@ -153,9 +150,9 @@ using JuliennedArrays
         # @time C = permutedims(A, (4,3,2,1));       # 130 ms,  47 MB
         # @time @strided permutedims(A, (4,3,2,1));  # 0.02 ms, 400 bytes, lazy
         #
-        # @time @shape D[i,j,k,l] := A[l,k,j,i];     # 140 ms,  47 MB,     copy
-        # @time @shape E[i,j,k,l] == A[l,k,j,i];     # 0.02 ms, 256 bytes, view
-        # @time @shape C[i,j,k,l] = A[l,k,j,i];      # 15 ms,   4 KB,  in-place
+        # @time @cast D[i,j,k,l] := A[l,k,j,i];     # 140 ms,  47 MB,     copy
+        # @time @cast E[i,j,k,l] == A[l,k,j,i];     # 0.02 ms, 256 bytes, view
+        # @time @cast C[i,j,k,l] = A[l,k,j,i];      # 15 ms,   4 KB,  in-place
 
     end
 end

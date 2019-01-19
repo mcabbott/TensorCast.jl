@@ -1,6 +1,6 @@
 @testset "parse!" begin 
 
-    using TensorSlice: SizeDict, parse!
+    using TensorCast: SizeDict, parse!
 
     ## case "rex" 
     dd = SizeDict()
@@ -37,7 +37,7 @@
 end
 @testset "SizeDict" begin
 
-    using TensorSlice: SizeDict, sizeinfer, savesize!
+    using TensorCast: SizeDict, sizeinfer, savesize!
 
     dd = SizeDict()
     dd.dict[:a] = 3
@@ -48,17 +48,20 @@ end
 
     dd.dict[:d] = 10
 
-    ss = sizeinfer(dd, [:a, :b, :c, :d])
-    @test_broken eval.(ss) == [3,4,10,10]
+    ss = sizeinfer(dd, [:a, :b, :c, :d], true) # leave one :
+    @test eval.(ss) == [3,4,:,10]
+
+    ss = sizeinfer(dd, [:a, :b, :c, :d], false)
+    @test eval.(ss) == [3,4,10,10]
 
     savesize!(dd, :a, 99)
-    @test dd.dict[:a] == 99
-    @test_throws AssertionError eval.(dd.checks) 
+    @test dd.dict[:a] == 3 # logic changed here, first value kept
+    @test_throws ErrorException eval.(dd.checks) 
 
 end
 @testset "minus" begin 
 
-    using TensorSlice: oddunique, stripminus!
+    using TensorCast: oddunique, stripminus!
 
     @test oddunique([:a, :b, :c]) == [:a, :b, :c]
     @test oddunique([:a, :b, :c, :a]) == [:b, :c]
@@ -81,7 +84,7 @@ end
 end
 @testset "colonise!" begin
 
-    using TensorSlice: colonise!
+    using TensorCast: colonise!
 
     osz = Any[:(sz[1]), :((sz[2] * sz[3]) * sz[4])] # nested *
      # the : in slist[2] means osz[2] should all be unkonwn

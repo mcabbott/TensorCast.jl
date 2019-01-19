@@ -49,13 +49,26 @@ end
 
 	Z = zeros(3)
 	A = sum( bc' .+ b' .* c ; dims=2) |> vec
-	@cast B[j] := sum(i) bc[i,j] .+ b[i] .* c[j]
-	@cast Z[j] = sum(i)  bc[i,j] .+ b[i] .* c[j]
+	@reduce B[j] := sum(i) bc[i,j] .+ b[i] .* c[j]
+	@reduce Z[j] = sum(i)  bc[i,j] .+ b[i] .* c[j]
 	@test A ==B == Z
 
 	## complete reduction
-	@cast S[] := sum(i,j) bc[j,i] + 1
-	T = @cast sum(i,j) bc[j,i] + 1
+	@reduce S[] := sum(i,j) bc[j,i] + 1
+	T = @reduce sum(i,j) bc[j,i] + 1
 	@test S[] ≈ sum(bc .+ 1) ≈ T
+
+	## with output shaping / fixing
+	bcde = rand(2,3,4,5);
+	@reduce A[d\c,_,b] := sum(e) bcde[-b,c,d,e]
+	B = similar(A);
+	@reduce B[d\c,_,b] = sum(e) bcde[-b,c,d,e] assert
+	@test A ≈ B
+
+	@reduce A[_,d\b,_] := sum(e,c) bcde[b,c,d,e]
+	B = similar(A);
+	@reduce B[_,d\b,_] = sum(c,e) bcde[b,c,d,e] assert
+	@test A ≈ B
+
 
 end

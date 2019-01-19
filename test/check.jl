@@ -1,6 +1,6 @@
 @testset "check" begin
 	
-	using TensorSlice: _check!, index_store, size_store
+	using TensorCast: _check!, index_store, size_store
 
 	@check!  throw=true empty
 	
@@ -33,16 +33,16 @@
 end
 @testset "shape! reduce! cast!" begin
 
-	using TensorSlice: _shape, _reduce, _cast
+	# using TensorCast: _shape, _reduce, _cast
 
-	@check!  throw=true size=false # empty
+	# @check!  throw=true size=false # empty
 
-	A = rand(3)
-	C = rand(3)
-	@shape! A[j] = C[j]
+	# A = rand(3)
+	# C = rand(3)
+	# @shape! A[j] = C[j]
 
-	@test_throws ErrorException _shape( :( A[z] = C[z] ); icheck=true) 
-	@test_throws ErrorException _reduce( :( A[z] := sum(i) ), :( D[z,i] ); icheck=true) 
+	# @test_throws ErrorException _shape( :( A[z] = C[z] ); icheck=true) 
+	# @test_throws ErrorException _reduce( :( A[z] := sum(i) ), :( D[z,i] ); icheck=true) 
 
 
 end
