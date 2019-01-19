@@ -28,9 +28,9 @@ matrix:
 
 ## uncomment the following lines to override the default test script
 #script:
-#  - julia -e 'Pkg.clone(pwd()); Pkg.build("TensorSlice"); Pkg.test("TensorSlice"; coverage=true)'
+#  - julia -e 'Pkg.clone(pwd()); Pkg.build("TensorCast"); Pkg.test("TensorCast"; coverage=true)'
 after_success:
   # push coverage results to Coveralls
-  - julia -e 'cd(Pkg.dir("TensorSlice")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
+  - julia -e 'cd(Pkg.dir("TensorCast")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
   # push coverage results to Codecov
-  - julia -e 'cd(Pkg.dir("TensorSlice")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
+  - julia -e 'cd(Pkg.dir("TensorCast")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
