@@ -1,24 +1,24 @@
 
 using .JuliennedArrays
 
-# import TensorSlice: sliceview, glue # because Revise doesn't track these
+# import TensorCast: julienne_slice, julienne_glue # because Revise doesn't track these
 
 if isdefined(JuliennedArrays, :julienne) # old notation
 
-    @inline sliceview(A::AbstractArray{T,N}, code::Tuple, sizes=nothing) where {T,N} =
-        collect(julienne(A, code)) # TODO test whether this is slow? it's tidier
+    @inline julienne_slice(A::AbstractArray, code::Tuple) where {T,N} =
+        collect(julienne(A, code)) 
 
-    @inline glue(A::AbstractArray{IT,N}, code::Tuple, sizes=nothing) where {IT,N} =
+    @inline julienne_glue(A::AbstractArray{IT,N}, code::Tuple) where {IT,N} =
         align(A, code)
 
 elseif isdefined(JuliennedArrays, :Slices) # new notation
 
-    @warn "TensorSlice only partially works with the new version of JuliennedArrays, sorry."
+    @warn "TensorCast only partially works with the new version of JuliennedArrays, sorry."
 
-    @inline sliceview(A::AbstractArray{T,N}, code::Tuple, sizes=nothing) where {T,N} =
+    @inline julienne_slice(A::AbstractArray{T,N}, code::Tuple) where {T,N} =
         Slices(A, newcode(code)...)
 
-    @inline glue(A::AbstractArray{IT,N}, code::Tuple, sizes=nothing) where {IT,N} =
+    @inline julienne_glue(A::AbstractArray{IT,N}, code::Tuple) where {IT,N} =
         collect(Align(A, newcode(code)...))
 
     @generated newcode(code::Tuple) = Expr(:tuple, [ c == Colon ? True() : False() for c in code.parameters ]...)
