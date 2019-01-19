@@ -1,14 +1,20 @@
 
-### Functions to help @shape and @reduce figure things out
+const flag_list = Any[ :!, :assert, :cat, :glue, :strided, :lazy, :julienne]
 
-const flag_list = Any[ :!, :assert, :_, :base ]
+#= TODO
+
+* make sz a constant gensym()
+* multiply with ̂* or something, which understands :
+
+=#
 
 struct SizeDict
     dict::Dict{Any, Any}
     checks::Vector{Any}
+    seen::Vector{Any}
 end
 
-SizeDict() = SizeDict(Dict{Any, Any}(), Any[])
+SizeDict() = SizeDict(Dict{Any, Any}(), Any[], Any[])
 
 """
     flat, getafix, putsz, negated = parse!(sdict, A, outer, inner)
@@ -32,8 +38,8 @@ to disable `size(A,2)` set `A = nothing` again.
 
 For dimensions & annotations. 
 Will look for flags because it was given something to push them into. 
-You should do this *last*, so that `sdict` is most likely to have these (neater) entries. 
-They are added using savesize!(sdict,...) which bumps earlier sizes into list of checks. 
+You should now do this first, so that `sdict` is most likely to have these (neater) entries. 
+They are added using savesize!(sdict,...) which now puts later sizes into list of checks. 
 """
 function parse!(sdict::SizeDict, A, outer, inner, allowranges=false, flags=nothing)
 
@@ -57,10 +63,14 @@ function parse!(sdict::SizeDict, A, outer, inner, allowranges=false, flags=nothi
         if allowranges 
 
             if @capture(ind , i_:ilength_ )
-                if isa(ilength, Int)
+                if !OLD
                     savesize!(sdict, i, ilength) 
                 else
-                    savesize!(sdict, i, esc(ilength))
+                    if isa(ilength, Int)
+                        savesize!(sdict, i, ilength) 
+                    else
+                        savesize!(sdict, i, esc(ilength)) ## REMOVED FOR NEW MACRO
+                    end
                 end
             else
                 i = ind    # not nothing from @capture
@@ -82,8 +92,18 @@ function parse!(sdict::SizeDict, A, outer, inner, allowranges=false, flags=nothi
     # but do allow tuples etc.
     for (dout, ind) in enumerate(outer)
         if isconstant(ind)              # then it's a constant slice,
-            i = (ind == :_) ? 1 : ind   # with _ indicating the same as 1 -- TODO make _ add a check size(A,d)==1, if A known.  Also TODO is to deal with $c correctly.
-            push!(getafix, i)           # so when we view(A, getafix...) we need it
+            if ind == :_                # treat _ almost like 1, but possibly with a check
+                if !isnothing(A)
+                    str = "direction marked _ must have size 1"
+                    push!(sdict.checks, :(TensorCast.@assertsize size($A, $dout) == 1 $str) )
+                end
+                ind = 1
+            end
+            if ind isa Expr             # constant slice with $c
+                @assert ind.head == :($)
+                ind = ind.args[1]
+            end
+            push!(getafix, ind)         # so when we view(A, getafix...) we need it
             push!(putsz, 1)             # or if driving the other direction, make size=1.
         else
             push!(getafix, Colon() )           # and we want this on the list:
@@ -111,16 +131,19 @@ function findcheck(i::Symbol, ind::Vector)
     d isa Nothing && throw(ArgumentError("can't find index $i where it should be!"))
     return d
 end
-findcheck(i::Expr, ind::Vector) = throw(ArgumentError("don't know what to do with $i, possibly nested brackets?"))
+findcheck(i::Expr, ind::Vector) = throw(ArgumentError("don't know what to do with index $i, expected a single symbol"))
 
 function savesize!(store::SizeDict, ind, long)
     if !haskey(store.dict, ind) # then we don't yet have a size for this index (or tuple)
         store.dict[ind] = long
     else                        # we have seen it before,
         if isa(ind, Symbol)     # but list of checks is only for actual indices
-            push!(store.checks, :(@assert $(store.dict[ind]) == $long) )
+            str = "range of index $ind must agree"
+            push!(store.checks, :(TensorCast.@assertsize $(store.dict[ind]) == $long $str) )
         end
-        store.dict[ind] = long  # either way, over-write in dict
+        if OLD
+            store.dict[ind] = long  # either way, over-write in dict CHANGED FOR NEW MACRO
+        end
     end
 end
 
@@ -145,21 +168,30 @@ function stripminus!(negated::Vector, ind::Expr)
 
     # tuple notation
     elseif @capture(ind, -(ijk__,) )
-        # append!(negated, ijk)   # writing [i,-(j,-k),l] may confuse this? 
         ijkplus = stripminus!(negated, ijk)
         append!(negated, ijkplus)
 
     elseif @capture(ind, (ijk__,) )
 
-    # backslash notation -- if you want more than four \ then I'm impressed! 
+    # backslash notation -- if you want more than four \ then I'm impressed! TODO make recursive
     elseif @capture(ind, i_\j_\k_\l_\m )
         ijk = Any[i,j,k,l,m]
-    elseif @capture(ind, i_\j_\k_\l_ )  # TODO do we want to allow ⊗ as notation too? 
+    elseif @capture(ind, i_\j_\k_\l_ )
         ijk = Any[i,j,k,l]
     elseif @capture(ind, i_\j_\k_ )
         ijk = Any[i,j,k]
     elseif @capture(ind, i_\j_ )
         ijk = Any[i,j]
+
+    elseif @capture(ind, i_⊗j_⊗k_⊗l_⊗m )
+        ijk = Any[i,j,k,l,m]
+    elseif @capture(ind, i_⊗j_⊗k_⊗l_ )
+        ijk = Any[i,j,k,l]
+    elseif @capture(ind, i_⊗j_⊗k_ )
+        ijk = Any[i,j,k]
+    elseif @capture(ind, i_⊗j_ )
+        ijk = Any[i,j]
+
     else 
         error("stripminus! is stuck on $ind")
     end
@@ -188,6 +220,30 @@ function oddunique(negated)  # -1 * -1 = +1
 end
 
 """
+    checkrepeats(flat)
+Throws an error if there are repeated indices.
+"""
+function checkrepeats(flat, msg="")
+    once = Set{Symbol}()
+    twice = Set{Symbol}()
+    for i in flat
+        if i != nothing
+            if i in once
+                push!(twice, i)
+            else
+                push!(once, i)
+            end
+        end
+    end
+    if length(twice) > 0
+        str = join(twice, ", ")
+        error("repeated index/indices $str" * msg)
+    end
+    nothing
+end
+
+
+"""
     sizeinfer(store, icannon, leaveone=true)
 
 This is the point of SizeDict. 
@@ -199,7 +255,6 @@ which come from tuples of indices, for which we know the product of their dimens
 """
 function sizeinfer(store::SizeDict, icanon::Vector, leaveone = true)
     sizes = Any[ (:) for i in icanon ]
-    # V && println("sz starting dict = ",store.dict)
 
     # first pass looks for single indices whose lengths are known directly
     for pair in store.dict
@@ -208,12 +263,12 @@ function sizeinfer(store::SizeDict, icanon::Vector, leaveone = true)
             sizes[d] = pair.second  # so write it into the answer
         end
     end
-    # V && println("sz first pass sizes = ",sizes)
 
     if leaveone && count(isequal(:), sizes) < 2 
-        V && count(isequal(:), sizes)==1 &&  @info "sizeinfer: leaving one : in sizes" repr(sizes)
+        V && count(isequal(:), sizes)==1 &&  @info "sizeinfer -- leaving one : in sizes" repr(sizes)
         return sizes 
     end
+    V && @info "sizeinfer -- first pass" sizes
 
     # second pass looks for tuples (whose product-length is known) where exactly one entry has unknown length
     for pair in store.dict
@@ -224,7 +279,7 @@ function sizeinfer(store::SizeDict, icanon::Vector, leaveone = true)
                 num = pair.second
                 denfacts = [ store.dict[i] for i in pair.first[known] ]
                 if length(denfacts) > 1
-                    den = :( *($denfacts...) )
+                    den = :( *($(denfacts...)) )
                 else
                     den = :( $(denfacts[1]) )
                 end
@@ -233,11 +288,12 @@ function sizeinfer(store::SizeDict, icanon::Vector, leaveone = true)
                 d = findcheck(first(pair.first[.!known]), icanon)
                 sizes[d] = rat      # save that size
 
-                push!(store.checks, :( @assert rem($num, $den)==0 ) )
+                str = "inferring range of $(icanon[d]) from range of $(join(pair.first, " ⊗ "))" 
+                push!(store.checks, :( TensorCast.@assertsize rem($num, $den)==0 $str) )
             end
         end
     end
-    # V && println("sz second pass sizes = ",sizes)
+    V && @info "sizeinfer -- second pass" sizes
 
     unknown = Any[ i for (d,i) in enumerate(icanon) if sizes[d] == (:) ]
     str = join(unknown, ", ")
@@ -245,8 +301,6 @@ function sizeinfer(store::SizeDict, icanon::Vector, leaveone = true)
 
     return sizes
 end
-
-# sorted_starcode(tot, inner) = Tuple(vcat([(:) for _=1:inner], [(*) for _=inner+1:tot]))
 
 sorted_starcode(tot, inner) = (ntuple(i -> :, inner)..., ntuple(i -> *, tot-inner)...)
 
@@ -264,7 +318,7 @@ function colonise!(isz, slist::Vector)
 
     if isz == szall
         # example from tests:  @pretty @shape g[(b,c),x,y,e] := bcde[b,c,(x,y),e] x:2;
-        V && println("colonise! replaced isz/osz/fsz= ",isz, 
+        V && println("colonise! replaced ",isz, 
             " with just sz... because that's what it is")
         resize!(isz, 1)
         isz[1] = :(sz...)
@@ -348,8 +402,17 @@ function simplicode(perm, before, after)
 
 end
 
-macro less(ex)
-    println("you got my version of this")
-    ex
+"""
+    @assertsize cond str
+
+Like `@assert`, but prints both the given string and the condition. 
+"""
+macro assertsize(ex, str)
+    strex = Main.Base.string(ex)
+    msg = str * ": " * strex
+    # return :($(esc(ex)) ? $(nothing) : throw(DimensionMismatch($msg)))
+    # return :( $(esc(ex)) ? $(nothing) : error($msg) )
+    return esc(:($ex || error($msg)))
 end
+
 

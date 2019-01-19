@@ -6,16 +6,16 @@ export @check!, @einsum!, @tensor!
 
 Adds `A` to the store of known tensors, and records that it expects indices `i,j,μ,ν`.
 If it is already in the store, then instead this checks whether the present indices differ 
-from the saved ones. This happens while parsing your source code, there is zero run-time penalty. 
+from the saved ones. Only the first letter is examined: `α` and `α2` are similar, as are nearby 
+letters `β`, `γ3`. More complicated indices like `Z[(i,j), -k, _, 3]` will be ignored. 
+This happens while parsing your source code, there is zero run-time penalty. Returns `A`.
 
-In addition, it can insert size checks to be performed at run-time. 
-At the first occurrange these save `i: => size(A,1)` etc., and on subsequent uses of 
+In addition, with `size=true` option, it can insert size checks to be performed at run-time. 
+At the first occurrance these save `i: => size(A,1)` etc., and on subsequent uses of 
 the same index (even on different tensors) give an error if the sizes do not match. 
-If turned on, this will need to look up indices in a dictionary, which takes ... 50ns, really? 
-
-More complicated indices like `Z[(i,j), -k, _, 3]` will be ignored. 
-
-Returns either `A` or `check!(A, stuff)`. 
+Here the whole index is used: `α`, `β` and `β2` may have different ranges. 
+This will need to look up indices in a dictionary, which takes ... 50ns, really? 
+Returns `check!(A, stuff)`. 
 
     @check! B[i,j] C[μ,ν]
 
@@ -23,13 +23,13 @@ Checks several tensors, returns nothing.
 
     @check!  alpha=true  tol=3  size=false  throw=false  info  empty
 
-Controls options for `@check!` and related macros, these are the defaults:
-* `alpha=true` turns on the parse-time checking, based on index letters
+Controls options for `@check!` and related macros (`@shape!`, `@reduce!`, `@einsum!` etc). 
+These are the default settings:
+* `alpha=true` turns on the parse-time checking, based on index letters.
 * `tol=3` sets how close together letters must be: `B[j,k]` is not an error but `B[a,b]` will be. 
-  (Multi-letter indices are judged by their first letter)
-* `size=false` turns off run-time size checking
-* `throw=false` means that errors are given using `@error`, without interrupting your program
-* `empty` deletes all saved letters and sizes -- there is one global store for each, for now
+* `size=false` turns off run-time size checking.
+* `throw=false` means that errors are given using `@error`, without interrupting your program.
+* `empty` deletes all saved letters and sizes -- there is one global store for each, for now.
 * `info` prints what's currently saved.
 """
 macro check!(exs...)
@@ -78,7 +78,6 @@ function _check!(exs...; where=nothing)
             @info "@check! info" check_options index_store size_store
 
         else 
-            println(ex, "  ",typeof(ex))
             @error "@check! doesn't know what to do with $ex"
 
         end
@@ -123,7 +122,7 @@ function check_one(ex, where=nothing)
 
     if check_options.size
         Astring = string(A,"[",join(ind," ,"),"]")
-        return :( TensorSlice.check!($A, $ind, $Astring, $where) )
+        return :( TensorCast.check!($A, $ind, $Astring, $where) )
     else
         return A
     end
@@ -245,7 +244,7 @@ A = B * C
 @einsum A[i,j] := B[i,k] * C[k,zz] # not an error... will be fixed soon, https://github.com/ahwillia/Einsum.jl/pull/31
 
 
-using TensorSlice
+using TensorCast
 
 
 @check! size=true throw=false info
