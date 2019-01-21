@@ -1,5 +1,5 @@
 
-export @check!, @einsum!, @tensor!
+export @check!, @einsum!, @vielsum!, @tensor!
 
 """
     @check!(A[i, j, μ, ν])
@@ -10,14 +10,15 @@ from the saved ones. Only the first letter is examined: `α` and `α2` are simil
 letters `β`, `γ3`. More complicated indices like `Z[(i,j), -k, _, 3]` will be ignored. 
 This happens while parsing your source code, there is zero run-time penalty. Returns `A`.
 
-In addition, with `size=true` option, it can insert size checks to be performed at run-time. 
-At the first occurrance these save `i: => size(A,1)` etc., and on subsequent uses of 
-the same index (even on different tensors) give an error if the sizes do not match. 
+In addition, with `size=true` option, it can insert size checks to be performed at run-time,
+by returning `check!(A, stuff)`. 
+At the first occurrance this saves `i: => size(A,1)` etc., and on subsequent uses of 
+the same index (even on different tensors) it gives an error if the sizes do not match. 
 Here the whole index is used: `α`, `β` and `β2` may have different ranges. 
 This will need to look up indices in a dictionary, which takes ... 50ns, really? 
-Returns `check!(A, stuff)`. 
 
-    @check! B[i,j] C[μ,ν]
+
+    @check! B[i,j] C[μ,ν] D[i] E[j]
 
 Checks several tensors, returns nothing. 
 
@@ -31,6 +32,17 @@ These are the default settings:
 * `throw=false` means that errors are given using `@error`, without interrupting your program.
 * `empty` deletes all saved letters and sizes -- there is one global store for each, for now.
 * `info` prints what's currently saved.
+
+
+    @cast! B[i,j] := D[i] * E[j]
+    @reduce! B[i,j] := sum(μ,ν) A[i,j,μ,ν] / C[μ,ν]
+
+    @einsum!  B[i,j] := D[i] * E[j]
+    @vielsum! B[i,j] := D[i] * E[j]
+    @tensor!  B[i,j] := D[i] * E[j]
+
+Versions of the macros from this package, and from Einsum.jl and TensorOperations.jl, 
+which call `@check!` on each of their tensors, before proceeding as normal. 
 """
 macro check!(exs...)
     where = (mod=__module__, src=__source__)
@@ -87,6 +99,7 @@ end
 
 """
     check_one(A[i,j,k], (mod=Module, src=...))
+
 Does the work of `@check!`, on one index expression, 
 returning `A` or `check!(A,...)` according to global flags. 
 """
@@ -140,6 +153,7 @@ end
 
 """
     check!(A, (:i,:j), "A[i,j]", (mod=..., src=...))
+
 Performs run-time size checking, on behalf of the `@check!` macro, returns `A`. 
 The string and tuple are just for the error message. 
 """
@@ -168,6 +182,17 @@ equivalent to wrapping every tensor with `@check!()`.
 macro einsum!(ex)
     where = (mod=__module__, src=__source__)
     _einsum!(ex, where)
+end
+
+"""
+    @vielsum! A[i,j] := B[i,k] * C[k,j]
+
+Variant of `@vielsum` from package Einsum.jl, 
+equivalent to wrapping every tensor with `@check!()`.
+"""
+macro vielsum!(ex)
+    where = (mod=__module__, src=__source__)
+    _einsum!(ex, where; threads=true)
 end
 
 """
@@ -207,7 +232,7 @@ function _tensor!(ex, where=nothing)
     return esc(:( TensorOperations.@tensor $ex ))
 end
 
-function _einsum!(ex, where=nothing)
+function _einsum!(ex, where=nothing; threads = false)
     if @capture(ex, lhs_ := rhs_ ) || @capture(ex, lhs_ = rhs_ ) 
 
         outex = quote end
@@ -222,7 +247,11 @@ function _einsum!(ex, where=nothing)
         if check_options.size == false
             check_one(lhs) # then these are only parse checks, outex is trash
         else
-            push!(outex.args, :(out = Einsum.@einsum $ex) )
+            if threads
+                push!(outex.args, :(out = Einsum.@vielsum $ex) )
+            else
+                push!(outex.args, :(out = Einsum.@einsum $ex) )
+            end
             push!(outex.args, check_one(lhs, where)) # lhs size may not be known until after @einsum
             push!(outex.args, :out )                 # make sure we still return what @einsum did
             return esc(outex)
@@ -230,7 +259,11 @@ function _einsum!(ex, where=nothing)
     else
         @warn "@einsum! not smart enough to process $ex yet, so ignoring checks"
     end
-    return esc(:( Einsum.@einsum $ex ))
+    if threads
+        return esc(:( Einsum.@vielsum $ex ))
+    else
+        return esc(:( Einsum.@einsum $ex ))
+    end
 end
 
 #==
