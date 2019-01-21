@@ -177,3 +177,8 @@ by inserting axes on which `size(B, d) == 1` as needed.
         "orient(A, ($str)) got ndims(A) = $(ndims(A)), expeceted n = $(d-1)"))
     :(reshape(A, ($(list...),))) 
 end
+
+# because of https://github.com/JuliaArrays/LazyArrays.jl/issues/16
+orient(A::AbstractVector, ::Tuple{typeof(*),Colon}) = transpose(A)
+orient(A::AbstractVector, ::Tuple{typeof(*),Colon,typeof(*)}) = transpose(A)
+
