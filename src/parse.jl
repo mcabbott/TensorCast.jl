@@ -63,15 +63,7 @@ function parse!(sdict::SizeDict, A, outer, inner, allowranges=false, flags=nothi
         if allowranges 
 
             if @capture(ind , i_:ilength_ )
-                if !OLD
-                    savesize!(sdict, i, ilength) 
-                else
-                    if isa(ilength, Int)
-                        savesize!(sdict, i, ilength) 
-                    else
-                        savesize!(sdict, i, esc(ilength)) ## REMOVED FOR NEW MACRO
-                    end
-                end
+                savesize!(sdict, i, ilength) 
             else
                 i = ind    # not nothing from @capture
             end
@@ -140,9 +132,6 @@ function savesize!(store::SizeDict, ind, long)
         if isa(ind, Symbol)     # but list of checks is only for actual indices
             str = "range of index $ind must agree"
             push!(store.checks, :(TensorCast.@assertsize $(store.dict[ind]) == $long $str) )
-        end
-        if OLD
-            store.dict[ind] = long  # either way, over-write in dict CHANGED FOR NEW MACRO
         end
     end
 end
