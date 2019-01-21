@@ -537,7 +537,7 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, siz
         end
     elseif :staticslice in flags                            # Z[i]{k} :=
         # codeW worked out already, but sizeWstatic must be done here
-        sizeWstatic = :( Size($([store.dict[i] for i in indW]...)) )
+        sizeWstatic = :( StaticArrays.Size($([store.dict[i] for i in indW]...)) )
         if :outshape in flags
             ex = :( TensorCast.static_slice($ex, $sizeWstatic, false) )
         else
@@ -687,11 +687,12 @@ function packageerror(str, where)
 end
 
 function packagecheck(flags, where)
-    if :staticslice in flags || :staticglue in flags
-        isdefined(TensorCast, :StaticArrays) || packageerror("can't use static arrays without using StaticArrays", where)
+    # thanks to LazyArrays, StaticArrays is always defined here, so check caller's scope?
+    if :staticslice in flags || :staticglue in flags && where != nothing
+        isdefined(where.mod, :StaticArrays) || packageerror("can't use static arrays without using StaticArrays", where)
     end
     if :strided in flags 
-        isdefined(TensorCast, :Strided) || packageerror("can't use @strided without using Strided", where)
+        isdefined(TensorCast, :Strided) || packageerror("can't use option strided without using Strided", where)
     end
     # if :lazy in flags 
     #     isdefined(TensorCast, :LazyArrays) || packageerror("can't do lazy broadcast without using LazyArrays", where)
