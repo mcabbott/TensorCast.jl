@@ -4,4 +4,4 @@ MacroTools
 Requires
 
 LazyArrays
-RecursiveArrayTools
+RecursiveArrayTools 0.18.6

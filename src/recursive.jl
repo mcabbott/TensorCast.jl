@@ -24,10 +24,3 @@ using RecursiveArrayTools
         error("can't glue code = $code with VectorOfArray")
     end
 end
-
-# https://github.com/JuliaDiffEq/RecursiveArrayTools.jl/issues/47
-function Base._reshape(parent::VectorOfArray, dims::Base.Dims)
-    n = prod(size(parent))
-    prod(dims) == n || Base._throw_dmrs(n, "size", dims)
-    Base.__reshape((parent, IndexStyle(parent)), dims)
-end
