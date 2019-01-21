@@ -7,23 +7,26 @@
 
 This package lets you write many expressions involving N-dimensional arrays in index notation,
 which is often the least confusing way. 
-It defines a pair of macros: `@cast` deals both with "casting" into new shapes, and with broadcasting:
+It defines a pair of macros: `@cast` deals both with "casting" into new shapes (including going 
+to and from an array-of-arrays) and with broadcasting:
 
 ```julia
-@cast A[j][i] := B[i,j]             # slice a matrix into its rows
-@cast C[i,(j,k)] := D[i,j,k]        # reshape 3-tensor into a matrix
+@cast A[row][col] := B[row, col]    # slice a matrix into its rows
 
-@cast A[i,j] = B[i] * log(C[j])     # broadcast A .= B .* log.(C')
+@cast C[(i,j), (k,ℓ)] := D[i,j,k,ℓ] # reshape a 4-tensor to give a matrix
+
+@cast E[x,y] = F[x]^2 * log(G[y])   # broadcast E .= F.^2 .* log.(G') into existing matrix
 ```
 
 And `@reduce` takes sums (or other reductions) over some directions, 
-and otherwise understands all the same things: 
+but otherwise understands all the same things: 
 
 ```julia
-@reduce E[i] := sum(j,k) F[i,j,k]                # sum over dims=(2,3), and dropdims
+@reduce H[a] := sum(b,c) L[a,b,c]                # sum over dims=(2,3), and dropdims
+
 @reduce S[i] = sum(n) -P[i,n] * log(P[i,n]/Q[n]) # sum!(S, @. -P*log(P/Q')) into exising S
 
-@reduce G[μ,ν,J] := prod(i:2) H[(i,J)][μ,ν]      # products of pairs of matrices, stacked
+@reduce W[μ,ν,J] := prod(i:2) V[(i,J)][μ,ν]      # products of pairs of matrices, stacked
 ```
 
 These are intended to complement the macro from [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl),
@@ -76,6 +79,8 @@ pkg> add StaticArrays Strided  TensorOperations Einsum  # optional extras, see b
 pkg> add Flux ImageView FileIO                          # for image examples
 
 julia> using TensorCast
+
+help?> @cast  # press ? for help
 ```
 
 If you downloaded this under its former name, you should `rm TensorSlice`.  
@@ -109,7 +114,7 @@ M = randn(Float16, 2*5, 3)
 
 size(A) == (2,3,5) # true
 
-@cast A[i,j,k] = M[(i,k),j]; # in-place version knows size(A)
+@cast A[i,j,k] = M[(i,k),j]; # writing into existing A, it knows size(A)
 ```
 
 This glues and reshapes a list of images into one large image:
@@ -265,7 +270,7 @@ while the above slot-checking is based on the first letter.
 
 ## Options
 
-As mentioned in passing, expressions with `=` write into an existing array, 
+As mentioned above, expressions with `=` write into an existing array, 
 while those with `:=` do not. This is the same notation as 
 [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl) and [Einsum.jl](https://github.com/ahwillia/Einsum.jl). 
 But unlike those packages, sometimes the result of `@cast` is a view of the original, for instance 
@@ -309,7 +314,7 @@ By another slight abuse of notation, such slices are written here as curly brack
 ```julia
 using StaticArrays
 
-@cast S[k]{i} == M[i,k]  i:3   # S = reinterpret(SVector{2,Int}, vec(M)) 
+@cast S[k]{i} == M[i,k]  i:3   # S = reinterpret(SVector{3,Int}, vec(M)) 
 
 @cast R[k,i] == S[k]{i}        # such slices can be reinterpreted back again
 
@@ -317,9 +322,9 @@ M[1,2]=42; R[2,1]==42          # all views of the original data
 ```
 
 When creating such slices, their size ought to be provided, either as a literal integer or 
-through the types. Note that you may also write `S[k]{i:2}`. 
+through the types. Note that you may also write `S[k]{i:3}`. 
 For example, this function is about 100x slower if not given the
-[value type](https://docs.julialang.org/en/latest/manual/types/index.html#"Value-types"-1) `Val(2)`,
+[value type](https://docs.julialang.org/en/latest/manual/types/index.html#"Value-types"-1) `Val(3)`,
 as the size of the SVector is then not known to the compiler:
 
 ```julia
@@ -328,7 +333,7 @@ cols_slow(M::Matrix) = @cast A[j]{i} == M[i,j]  i:size(M,1)
 cols_fast(M::Matrix, ::Val{N}) where N = @cast A[j]{i:N} == M[i,j]
 
 @code_warntype cols_slow(M) # with complaints ::Any in red
-@code_warntype cols_fast(M, Val(2))
+@code_warntype cols_fast(M, Val(3))
 ```
 
 Another potential issue is that, if you create such slices after transposing (or some other lazy transformation), 
@@ -353,7 +358,7 @@ V3 = reshape(V, 1,1,:);
 @time @reduce W[i] := sum(j,k) V[i] * V[j] * V[k];    # about the same
 
 @time sum(BroadcastArray(*, V, V', V3); dims=(2,3));  # 0.025 s, 5 KB
-@time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k]  lazy;  # should be the same! 
+@time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k]  lazy;  # about the same 
 ```
 
 Finally, the package [Strided.jl](https://github.com/Jutho/Strided.jl) can apply multi-threading to 
