@@ -11,11 +11,11 @@ It defines a pair of macros: `@cast` deals both with "casting" into new shapes (
 to and from an array-of-arrays) and with broadcasting:
 
 ```julia
-@cast A[row][col] := B[row, col]    # slice a matrix into its rows
+@cast A[row][col] := B[row, col]            # slice a matrix into its rows
 
-@cast C[(i,j), (k,ℓ)] := D[i,j,k,ℓ] # reshape a 4-tensor to give a matrix
+@cast C[(i,j), (k,ℓ)] := D[i,j,k,ℓ]         # reshape a 4-tensor to give a matrix
 
-@cast E[x,y] = F[x]^2 * log(G[y])   # broadcast E .= F.^2 .* log.(G') into existing matrix
+@cast E[x,y] = F[x]^2 * log(G[y])           # broadcast E .= F.^2 .* log.(G') into existing E
 ```
 
 And `@reduce` takes sums (or other reductions) over some directions, 
@@ -34,8 +34,8 @@ which instead performs Einstein-convention contractions and traces, in a very si
 Here it is implicit that repeated indices are summed over: 
 
 ```julia
-@tensor A[i,k] := B[i,j] * C[j,k]   # matrix multiplication, A = B * C
-@tensor D[i] := E[i] + F[i,k,k]     # partial trace of F only, Dᵢ = Eᵢ + Σⱼ Fᵢⱼⱼ
+@tensor A[i,k] := B[i,j] * C[j,k]           # matrix multiplication, A = B * C
+@tensor D[i] := E[i] + F[i,k,k]             # partial trace of F only, Dᵢ = Eᵢ + Σⱼ Fᵢⱼⱼ
 ```
 
 Similar notation is also used by the macro from [Einsum.jl](https://github.com/ahwillia/Einsum.jl),
@@ -63,7 +63,7 @@ This means that they are very generic, and will (mostly) work well on
 and on almost any other kind of N-dimensional array.
 
 For those who speak Python, `@cast` and `@reduce` allow similar operations to 
-[`einops`](https://github.com/arogozhnikov/einops) (minus the cool video, but plus broadcasting),
+[`einops`](https://github.com/arogozhnikov/einops) (minus the cool video, but plus broadcasting)
 while Einsum / TensorOperations map very roughly to [`einsum`](http://numpy-discussion.10968.n7.nabble.com/einsum-td11810.html) 
 / [`opt_einsum`](https://github.com/dgasmith/opt_einsum).
 The function of `@check!` (see [below](#checking)) is similar to [`tsalib`](https://github.com/ofnote/tsalib)'s shape annotations.
@@ -314,11 +314,11 @@ By another slight abuse of notation, such slices are written here as curly brack
 ```julia
 using StaticArrays
 
-@cast S[k]{i} == M[i,k]  i:3   # S = reinterpret(SVector{3,Int}, vec(M)) 
+@cast S[k]{i} == M[i,k]  i:3        # S = reinterpret(SVector{3,Int}, vec(M)) 
 
-@cast R[k,i] == S[k]{i}        # such slices can be reinterpreted back again
+@cast R[k,i] == S[k]{i}             # such slices can be reinterpreted back again
 
-M[1,2]=42; R[2,1]==42          # all views of the original data
+M[1,2]=42; R[2,1]==42               # all views of the original data
 ```
 
 When creating such slices, their size ought to be provided, either as a literal integer or 
