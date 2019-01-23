@@ -365,6 +365,7 @@ function walker(outex, ex, canon, flags, store, icheck, where)
 
         # TODO if A = rand(2,3) then pull this out now, and hand inputex & hence parse! a new symbol?
         # but then sz = (... size(this, 2) ) and size checks need to come after what was inserted.
+        # @pretty @cast A[i]{j:5} |= rand(3,5)[i,j]  assert
 
         Aval = inputex(ex, canon, flags, store, icheck, where)
         if isa(Aval, Symbol) 
@@ -483,8 +484,9 @@ function inputex(inex, canon, flags, store, icheck, where)
 
     for i in negF                                           # A[-i,j]
         d = invperm(perm)[findcheck(i, flatE)]
-        ex = :( reverse($ex, dims=$d) )
-        push!(flags, :havecopied)
+        # ex = :( reverse($ex, dims=$d) )
+        ex = :( TensorCast.Reverse{$d}($ex) )
+        # push!(flags, :havecopied)
     end
 
     if length(flatE) != length(canon)                       # A[i] + B[j]

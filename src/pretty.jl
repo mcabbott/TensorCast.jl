@@ -21,6 +21,7 @@ function pretty(ex::Union{Expr,Symbol})
     
     str = replace(str, r"\w+\.(\w+)\(" => s"\1(") # remove module names on functions
     str = replace(str, r"\w+\.(@\w+)" => s"\1")   # and on macros
+    str = replace(str, r"\w+\.(\w+){" => s"\1{")  # and on structs...
 
     str = replace(str, "Colon()" => ":")
 end

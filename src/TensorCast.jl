@@ -4,7 +4,6 @@ module TensorCast
 using MacroTools
 
 V = false # verbose debugging
-const OLD = false # a few things in parse
 
 include("parse.jl")
 
@@ -21,6 +20,8 @@ end
 include("slice.jl")
 
 include("recursive.jl")
+
+include("order.jl")
 
 using Requires
 
