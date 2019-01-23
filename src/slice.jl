@@ -49,15 +49,16 @@ glue(A::AbstractArray, code::Tuple) = copy_glue(A, code)
 @inline function red_glue(A::AbstractArray{IT,N}, code::Tuple) where {IT,N}
     gluecodecheck(A, code)
     if code == (:,*)
-        reduce(hcat, A)
+        reduce(hcat, A) # this is fast, specially optimised
     elseif code == (*,:)
-        mapreduce(transpose, vcat, A)
-    elseif count(isequal(*), code) == 1 && code[end] == (*)
-        reduce((x,y) -> cat(x,y; dims = length(code)), A)
+        # mapreduce(transpose, vcat, A) # this is slow
+        reduce(vcat, transpose.(A))
+    # elseif count(isequal(*), code) == 1 && code[end] == (*)
+    #     reduce((x,y) -> cat(x,y; dims = length(code)), A) # this is slow
     elseif iscodesorted(code)
-        flat = reduce((x,y) -> cat(x,y; dims = length(code)-ndims(A)+1), vec(A))
-        finalsize = (size(first(A))..., size(A)...)
-        reshape(flat, finalsize)
+    #     flat = reduce((x,y) -> cat(x,y; dims = length(code)-ndims(A)+1), vec(A))
+        flat = reduce(hcat, vec(vec.(A)))
+        reshape(flat, gluedsize(A, code))
     else
         error("can't glue code = $code with reduce(cat...)")
     end
@@ -73,8 +74,9 @@ end
         cat(A...; dims = length(code))
     elseif iscodesorted(code)
         flat = cat(vec(A)...; dims = length(code)-ndims(A)+1)
-        finalsize = (size(first(A))..., size(A)...)
-        reshape(flat, finalsize)
+        reshape(flat, gluedsize(A, code))
+        # finalsize = (size(first(A))..., size(A)...)
+        # reshape(flat, finalsize)
     else
         error("can't glue code = $code with cat(A...)")
     end

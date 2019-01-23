@@ -51,7 +51,7 @@ end
     H3 = glue!(similar(H1), C, (:,:,*,*))
     H4 = red_glue(C, (:,:,*,*)) 
     H5 = cat_glue(C, (:,:,*,*)) 
-    # H6 = recursive_glue(C, (:,:,*,*)) 
+    H6 = recursive_glue(C, (:,:,*,*)) 
     @test all(H1 .== H2 .== H3 .== H4 .== H5)
 
     D = [ SMatrix{2,3}(k .+ rand(2,3)) for k=1:4 ];
@@ -59,7 +59,8 @@ end
     G5 = copy_glue(D, (:,:,*))
     G6 = cat_glue(D, (:,:,*))
     G7 = red_glue(D, (:,:,*))
-    @test all(G5 .== G6 .== G7)
+    G8 = recursive_glue(D, (:,:,*))
+    @test all(G5 .== G6 .== G7 .== G8)
 
     G8 = copy_glue(D, (:,*,:))
     G9 = glue!(similar(G8), D, (:,*,:))
