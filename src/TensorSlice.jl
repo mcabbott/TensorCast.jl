@@ -7,7 +7,7 @@ I have now changed its name TensorSlice.jl -> TensorCast.jl
 You should probably remove this, and download again under the new name:
 
 ] rm TensorSlice
-  add https://github.com/mcabbott/TensorCast.jl
+  add TensorCast
 
 You will also need to replace @shape with @cast everywhere 
 (and possibly replace some @cast with @reduce, sorry.) 
