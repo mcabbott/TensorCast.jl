@@ -70,10 +70,10 @@ The function of `@check!` (see [below](#checking)) is similar to [`tsalib`](http
 
 ## Installation
 
-You need [Julia](https://julialang.org/downloads/) 1.0. This package is not yet registered, install it like this: 
+You need [Julia](https://julialang.org/downloads/) 1.0. This package is now registered, install it like this: 
 
 ```julia
-pkg> add https://github.com/mcabbott/TensorCast.jl # press ] for pkg, backspace to leave
+pkg> add TensorCast  # press ] for pkg, backspace to leave
 
 pkg> add StaticArrays Strided  TensorOperations Einsum  # optional extras, see below
 pkg> add Flux ImageView FileIO                          # for image examples
@@ -83,6 +83,7 @@ julia> using TensorCast
 help?> @cast  # press ? for help
 ```
 
+From a Jupyter notebook, write instead `using Pkg; pkg"add TensorCast"`.
 If you downloaded this under its former name, you should `rm TensorSlice`.  
 
 ## Examples
