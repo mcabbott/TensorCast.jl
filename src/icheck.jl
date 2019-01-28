@@ -45,7 +45,7 @@ Versions of the macros from this package, and from Einsum.jl and TensorOperation
 which call `@check!` on each of their tensors, before proceeding as normal. 
 """
 macro check!(exs...)
-    where = (mod=__module__, src=__source__)
+    where = (mod=__module__, src=__source__, str=unparse("@check!", exs...))
     _check!(exs...; where=where)
 end
 
@@ -180,7 +180,7 @@ Variant of `@einsum` from package Einsum.jl,
 equivalent to wrapping every tensor with `@check!()`.
 """
 macro einsum!(ex)
-    where = (mod=__module__, src=__source__)
+    where = (mod=__module__, src=__source__, str=unparse("@einsum!", exs...))
     _einsum!(ex, where)
 end
 
@@ -191,7 +191,7 @@ Variant of `@vielsum` from package Einsum.jl,
 equivalent to wrapping every tensor with `@check!()`.
 """
 macro vielsum!(ex)
-    where = (mod=__module__, src=__source__)
+    where = (mod=__module__, src=__source__, str=unparse("@vielsum!", exs...))
     _einsum!(ex, where; threads=true)
 end
 
@@ -202,7 +202,7 @@ Variant of `@tensor` from package TensorOperations.jl,
 equivalent to wrapping every tensor with `@check!()`.
 """
 macro tensor!(ex)
-    where = (mod=__module__, src=__source__)
+    where = (mod=__module__, src=__source__, str=unparse("@tensor!", exs...))
     _tensor!(ex, where)
 end
 

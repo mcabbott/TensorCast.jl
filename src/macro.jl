@@ -38,7 +38,7 @@ Static slices `D[j,k]{i}` need `using StaticArrays`, and to create them you shou
 slice dimensions explicitly. You may write `D[k]{i:2,j:2}` to specify `Size(2,2)` slices.
 """
 macro cast(exs...)
-    where = (mod=__module__, src=__source__)
+    where = (mod=__module__, src=__source__, str=unparse("@cast", exs...))
     _macro(exs...; reduce=false, where=where)
 end
 
@@ -48,7 +48,7 @@ end
 Variant of `@cast` which effectively runs `@check!()` on each tensor.
 """
 macro cast!(exs...)
-    where = (mod=__module__, src=__source__)
+    where = (mod=__module__, src=__source__, str=unparse("@cast!", exs...))
     _macro(exs...; reduce=false, where=where, icheck=true)
 end
 
@@ -82,7 +82,7 @@ The option `strided` will place `@strided` in front of the broadcasting operatio
 You need `using Strided` for this to work. 
 """
 macro reduce(exs...)
-    where = (mod=__module__, src=__source__)
+    where = (mod=__module__, src=__source__, str=unparse("@reduce", exs...)) # wtf?
     _macro(exs...; reduce=true, where=where)
 end
 
@@ -92,7 +92,7 @@ end
 Variant of `@reduce` which effectively runs `@check!()` on each tensor.
 """
 macro reduce!(exs...)
-    where = (mod=__module__, src=__source__)
+    where = (mod=__module__, src=__source__, str=unparse("@reduce!", exs...))
     _macro(exs...; reduce=true, where=where, icheck=true)
 end
 
@@ -132,11 +132,10 @@ nameZ, indZ, indZsub, indZred -- given LHS
 
 function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=false, where=nothing)
 
-    #===== parse overall input =====#
-
     flags = Set{Symbol}()
 
-    if reduce 
+    if reduce
+    	#===== parse @reduce input =====#
 
         if @capture(exone, left_ := redfun_(redind__) )     # Z[i] := sum(j) A[i] * B[j]
             right = extwo
@@ -162,10 +161,11 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
             V && @info "full reduce" right redfun Tuple(redind)
 
         else
-            error("@reduce doesn't know what to do with $exone")
+            throw(MacroError("don't know what to do with $exone", where))
         end
 
-    else # I made this another macro, else how do you tell whether *(A, B) is a reduction func? 
+    else
+    	#===== parse @cast input =====#
 
         if @capture(exone, left_ := right_ )                # Z[i,j] := A[i] * B[j]
         elseif @capture(exone, left_ = right_ )
@@ -175,13 +175,13 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
         elseif @capture(exone, left_ == right_ )
             push!(flags, :mustview)
         else
-            error("@cast doesn't know what to do with $exone")
+            throw(MacroError("@cast doesn't know what to do with $exone", where))
         end
         V && @info "no reduction" left right 
         options = extwo
         redind = []
         redfun = identity
-        exthree == nothing || error("@cast doesn't know what to do with $exthree")
+        exthree == nothing || throw(MacroError("@cast doesn't know what to do with $exthree", where))
 
     end
 
@@ -196,7 +196,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
 
     if count(i -> i != nothing, setdiff(optind, canon)) > 0
         str = join(something.(setdiff(optind, canon), "nothing"), ", ")
-        error("don't recognise these options: $str")
+        m_error("attempting to ignore unrecognised options: $str", where)
     end
 
     #===== parse and process RHS =====#
@@ -213,13 +213,13 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
     end
 
     notseen = setdiff(canon, unique(store.seen))
-    isempty(notseen) || error("did not see index/indices $(join(notseen, ", ")) on the right")
+    isempty(notseen) || throw(MacroError("did not see index/indices $(join(notseen, ", ")) on the right", where))
 
     #===== almost done =====#
 
     packagecheck(flags, where)
 
-    canonsize = sizeinfer(store, canon)
+    canonsize = sizeinfer(store, canon, where)
 
     V && @info "before in/out choice" store flags Tuple(canonsize)
 
@@ -231,7 +231,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
             push!(outex.args, checkZ)
         end
 
-        inout = outputinplace(newright, outUZ, redfun, canonsize, canon, flags, store, nameZ)
+        inout = outputinplace(newright, outUZ, redfun, canonsize, canon, flags, store, nameZ, where)
         push!(outex.args, inout)
         if :finalres in flags
             push!(outex.args, nameZ)
@@ -249,7 +249,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
                 newright = :( Strided.@strided $newright )
             end
         end
-        finalright = outputnew(newright, outUZ, redfun, canonsize, canon, flags, store)
+        finalright = outputnew(newright, outUZ, redfun, canonsize, canon, flags, store, where)
         push!(outex.args, :( $nameZ =  $finalright ) )
 
         if checkZ != nothing
@@ -298,13 +298,13 @@ function readleft(left, redind, flags, store, icheck, where)
         outer = []
         Z = nothing
     else 
-        error("readleft doesn't know what to do with $left")
+        throw(MacroError("readleft doesn't know what to do with $left", where))
     end
 
     if Z == nothing
         nameZ = gensym(:Z) # no output name
         if :inplace in flags
-            error("can't write in-place into nowhere!")
+            throw(MacroError("can't write in-place into nowhere!", where))
         end
     else
         nameZ = Z
@@ -318,8 +318,8 @@ function readleft(left, redind, flags, store, icheck, where)
 
     canon = vcat(flat12, redUind) # order here is [inner, outer, reduced]
 
-    checkrepeats(flat12, " on left hand side")
-    checkrepeats(canon, " on left hand side plus reduction function")
+    checkrepeats(flat12, " on left hand side", where)
+    checkrepeats(canon, " in reduction function", where)
 
     codeW = repeat(Any[*], length(canon) - length(redUind))
     codeW[1:length(inner)] .= (:)
@@ -410,7 +410,7 @@ function inputex(inex, canon, flags, store, icheck, where)
 
     flatE, getB, _, negF = parse!(store, A, outer, inner)
 
-    checkrepeats(flatE, " in term $inex")
+    checkrepeats(flatE, " in term $inex", where)
     append!(store.seen, flatE)
 
     ex = A
@@ -425,7 +425,7 @@ function inputex(inex, canon, flags, store, icheck, where)
 
     sizeC = Any[]
     for i in flatE[length(inner)+1 : end]
-        d = findcheck(i, canon) 
+        d = findcheck(i, canon, where) 
         push!(sizeC, :( sz[$d] ) )
     end
     if (length(sizeC) + numB) != length(outer)              # A[i\j]
@@ -435,7 +435,7 @@ function inputex(inex, canon, flags, store, icheck, where)
         push!(flags, :needsize)
     end
 
-    dirs = [ findcheck(i, canon) for i in flatE ]
+    dirs = [ findcheck(i, canon, where) for i in flatE ]
 
     if glue == :yes                                         # A[i][k]
         codeD = repeat(Any[*],length(flatE))
@@ -483,7 +483,7 @@ function inputex(inex, canon, flags, store, icheck, where)
     end
 
     for i in negF                                           # A[-i,j]
-        d = invperm(perm)[findcheck(i, flatE)]
+        d = invperm(perm)[findcheck(i, flatE, where)]
         # ex = :( reverse($ex, dims=$d) )
         ex = :( TensorCast.Reverse{$d}($ex) )
         # push!(flags, :havecopied)
@@ -503,7 +503,7 @@ function inputex(inex, canon, flags, store, icheck, where)
 end
 
 """
-     outputnew(newright, outUZ, redfun, canonsize, canon, flags, store)
+     outputnew(newright, outUZ, redfun, canonsize, canon, flags, store, where)
 
 For the case of `:=`, this constructs the expression to do reduction if needed, 
 and slicing/reshaping/reversing for LHS. 
@@ -511,17 +511,17 @@ and slicing/reshaping/reversing for LHS.
 outUZ = (redUind, negV, codeW, indW, sizeX, getY, numY, sizeZ)
 """
 function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, sizeZ), 
-        redfun, canonsize, canon, flags, store)
+        redfun, canonsize, canon, flags, store, where)
 
     ex = newright
 
     for ri in negV                                          # Z[-i,j]
-        d = findcheck(ri, canon)
+        d = findcheck(ri, canon, where)
         ex = :( reverse($ex, dims=$d) )
     end
 
     if :reduce in flags                                     # := sum(i)
-        rdims = Tuple([findcheck(i, canon) for i in redUind])
+        rdims = Tuple([findcheck(i, canon, where) for i in redUind])
         if length(rdims)==1
             rdims = first(rdims)
         end
@@ -553,7 +553,7 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, siz
         ex = :( reshape($ex, $sizeZex) )
         push!(flags, :needsize)
         for n in filter(!isequal(:), getY)
-            n == 1 || error("can't fix output index to $n != 1, when creating a new array")
+            n == 1 || throw(MacroError("can't fix output index to $n != 1, when creating a new array", where))
         end
     end
 
@@ -563,9 +563,9 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, siz
         ex = :( copy($ex) )  
 
     elseif :mustview in flags && :havecopied in flags       # Z[i] == ...
-        error("can't do what you ask without copying, sorry")
+        m_error("can't do what you ask without copying, sorry", where)
     elseif :mustview in flags && :broadcast in flags
-        error("can't broadcast without copying, sorry")
+        m_error("can't broadcast without copying, sorry", where)
     end
 
     if :scalar in flags
@@ -580,7 +580,7 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, siz
 end
 
 """
-    outputinplace(newright, outUZ, redfun, canonsize, canon, flags, store, nameZ)
+    outputinplace(newright, outUZ, redfun, canonsize, canon, flags, store, nameZ, where)
 
 For the case of `=` this figures out how to write RHS into LHS, in one of three ways:
 * reduction `sum!(Z, newright)`
@@ -591,13 +591,13 @@ No longer attempts to write `permutedims!(Z, A, ...)`, now just `copyto!(Z, Perm
 Doesn't really need so many arguments...
 """
 function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, sizeZ), 
-        redfun, canonsize, canon, flags, store, nameZ)
+        redfun, canonsize, canon, flags, store, nameZ, where)
 
     if :slice in flags
-        error("can't write to sliced arrays in-place, for now")
+        throw(MacroError("can't write to sliced arrays in-place, for now", where))
     end
     if length(negV) > 0
-        error("can't reverse axes of in-place output, try moving -$(negV[1]) to right hand side")
+        m_error("can't reverse axes of in-place output, try moving -$(negV[1]) to right hand side", where)
     end
 
     if :reduce in flags                                     # sum!(revleft, newright) 
@@ -680,27 +680,16 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
     return ex
 end
 
-function packageerror(str, where)
-    if where==nothing
-        @error str
-    else
-        @error str  _module=where.mod  _line=where.src.line  _file=string(where.src.file)
-    end
-end
-
 function packagecheck(flags, where)
     # thanks to LazyArrays, StaticArrays is always defined here, so check caller's scope?
     if :staticslice in flags || :staticglue in flags && where != nothing
-        isdefined(where.mod, :StaticArrays) || packageerror("can't use static arrays without using StaticArrays", where)
+        isdefined(where.mod, :StaticArrays) || m_error("can't use static arrays without using StaticArrays", where)
     end
     if :strided in flags 
-        isdefined(TensorCast, :Strided) || packageerror("can't use option strided without using Strided", where)
+        isdefined(TensorCast, :Strided) || m_error("can't use option strided without using Strided", where)
     end
-    # if :lazy in flags 
-    #     isdefined(TensorCast, :LazyArrays) || packageerror("can't do lazy broadcast without using LazyArrays", where)
-    # end
     if :julienne in flags 
-        isdefined(TensorCast, :JuliennedArrays) || packageerror("can't use option julienne without using JuliennedArrays", where)
+        isdefined(TensorCast, :JuliennedArrays) || m_error("can't use option julienne without using JuliennedArrays", where)
     end
 end
 
@@ -729,4 +718,3 @@ function makelazy(bc::Expr)
     V && @info "after LazyArrays" lazybc
     return lazybc
 end
-

@@ -5,6 +5,7 @@ const flag_list = Any[ :!, :assert, :cat, :glue, :strided, :lazy, :julienne]
 
 * make sz a constant gensym()
 * multiply with ̂* or something, which understands :
+* add ndims checks to sizeassert?
 
 =#
 
@@ -118,12 +119,13 @@ isconstant(i::Int) = true
 isconstant(i::Symbol) = i == :_ 
 isconstant(ex::Expr) = ex.head == :($)
 
-function findcheck(i::Symbol, ind::Vector)
+function findcheck(i::Symbol, ind::Vector, where=nothing)
     d = findfirst(isequal(i), ind)
-    d isa Nothing && throw(ArgumentError("can't find index $i where it should be!"))
+    d isa Nothing && throw(MacroError("can't find index $i", where))
     return d
 end
-findcheck(i::Expr, ind::Vector) = throw(ArgumentError("don't know what to do with index $i, expected a single symbol"))
+findcheck(i::Expr, ind::Vector, where=nothing) = 
+    throw(MacroError("don't know what to do with index $i, expected a single symbol", where))
 
 function savesize!(store::SizeDict, ind, long)
     if !haskey(store.dict, ind) # then we don't yet have a size for this index (or tuple)
@@ -182,7 +184,7 @@ function stripminus!(negated::Vector, ind::Expr)
         ijk = Any[i,j]
 
     else 
-        error("stripminus! is stuck on $ind")
+        error("stuck on $ind, doesn't look like a valid index, or set of indices")
     end
 
     # now we have a vector ijk of symbols, or expressions :(-i), no more
@@ -210,13 +212,16 @@ end
 
 """
     checkrepeats(flat)
-Throws an error if there are repeated indices.
+Throws an error if there are repeated indices. 
+Also a good place to check whether flat is flat... e.g. A[i][j\\k] will arrive here
 """
-function checkrepeats(flat, msg="")
+function checkrepeats(flat, msg="", where=nothing)
     once = Set{Symbol}()
     twice = Set{Symbol}()
     for i in flat
         if i != nothing
+        	isa(i, Symbol) || throw(MacroError("can't handle index $i, expected a single symbol" * msg, where))
+
             if i in once
                 push!(twice, i)
             else
@@ -226,7 +231,7 @@ function checkrepeats(flat, msg="")
     end
     if length(twice) > 0
         str = join(twice, ", ")
-        error("repeated index/indices $str" * msg)
+        throw(MacroError("index $str repeated" * msg, where))
     end
     nothing
 end
@@ -242,13 +247,13 @@ If these sizes are known, easy!
 But for unknown ones, we do a second pass, looking for entries in sizedict like [:i, :j]
 which come from tuples of indices, for which we know the product of their dimensions. 
 """
-function sizeinfer(store::SizeDict, icanon::Vector, leaveone = true)
+function sizeinfer(store::SizeDict, icanon::Vector, where=nothing, leaveone = true)
     sizes = Any[ (:) for i in icanon ]
 
     # first pass looks for single indices whose lengths are known directly
     for pair in store.dict
         if isa(pair.first, Symbol)  
-            d = findcheck(pair.first, icanon)
+            d = findcheck(pair.first, icanon, where)
             sizes[d] = pair.second  # so write it into the answer
         end
     end
@@ -274,7 +279,7 @@ function sizeinfer(store::SizeDict, icanon::Vector, leaveone = true)
                 end
                 rat = :( $num ÷ $den )
 
-                d = findcheck(first(pair.first[.!known]), icanon)
+                d = findcheck(first(pair.first[.!known]), icanon, where)
                 sizes[d] = rat      # save that size
 
                 str = "inferring range of $(icanon[d]) from range of $(join(pair.first, " ⊗ "))" 
@@ -346,50 +351,50 @@ function colonise!(isz, slist::Vector)
     return needsizes
 end
 
-"""
-    p, (bef, aft) = simplicode(p, (bef, aft))
+# """
+#     p, (bef, aft) = simplicode(p, (bef, aft))
 
-The idea here is to absorb permutedims into alterations of the slicing / gluing codes. 
-Done as an optimisation pass, after figuring all of those out, before building expression. 
+# The idea here is to absorb permutedims into alterations of the slicing / gluing codes. 
+# Done as an optimisation pass, after figuring all of those out, before building expression. 
 
-* If we also have reversal or shift, those dimensions will need to be updated.
-  Maybe then don't bother. 
+# * If we also have reversal or shift, those dimensions will need to be updated.
+#   Maybe then don't bother. 
 
-* If there is a reduction, then it's totally worth bothering! You have more freedom than with slicing.
+# * If there is a reduction, then it's totally worth bothering! You have more freedom than with slicing.
 
-* It will also tend to break agreement between canonical sizes & size of actual array at any stage. 
-  This may matter for in-place case. 
+# * It will also tend to break agreement between canonical sizes & size of actual array at any stage. 
+#   This may matter for in-place case. 
 
-For now, only apply this when those are not in use. 
-"""
-function simplicode(perm, before, after)
-    ## just copied here from main file, this function isn't called yet 
-    ## and certainly won't work!! 
+# For now, only apply this when those are not in use. 
+# """
+# function simplicode(perm, before, after)
+#     ## just copied here from main file, this function isn't called yet 
+#     ## and certainly won't work!! 
 
-    # TODO Think more about this -- it could also tidy up @pretty @shape A[(i,j)] := B[i][j]
-    # but not for static glue
-    if willpermute && willslice # hence not willstaticslice
-        if perm==(2,1)
-            ocode = (ocode[2],ocode[1])
-            willpermute = false
-            W && println("removed permutation by changing slicing: now ocode = ",ocode)
-            # W && println("... for expr = ",expr)
-        else
-            V && println("am going to slice a permuted array. Can I remove permutation by re-ordering slice?")
-        end
-    end
-    # if willpermute && willglue # hence not willstaticglue
-    #     if perm==(2,1)
-    #         icode = (icode[2],icode[1])
-    #         willpermute = false
-    #         W && println("removed permutation by changing gluing: now icode = ",icode)
-    #         W && println("... for expr = ",expr)
-    #     else
-    #         V && println("am going to glue a permuted array. Can I remove permutation by re-ordering ?")
-    #     end
-    # end
+#     # TODO Think more about this -- it could also tidy up @pretty @shape A[(i,j)] := B[i][j]
+#     # but not for static glue
+#     if willpermute && willslice # hence not willstaticslice
+#         if perm==(2,1)
+#             ocode = (ocode[2],ocode[1])
+#             willpermute = false
+#             W && println("removed permutation by changing slicing: now ocode = ",ocode)
+#             # W && println("... for expr = ",expr)
+#         else
+#             V && println("am going to slice a permuted array. Can I remove permutation by re-ordering slice?")
+#         end
+#     end
+#     # if willpermute && willglue # hence not willstaticglue
+#     #     if perm==(2,1)
+#     #         icode = (icode[2],icode[1])
+#     #         willpermute = false
+#     #         W && println("removed permutation by changing gluing: now icode = ",icode)
+#     #         W && println("... for expr = ",expr)
+#     #     else
+#     #         V && println("am going to glue a permuted array. Can I remove permutation by re-ordering ?")
+#     #     end
+#     # end
 
-end
+# end
 
 """
     @assertsize cond str
@@ -403,5 +408,38 @@ macro assertsize(ex, str)
     # return :( $(esc(ex)) ? $(nothing) : error($msg) )
     return esc(:($ex || error($msg)))
 end
+
+function unparse(str::String, exs...)
+	@capture(exs[1], left_ = right_ ) && return string(str, " ", left, " = ", right, "  ", join(exs[2:end],"  "))
+	@capture(exs[1], left_ := right_ ) && return string(str, " ", left, " := ", right, "  ", join(exs[2:end],"  "))
+	@capture(exs[1], left_ |= right_ ) && return string(str, " ", left, " |= ", right, "  ", join(exs[2:end],"  "))
+	@capture(exs[1], left_ == right_ ) && return string(str, " ", left, " == ", right, "  ", join(exs[2:end],"  "))
+	return string(exs)
+end
+
+
+
+
+function m_error(str::String, where=nothing)
+	if where == nothing
+		@error str
+	else
+		@error str  input=where.str _module=where.mod  _line=where.src.line  _file=string(where.src.file)
+	end
+end
+
+struct MacroError <: Exception
+    msg::String
+    where::Union{Nothing, NamedTuple}
+    MacroError(msg::String, where=nothing) = new(msg, where)
+end
+
+function Base.showerror(io::IO, err::MacroError)
+	print(io, err.msg)
+	if err.where != nothing
+		printstyled(io, " \n    ", err.where.str; color = :normal)# :blue)
+	end
+end
+
 
 
