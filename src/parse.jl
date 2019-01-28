@@ -64,9 +64,14 @@ function parse!(sdict::SizeDict, A, outer, inner, allowranges=false, flags=nothi
         if allowranges 
 
             if @capture(ind , i_:ilength_ )
-                savesize!(sdict, i, ilength) 
+                savesize!(sdict, i, ilength)
+                if flags != nothing
+                	push!(flags, :assert) # turn on size checks if you can
+                else
+                	# for sum(i:3, j) can't see flags, so can't do that, sorry
+                end
             else
-                i = ind    # not nothing from @capture
+                i = ind    # replace nothing from @capture
             end
             push!(flat, i) # all need to go into flat!
 
@@ -88,7 +93,7 @@ function parse!(sdict::SizeDict, A, outer, inner, allowranges=false, flags=nothi
             if ind == :_                # treat _ almost like 1, but possibly with a check
                 if !isnothing(A)
                     str = "direction marked _ must have size 1"
-                    push!(sdict.checks, :(TensorCast.@assertsize size($A, $dout) == 1 $str) )
+                    push!(sdict.checks, :(TensorCast.@assert_ size($A, $dout) == 1 $str) )
                 end
                 ind = 1
             end
@@ -133,7 +138,7 @@ function savesize!(store::SizeDict, ind, long)
     else                        # we have seen it before,
         if isa(ind, Symbol)     # but list of checks is only for actual indices
             str = "range of index $ind must agree"
-            push!(store.checks, :(TensorCast.@assertsize $(store.dict[ind]) == $long $str) )
+            push!(store.checks, :(TensorCast.@assert_ $(store.dict[ind]) == $long $str) )
         end
     end
 end
@@ -238,7 +243,7 @@ end
 
 
 """
-    sizeinfer(store, icannon, leaveone=true)
+    sizeinfer(store, icannon, where, leaveone=true)
 
 This is the point of SizeDict. 
 The goal is to produce a canonical vector of sizes, corresponding to vector of symbols icannon. 
@@ -283,7 +288,7 @@ function sizeinfer(store::SizeDict, icanon::Vector, where=nothing, leaveone = tr
                 sizes[d] = rat      # save that size
 
                 str = "inferring range of $(icanon[d]) from range of $(join(pair.first, " ⊗ "))" 
-                push!(store.checks, :( TensorCast.@assertsize rem($num, $den)==0 $str) )
+                push!(store.checks, :( TensorCast.@assert_ rem($num, $den)==0 $str) )
             end
         end
     end
@@ -291,7 +296,7 @@ function sizeinfer(store::SizeDict, icanon::Vector, where=nothing, leaveone = tr
 
     unknown = Any[ i for (d,i) in enumerate(icanon) if sizes[d] == (:) ]
     str = join(unknown, ", ")
-    length(unknown) <= 1 || throw(ArgumentError("unable to infer ranges for indices $str"))
+    length(unknown) <= 1 || throw(MacroError("unable to infer ranges for indices $str", where))
 
     return sizes
 end
@@ -397,15 +402,13 @@ end
 # end
 
 """
-    @assertsize cond str
+    @assert_ cond str
 
 Like `@assert`, but prints both the given string and the condition. 
 """
-macro assertsize(ex, str)
+macro assert_(ex, str)
     strex = Main.Base.string(ex)
     msg = str * ": " * strex
-    # return :($(esc(ex)) ? $(nothing) : throw(DimensionMismatch($msg)))
-    # return :( $(esc(ex)) ? $(nothing) : error($msg) )
     return esc(:($ex || error($msg)))
 end
 
@@ -416,9 +419,6 @@ function unparse(str::String, exs...)
 	@capture(exs[1], left_ == right_ ) && return string(str, " ", left, " == ", right, "  ", join(exs[2:end],"  "))
 	return string(exs)
 end
-
-
-
 
 function m_error(str::String, where=nothing)
 	if where == nothing

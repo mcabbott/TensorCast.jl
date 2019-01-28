@@ -27,4 +27,3 @@ function pretty(ex::Union{Expr,Symbol})
 end
 
 pretty(tup::Tuple) = replace(string(tup), "Colon()" => ":")
-

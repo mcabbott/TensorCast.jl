@@ -5,8 +5,8 @@
     ## case "rex" 
     dd = SizeDict()
     ff = Any[]
-    flat, getafix, negated = parse!(dd, nothing, [], [:(i:3), :(j:4), :assert], true, ff)
-    @test ff == [:assert]
+    flat, getafix, negated = parse!(dd, nothing, [], [:(i:3), :(j:4) ], true, ff)
+    @test unique(ff) == [:assert]
     @test length(dd.dict) == 2
     @test dd.dict[:i] == 3
     @test flat == [:i, :j]
@@ -37,21 +37,21 @@
 end
 @testset "SizeDict" begin
 
-    using TensorCast: SizeDict, sizeinfer, savesize!
+    using TensorCast: SizeDict, sizeinfer, savesize!, MacroError
 
     dd = SizeDict()
     dd.dict[:a] = 3
     dd.dict[:b] = 4
     dd.dict[[:c,:d]] = 100
 
-    @test_throws ArgumentError sizeinfer(dd, [:a, :b, :c, :d])
+    @test_throws MacroError sizeinfer(dd, [:a, :b, :c, :d])
 
     dd.dict[:d] = 10
 
-    ss = sizeinfer(dd, [:a, :b, :c, :d], true) # leave one :
+    ss = sizeinfer(dd, [:a, :b, :c, :d], nothing, true) # leave one :
     @test eval.(ss) == [3,4,:,10]
 
-    ss = sizeinfer(dd, [:a, :b, :c, :d], false)
+    ss = sizeinfer(dd, [:a, :b, :c, :d], nothing, false)
     @test eval.(ss) == [3,4,10,10]
 
     savesize!(dd, :a, 99)

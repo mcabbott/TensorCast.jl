@@ -213,13 +213,13 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
     end
 
     notseen = setdiff(canon, unique(store.seen))
-    isempty(notseen) || throw(MacroError("did not see index/indices $(join(notseen, ", ")) on the right", where))
+    isempty(notseen) || throw(MacroError("did not see index $(join(notseen, ", ")) on the right", where))
 
     #===== almost done =====#
 
     packagecheck(flags, where)
 
-    canonsize = sizeinfer(store, canon, where)
+    canonsize = sizeinfer(store, canon, where, true)
 
     V && @info "before in/out choice" store flags Tuple(canonsize)
 
