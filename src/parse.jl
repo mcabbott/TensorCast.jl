@@ -1,11 +1,14 @@
 
-const flag_list = Any[ :!, :assert, :cat, :glue, :strided, :lazy, :julienne]
+const flag_list = Any[ :!, :assert, :cat, :glue, :strided, :lazy, :julienne, :batched]
 
 #= TODO
 
 * make sz a constant gensym()
-* multiply with ̂* or something, which understands :
 * add ndims checks to sizeassert?
+* pull the function in f(x)[i,j] out, to do it once
+* make parse! take keywords sanely
+
+@pretty @cast A[i\j\k] := B[i,j\k] + C[k] # this could have reshape(right, :) but not worth a fight?
 
 =#
 
@@ -58,8 +61,6 @@ function parse!(sdict::SizeDict, A, outer, inner, allowranges=false, flags=nothi
             continue
         end
 
-        # @info "parse! inner" A repr(inner) allowranges din ind 
-
         # in rex or sum(a, b:3, c), some indices may have explicit ranges
         if allowranges 
 
@@ -87,9 +88,10 @@ function parse!(sdict::SizeDict, A, outer, inner, allowranges=false, flags=nothi
     end
 
     ### OUTER dimensions never allow flags or ranges,
-    # but do allow tuples etc.
+    # but do allow tuples etc, and fixed indices.
     for (dout, ind) in enumerate(outer)
         if isconstant(ind)              # then it's a constant slice,
+        	# removing this "if" will make _ cases produce rview()... but it's slower! 
             if ind == :_                # treat _ almost like 1, but possibly with a check
                 if !isnothing(A)
                     str = "direction marked _ must have size 1"
@@ -156,6 +158,8 @@ It returns an index, or a tidied-up vector of indices, in which tuples etc have 
 """
 stripminus!(negated::Vector, ind::Symbol) = ind  # get one Symol & you're done
 
+stripminus!(negated::Vector, ind::Int) = throw(MacroError("can't handle fixed index $ind here"))
+
 function stripminus!(negated::Vector, ind::Expr)
     # minus one index
     if @capture(ind, -i_Symbol)
@@ -189,7 +193,7 @@ function stripminus!(negated::Vector, ind::Expr)
         ijk = Any[i,j]
 
     else 
-        error("stuck on $ind, doesn't look like a valid index, or set of indices")
+        throw(MacroError("stuck on $ind, doesn't look like a valid index, or set of indices"))
     end
 
     # now we have a vector ijk of symbols, or expressions :(-i), no more
@@ -197,10 +201,12 @@ function stripminus!(negated::Vector, ind::Expr)
 end
 
 szwrap(i::Symbol, d::Int) = :( sz[$d] )
-szwrap(ijk::Vector, d::Int) = :( *($([ :(sz[$n]) for n=d:(d+length(ijk)-1) ]...)) )
+# szwrap(ijk::Vector, d::Int) = :( *($([ :(sz[$n]) for n=d:(d+length(ijk)-1) ]...)) )
+szwrap(ijk::Vector, d::Int) = :( TensorCast.star($([ :(sz[$n]) for n=d:(d+length(ijk)-1) ]...)) )
 
 """
     oddunique(negated)
+
 Returns a list in which anything repeated evenly many times has been removed, then `unique`. 
 """
 function oddunique(negated)  # -1 * -1 = +1
@@ -217,6 +223,7 @@ end
 
 """
     checkrepeats(flat)
+
 Throws an error if there are repeated indices. 
 Also a good place to check whether flat is flat... e.g. A[i][j\\k] will arrive here
 """
@@ -301,6 +308,8 @@ function sizeinfer(store::SizeDict, icanon::Vector, where=nothing, leaveone = tr
     return sizes
 end
 
+#==
+
 sorted_starcode(tot, inner) = (ntuple(i -> :, inner)..., ntuple(i -> *, tot-inner)...)
 
 """
@@ -356,50 +365,37 @@ function colonise!(isz, slist::Vector)
     return needsizes
 end
 
-# """
-#     p, (bef, aft) = simplicode(p, (bef, aft))
+==#
 
-# The idea here is to absorb permutedims into alterations of the slicing / gluing codes. 
-# Done as an optimisation pass, after figuring all of those out, before building expression. 
+"""
+	star(x,y,...)
 
-# * If we also have reversal or shift, those dimensions will need to be updated.
-#   Maybe then don't bother. 
+Like `*` but intended for multiplying sizes, and understands that `:` is a wildcard. 
+"""
+star(x,y) = *(x,y)
+star(::Colon,y) = Colon()
+star(x,::Colon) = Colon()
+star(x,y,zs...) = star(star(x,y), zs...)
 
-# * If there is a reduction, then it's totally worth bothering! You have more freedom than with slicing.
+"""
+	needview!([:, 3, :])   # true, need view(A, :,3,:)
+	needview!([:, :_, :])  # false, can use rview(A, :,1,:)
 
-# * It will also tend to break agreement between canonical sizes & size of actual array at any stage. 
-#   This may matter for in-place case. 
-
-# For now, only apply this when those are not in use. 
-# """
-# function simplicode(perm, before, after)
-#     ## just copied here from main file, this function isn't called yet 
-#     ## and certainly won't work!! 
-
-#     # TODO Think more about this -- it could also tidy up @pretty @shape A[(i,j)] := B[i][j]
-#     # but not for static glue
-#     if willpermute && willslice # hence not willstaticslice
-#         if perm==(2,1)
-#             ocode = (ocode[2],ocode[1])
-#             willpermute = false
-#             W && println("removed permutation by changing slicing: now ocode = ",ocode)
-#             # W && println("... for expr = ",expr)
-#         else
-#             V && println("am going to slice a permuted array. Can I remove permutation by re-ordering slice?")
-#         end
-#     end
-#     # if willpermute && willglue # hence not willstaticglue
-#     #     if perm==(2,1)
-#     #         icode = (icode[2],icode[1])
-#     #         willpermute = false
-#     #         W && println("removed permutation by changing gluing: now icode = ",icode)
-#     #         W && println("... for expr = ",expr)
-#     #     else
-#     #         V && println("am going to glue a permuted array. Can I remove permutation by re-ordering ?")
-#     #     end
-#     # end
-
-# end
+Mutates the given vector, replacing symbol `:_` with `1`. 
+If the vector contains only colons & underscores, then the result is suitable for use with `rview`,
+but if not, we need a real view, so it returns `true`.
+"""
+function needview!(getafix::Vector)
+	out = false
+	for i=1:length(getafix)
+		if getafix[i] == :_ 
+			getafix[i] = 1
+		elseif getafix[i] isa Int
+			out = true
+		end
+	end
+	out
+end
 
 """
     @assert_ cond str
@@ -409,7 +405,7 @@ Like `@assert`, but prints both the given string and the condition.
 macro assert_(ex, str)
     strex = Main.Base.string(ex)
     msg = str * ": " * strex
-    return esc(:($ex || error($msg)))
+    return esc(:($ex || throw(DimensionMismatch($msg))))
 end
 
 function unparse(str::String, exs...)

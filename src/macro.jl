@@ -13,29 +13,42 @@ Understands the following things:
 * `E[i,_,k]` has two nontrivial dimensions, and `size(E,2)==1`. On the right hand side 
   (or when writing to an existing array) you may also write `E[i,3,k]` meaning `view(E, :,3,:)`,
   or `E[i,\$c,j]` to use a variable `c`. Fixing inner indices, like `C[k][i,_]`, is not allowed.
-* `F[i,-j,k]` means `reverse(F, dims=2)`. 
+* `F[i,-j,k]` means roughly `reverse(F, dims=2)`. 
+* `g(x)[i,j,k]` is allowed, but there is some chance that `g(x)` may be evaluated several times,
+  e.g. in `size(g(x),2)`. For now check with `@pretty @cast Z[...] := ...` to find out. 
 
 The left and right hand sides must have all the same indices. 
 See `@reduce` for a related macro which can sum over things. 
 
 If several tensors appear on the right hand side, then this represents a broadcasting operation, 
 and the necessary re-orientations of axes are automatically inserted. 
+Some attempt is made to shield scalar functions from broadcasting, 
+e.g. `@cast A[i] := log(B[i]) / log(2)` will avoid `log.(2)` and evaluate `log(2)` once. 
+But this is imperfect, confirm with `@pretty @cast ...` if concerned. 
 
 The following actions are possible:
-* `=` writes into an existing array.
+* `=` writes into an existing array, `copyto!(Z, ...)`.
 * `:=` creates a new object... which may or may not be a view of the input:
 * `==` insists on a view of the old object (error if impossible), and `|=` insists on a copy. 
 
+Re-ordering of indices `Z[k,j,i]` is done lazily with `PermutedDimsArray(A, ...)`. 
+Reversing of an axis `F[i,-j,k]` is also done lazily, by `Reverse{2}(F)` which makes a `view`. 
+Using `|=` (or broadcasting) will produce a simple `Array`. 
+
 Options can be specified at the end (if several, separated by `,` i.e. `options::Tuple`)
-* `i:3` supplies the range of index `i`. Variables `j:rangej` and functions `k:length(K)` are allowed. 
-* `assert` or `!` will turn on explicit dimension checks.
+* `i:3` supplies the range of index `i`. Variables and functions like `j:Nj, k:length(K)` 
+  are allowed. 
+* `assert` or `!` will turn on explicit dimension checks of the input. 
+  (Providing ranges may also turn these on, but imperfectly, confirm with `@pretty @cast ...`.)
 * `cat` will glue slices by things like `hcat(A...)` instead of `reduce(hcat, A)`,
   and `lazy` will instead make a `VectorOfArrays` container. 
 * `strided` will place `@strided` in front of broadcasting operations, 
   and use `@strided permutedims(A, ...)` instead of `PermutedDimsArray(A, ...)`. 
+  For this you need to install and load the package: `using Strided`.
 
 Static slices `D[j,k]{i}` need `using StaticArrays`, and to create them you should give all 
 slice dimensions explicitly. You may write `D[k]{i:2,j:2}` to specify `Size(2,2)` slices.
+They are made most cleanly from the first indices of the input. 
 """
 macro cast(exs...)
     where = (mod=__module__, src=__source__, str=unparse("@cast", exs...))
@@ -64,6 +77,7 @@ Tensor reduction macro:
   which must work like `sum!(Z, A)`.
 * The tensors can be anything that `@cast` understands, including gluing of slices `B[i,k][j]` 
   and reshaping `B[i\\j,k]`. 
+* If there are several tensors (or scalars) on the right, then this is a broadcasting operation. 
 * Index ranges may be given afterwards (as for `@cast`) or inside the reduction `sum(i:3, k:4)`. 
 * All indices appearing on the right must appear either within `sum(...)` etc, or on the left. 
 
@@ -76,7 +90,7 @@ Complete reduction to a scalar output `F`, or a zero-dim array `G`.
     @reduce Z[k] := sum(i,j) A[i] * B[j] * C[k]  lazy, i:N, j:N, k:N
 
 The option `lazy` replaces the broadcast expression with a `BroadcastArray`, 
-to avoid `materialize`ing the entire array (here size `N^3`) before summing. 
+to avoid `materialize`ing the entire array before summing. In the example this is of size `N^3`.  
 
 The option `strided` will place `@strided` in front of the broadcasting operation. 
 You need `using Strided` for this to work. 
@@ -135,7 +149,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
     flags = Set{Symbol}()
 
     if reduce
-    	#===== parse @reduce input =====#
+        #===== parse @reduce input =====#
 
         if @capture(exone, left_ := redfun_(redind__) )     # Z[i] := sum(j) A[i] * B[j]
             right = extwo
@@ -165,7 +179,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
         end
 
     else
-    	#===== parse @cast input =====#
+        #===== parse @cast input =====#
 
         if @capture(exone, left_ := right_ )                # Z[i,j] := A[i] * B[j]
         elseif @capture(exone, left_ = right_ )
@@ -201,7 +215,6 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
 
     #===== parse and process RHS =====#
 
-    # outex = quote end
     outex = MacroTools.@q begin end
 
     if @capture(right, AA_[ii__] ) || @capture(right, AA_{ii__} ) 
@@ -288,7 +301,7 @@ function readleft(left, redind, flags, store, icheck, where)
 
     if @capture(left, Z_[outer__][inner__]) ||  @capture(left, [outer__][inner__])
         push!(flags, :slice)
-    elseif @capture(left, Z_[outer__]{inner__}) || @capture(left, Z_[outer__]{inner__})
+    elseif @capture(left, Z_[outer__]{inner__}) || @capture(left, [outer__]{inner__})
         push!(flags, :staticslice)
     elseif @capture(left, Z_[outer__]) || @capture(left, [outer__])
         inner = []
@@ -375,6 +388,8 @@ function walker(outex, ex, canon, flags, store, icheck, where)
             ex =  Asym 
         end
         V && @info "walker" ex Aval
+
+    # TODO catch LinearAlgebra.Adjoint(...) and replace with Base.conj(...)
         
     # try to protect log(2) etc from @. , but not log(A[i])
     elseif @capture(ex, f_(x_Symbol) ) || @capture(ex, f_(x_Int) ) || @capture(ex, f_(x_Float64) ) 
@@ -420,7 +435,11 @@ function inputex(inex, canon, flags, store, icheck, where)
 
     numB = count(!isequal(:), getB)
     if numB > 0                                             # A[_,i]
-        ex = :(view($ex, $(getB...) ))
+        if needview!(getB)
+            ex = :(view($ex, $(getB...) ))
+        else
+            ex = :(TensorCast.rview($ex, $(getB...) )) # really a reshape
+        end
     end
 
     sizeC = Any[]
@@ -429,7 +448,7 @@ function inputex(inex, canon, flags, store, icheck, where)
         push!(sizeC, :( sz[$d] ) )
     end
     if (length(sizeC) + numB) != length(outer)              # A[i\j]
-        colonise!(sizeC, canon) # note that this really wants canonsize, which isn't known yet! Damn. 
+        # colonise!(sizeC, canon) # note that this really wants canonsize, which isn't known yet! Damn. 
         sizeCex = :(($(sizeC...) ,))
         ex = :( reshape($ex, $sizeCex) )
         push!(flags, :needsize)
@@ -525,7 +544,12 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, siz
         if length(rdims)==1
             rdims = first(rdims)
         end
-        ex = :( dropdims($redfun($ex, dims=$rdims), dims=$rdims) )
+        ex = :( $redfun($ex, dims=$rdims) )
+        if :outshape in flags && !(:slice in flags || :staticslice in flags)
+            # then we need not dropdims, as reshape will handle it
+        else 
+            ex = :( dropdims($ex, dims=$rdims) )
+        end
     end
 
     if :slice in flags                                      # Z[i][k] :=
@@ -548,7 +572,7 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, siz
     end
 
     if :outshape in flags                                   # Z[i\j, _, k]
-        colonise!(sizeZ, canonsize)
+        # colonise!(sizeZ, canonsize) # now using star() instead
         sizeZex = :(($(sizeZ...) ,))
         ex = :( reshape($ex, $sizeZex) )
         push!(flags, :needsize)
@@ -613,12 +637,17 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
         revleft = nameZ
 
         if numY > 0
-            revleft = :( view($revleft, $(getY...)) )
+            if needview!(getY)
+                revleft = :(view($revleft, $(getY...) ))
+            else
+                revleft = :(TensorCast.rview($revleft, $(getY...) )) # really a reshape
+            end
+            # revleft = :( view($revleft, $(getY...)) )
             push!(flags, :finalres)
         end
 
         if :backshape in flags
-            colonise!(sizeX, canonsize)
+            # colonise!(sizeX, canonsize) # now using star() instead
             sizeXex = :(($(sizeX...) ,))
             revleft = :( reshape($revleft, $sizeXex) )
             push!(flags, :needsize)
@@ -637,12 +666,17 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
         revleft = nameZ
 
         if numY > 0 # when getY has only : and 1, and backshape, then you could skip this
-            revleft = :( view($revleft, $(getY...)) )
+            if needview!(getY)
+                revleft = :(view($revleft, $(getY...) ))
+            else
+                revleft = :(TensorCast.rview($revleft, $(getY...) )) # really a reshape
+            end
+            # revleft = :( view($revleft, $(getY...)) )
             push!(flags, :finalres)
         end
 
         if :backshape in flags
-            colonise!(sizeX, canonsize)
+            # colonise!(sizeX, canonsize) # now using star() instead
             sizeXex = :(($(sizeX...) ,))
             revleft = :( reshape($revleft, $sizeXex) )
             push!(flags, :needsize)
@@ -658,7 +692,12 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
         revleft = nameZ
 
         if numY > 0
-            revleft = :( view($revleft, $(getY...)) )
+            if needview!(getY)
+                revleft = :(view($revleft, $(getY...) ))
+            else
+                revleft = :(TensorCast.rview($revleft, $(getY...) )) # really a reshape
+            end
+            # revleft = :( view($revleft, $(getY...)) )
             push!(flags, :finalres)
         end
 

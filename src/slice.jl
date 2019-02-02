@@ -9,7 +9,7 @@ For example if `code = (:,*,:)` then slices are either `view(A, :,i,:)`
 or `A[:,i,:]` with `i=1:size(A,2)`. 
 """
 function sliceview(A::AbstractArray{T,N}, code::Tuple) where {T,N}
-    N == length(code) || error("wrong code length")
+    N == length(code) || throw(ArgumentError("wrong code length"))
     if code == (:,*)
         collect(eachcol(A))
     elseif code == (*,:)
@@ -24,10 +24,13 @@ end
 
 @doc @doc(sliceview)
 function slicecopy(A::AbstractArray{T,N}, code::Tuple) where {T,N}
-    N == length(code) || error("wrong code length")
+    N == length(code) || throw(ArgumentError("wrong code length"))
     iter = Iterators.product(ntuple(d -> (code[d]==*) ? axes(A,d) : Ref(:), Val(N))...)
     [ A[i...] for i in iter ]
 end
+
+sliceview(A::AbstractArray{T,N}) where {T,N} = sliceview(A, ntuple(i-> i==N ? (*) : (:), N))
+slicecopy(A::AbstractArray{T,N}) where {T,N} = slicecopy(A, ntuple(i-> i==N ? (*) : (:), N))
 
 """
     glue!(B, A, code)
@@ -60,7 +63,7 @@ glue(A::AbstractArray, code::Tuple) = copy_glue(A, code)
         flat = reduce(hcat, vec(vec.(A)))
         reshape(flat, gluedsize(A, code))
     else
-        error("can't glue code = $code with reduce(cat...)")
+        throw(ArgumentError("can't glue code = $code with reduce(cat...)"))
     end
 end
 
@@ -78,7 +81,7 @@ end
         # finalsize = (size(first(A))..., size(A)...)
         # reshape(flat, finalsize)
     else
-        error("can't glue code = $code with cat(A...)")
+        throw(ArgumentError("can't glue code = $code with cat(A...)"))
     end
 end
 
@@ -91,7 +94,7 @@ end
 @doc @doc(glue)
 function glue!(B::AbstractArray{T,N}, A::AbstractArray{IT,ON}, code::Tuple) where {T,N,IT,ON}
     gluecodecheck(A, code)
-    N == ndims(A) + ndims(first(A))  || error("wrong size target")
+    N == ndims(A) + ndims(first(A))  || throw(DimensionMismatch("wrong size target"))
     iter = Iterators.product(ntuple(d -> (code[d]==*) ? axes(B,d) : Ref(:), Val(N))...)
     for i in iter
         copyto!(view(B, i...), A[decolonise(i)...] )
@@ -100,8 +103,8 @@ function glue!(B::AbstractArray{T,N}, A::AbstractArray{IT,ON}, code::Tuple) wher
 end
 
 function gluecodecheck(A::AbstractArray, code::Tuple)
-    countcolons(code) == ndims(first(A)) || error("wrong number of : in code")
-    length(code) == ndims(A) + ndims(first(A)) || error("wrong code length")
+    countcolons(code) == ndims(first(A)) || throw(ArgumentError("wrong number of : in code"))
+    length(code) == ndims(A) + ndims(first(A)) || throw(ArgumentError("wrong code length"))
 end
 
 @generated function decolonise(i::Tuple)
@@ -176,11 +179,56 @@ by inserting axes on which `size(B, d) == 1` as needed.
     end
     str = join(pretty, ", ")
     d-1 == ndims(A) || throw(ArgumentError(
-        "orient(A, ($str)) got ndims(A) = $(ndims(A)), expeceted n = $(d-1)"))
+        "orient(A, ($str)) expeceted $(d-1) dimensions, got ndims(A) = $(ndims(A))"))
     :(reshape(A, ($(list...),))) 
 end
 
 # because of https://github.com/JuliaArrays/LazyArrays.jl/issues/16
-orient(A::AbstractVector, ::Tuple{typeof(*),Colon}) = transpose(A)
-orient(A::AbstractVector, ::Tuple{typeof(*),Colon,typeof(*)}) = transpose(A)
+orient(A::AbstractVector{T}, ::Tuple{typeof(*),Colon}) where {T <: Number} = transpose(A)
+orient(A::AbstractVector{T}, ::Tuple{typeof(*),Colon,typeof(*)}) where {T <: Number} = transpose(A)
+
+# tidier but not strictly necc: for @cast Z[i] = A[3] + B[i]
+orient(A::AbstractArray{<:Any, 0}, ::Tuple{typeof(*)}) = first(A)
+
+"""
+	rview(A, :,1,:) ≈ (@assert size(A,2)==1; view(A, :,1,:))
+
+This simply reshapes `A` so as to remove a trivial dimension where indicated. 
+Throws an error if size of `A` is not 1 in the indicated dimension. 
+
+Will fail silently if given a `(:,3,:)` or `(:,\$c,:)`,
+for which `needview!(code) = true`, so the macro should catch such cases.  
+"""
+function rview(A::AbstractArray, code...)
+	# This nice error has to happen at runtime, and thus is slow
+	# all(decolonise(code) .== 1) || 
+	#     throw(ArgumentError("can't use rview(A, code...) with code = $(pretty(code)), it accepts only 1 and :"))
+	rview(A, code)
+end
+
+@generated function rview(A::AbstractArray, code::Tuple)
+    list = Any[]
+    pretty = Any[] # just for error
+    ex = quote end
+    d = 1
+    for s in code.parameters
+        if s == Colon
+            push!(list, :( size(A,$d) ))
+            push!(pretty, ":")
+            d += 1
+        elseif s == Int
+            push!(pretty, "1")
+            str = "rview(A) expected size(A,$d) == 1"
+            push!(ex.args, :(size(A,$d)==1|| throw(DimensionMismatch($str)) ) )
+            d += 1
+        end
+    end
+    str = join(pretty, ", ")
+    d-1 == ndims(A) || throw(ArgumentError(
+        "rview(A, ($str)) expeceted $(d-1) dimensions, got ndims(A) = $(ndims(A))"))
+    push!(ex.args, :(reshape(A, ($(list...),))) )
+    ex
+end
+
+
 
