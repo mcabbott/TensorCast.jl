@@ -4,6 +4,7 @@ const flag_list = Any[ :!, :assert, :cat, :glue, :strided, :lazy, :julienne, :ba
 #= TODO
 
 * make sz a constant gensym()
+* or better yet, generate :sz_i not sz[n], freeing from canon
 * add ndims checks to sizeassert?
 * pull the function in f(x)[i,j] out, to do it once
 * make parse! take keywords sanely
@@ -67,9 +68,9 @@ function parse!(sdict::SizeDict, A, outer, inner, allowranges=false, flags=nothi
             if @capture(ind , i_:ilength_ )
                 savesize!(sdict, i, ilength)
                 if flags != nothing
-                	push!(flags, :assert) # turn on size checks if you can
+                    push!(flags, :assert) # turn on size checks if you can
                 else
-                	# for sum(i:3, j) can't see flags, so can't do that, sorry
+                    # for sum(i:3, j) can't see flags, so can't do that, sorry
                 end
             else
                 i = ind    # replace nothing from @capture
@@ -91,7 +92,7 @@ function parse!(sdict::SizeDict, A, outer, inner, allowranges=false, flags=nothi
     # but do allow tuples etc, and fixed indices.
     for (dout, ind) in enumerate(outer)
         if isconstant(ind)              # then it's a constant slice,
-        	# removing this "if" will make _ cases produce rview()... but it's slower! 
+            # removing this "if" will make _ cases produce rview()... but it's slower! 
             if ind == :_                # treat _ almost like 1, but possibly with a check
                 if !isnothing(A)
                     str = "direction marked _ must have size 1"
@@ -232,7 +233,7 @@ function checkrepeats(flat, msg="", where=nothing)
     twice = Set{Symbol}()
     for i in flat
         if i != nothing
-        	isa(i, Symbol) || throw(MacroError("can't handle index $i, expected a single symbol" * msg, where))
+            isa(i, Symbol) || throw(MacroError("can't handle index $i, expected a single symbol" * msg, where))
 
             if i in once
                 push!(twice, i)
@@ -368,7 +369,7 @@ end
 ==#
 
 """
-	star(x,y,...)
+    star(x,y,...)
 
 Like `*` but intended for multiplying sizes, and understands that `:` is a wildcard. 
 """
@@ -378,23 +379,23 @@ star(x,::Colon) = Colon()
 star(x,y,zs...) = star(star(x,y), zs...)
 
 """
-	needview!([:, 3, :])   # true, need view(A, :,3,:)
-	needview!([:, :_, :])  # false, can use rview(A, :,1,:)
+    needview!([:, 3, :])   # true, need view(A, :,3,:)
+    needview!([:, :_, :])  # false, can use rview(A, :,1,:)
 
 Mutates the given vector, replacing symbol `:_` with `1`. 
 If the vector contains only colons & underscores, then the result is suitable for use with `rview`,
 but if not, we need a real view, so it returns `true`.
 """
 function needview!(getafix::Vector)
-	out = false
-	for i=1:length(getafix)
-		if getafix[i] == :_ 
-			getafix[i] = 1
-		elseif getafix[i] isa Int
-			out = true
-		end
-	end
-	out
+    out = false
+    for i=1:length(getafix)
+        if getafix[i] == :_ 
+            getafix[i] = 1
+        elseif getafix[i] isa Int
+            out = true
+        end
+    end
+    out
 end
 
 """
@@ -409,19 +410,19 @@ macro assert_(ex, str)
 end
 
 function unparse(str::String, exs...)
-	@capture(exs[1], left_ = right_ ) && return string(str, " ", left, " = ", right, "  ", join(exs[2:end],"  "))
-	@capture(exs[1], left_ := right_ ) && return string(str, " ", left, " := ", right, "  ", join(exs[2:end],"  "))
-	@capture(exs[1], left_ |= right_ ) && return string(str, " ", left, " |= ", right, "  ", join(exs[2:end],"  "))
-	@capture(exs[1], left_ == right_ ) && return string(str, " ", left, " == ", right, "  ", join(exs[2:end],"  "))
-	return string(exs)
+    @capture(exs[1], left_ = right_ ) && return string(str, " ", left, " = ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ := right_ ) && return string(str, " ", left, " := ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ |= right_ ) && return string(str, " ", left, " |= ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ == right_ ) && return string(str, " ", left, " == ", right, "  ", join(exs[2:end],"  "))
+    return string(exs)
 end
 
 function m_error(str::String, where=nothing)
-	if where == nothing
-		@error str
-	else
-		@error str  input=where.str _module=where.mod  _line=where.src.line  _file=string(where.src.file)
-	end
+    if where == nothing
+        @error str
+    else
+        @error str  input=where.str _module=where.mod  _line=where.src.line  _file=string(where.src.file)
+    end
 end
 
 struct MacroError <: Exception
@@ -431,10 +432,10 @@ struct MacroError <: Exception
 end
 
 function Base.showerror(io::IO, err::MacroError)
-	print(io, err.msg)
-	if err.where != nothing
-		printstyled(io, " \n    ", err.where.str; color = :normal)# :blue)
-	end
+    print(io, err.msg)
+    if err.where != nothing
+        printstyled(io, " \n    ", err.where.str; color = :normal)# :blue)
+    end
 end
 
 
