@@ -56,7 +56,7 @@ end
 
     savesize!(dd, :a, 99)
     @test dd.dict[:a] == 3 # logic changed here, first value kept
-    @test_throws ErrorException eval.(dd.checks) 
+    @test_throws DimensionMismatch eval.(dd.checks) 
 
 end
 @testset "minus" begin 
@@ -80,27 +80,5 @@ end
     @test stripminus!(nn, :(a\-b\c)) == [:a, :b, :c]
     @test stripminus!(nn, :(-a\b\c\-d)) == [:a, :b, :c, :d]
     @test nn == [:z, :c, :b, :a, :d]
-
-end
-@testset "colonise!" begin
-
-    using TensorCast: colonise!
-
-    osz = Any[:(sz[1]), :((sz[2] * sz[3]) * sz[4])] # nested *
-     # the : in slist[2] means osz[2] should all be unkonwn
-    @test colonise!(osz, [4,:,4,4]) # should return true as sz[1] is still needed
-    @test osz[1] == :(sz[1])
-    @test osz[2] == (:)
-
-    osz = Any[ :((sz[2] * sz[3]) * sz[1])]
-    # since osz[1] contains all 3 sizes, it must be length(A)
-    @test !colonise!(osz, [4,4,4])  # return false as sz not required anymore
-    @test osz[1] == (:)
-
-    osz = Any[:(sz[1]), :(sz[2] * sz[3] * sz[4])] 
-    # now I produce un-nested *
-    @test_broken colonise!(osz, [4,4,4]) # should return true as sz[1] is still needed
-    @test osz[1] == :(sz[1])
-    @test osz[2] == (:)
 
 end
