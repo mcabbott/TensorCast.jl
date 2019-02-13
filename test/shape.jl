@@ -338,7 +338,7 @@ end
 
     ## runtime
 
-    @test_throws ErrorException @cast oo[i,j] := bc[i,j] i:3,!
-    @test_throws ErrorException @cast cb[i,j] = bc[i,j] !
+    @test_throws DimensionMismatch @cast oo[i,j] := bc[i,j] i:3,!
+    @test_throws DimensionMismatch @cast cb[i,j] = bc[i,j] !
 
 end

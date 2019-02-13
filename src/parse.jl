@@ -309,64 +309,6 @@ function sizeinfer(store::SizeDict, icanon::Vector, where=nothing, leaveone = tr
     return sizes
 end
 
-#==
-
-sorted_starcode(tot, inner) = (ntuple(i -> :, inner)..., ntuple(i -> *, tot-inner)...)
-
-"""
-    colonise!(isz, slist)
-
-This aims to simplify "isz" which is going to be used `reshape(A, isz)`. 
-Partly for cosmetic reasons... some of which are now caught elsewhere. 
-
-But partly because `slist` may contain one `:`, and `isz` may try to multiply that by `sz[d]`, 
-correct answer is `:` again. 
-"""
-function colonise!(isz, slist::Vector) 
-    szall = Any[:(sz[$d]) for d=1:length(slist)]
-
-    if isz == szall
-        # example from tests:  @pretty @shape g[(b,c),x,y,e] := bcde[b,c,(x,y),e] x:2;
-        V && println("colonise! replaced ",isz, 
-            " with just sz... because that's what it is")
-        resize!(isz, 1)
-        isz[1] = :(sz...)
-        return true
-    end
-
-    d = findfirst(isequal(:), slist) # slist may have one colon, or none
-
-    function f!(nsz_ref, x)
-        if x == :(sz[$d])
-            nsz_ref[1] = 9999
-        elseif @capture(x, sz[other_])
-            nsz_ref[1] += 1
-        end
-        x
-    end
-
-    N = length(slist)
-    needsizes = true
-
-    for (n,sprod) in enumerate(isz)
-        nsz = [0]
-        MacroTools.postwalk(x -> f!(nsz, x), sprod);
-        if nsz[1] > N
-            isz[n] = Colon()
-            V && println("colonise! replaced isz/osz/fsz[$n]= ",sprod, 
-                " with just : because really sz[$d]=:")
-        elseif nsz[1] == N
-            isz[n] = Colon()
-            needsizes = false
-            V && println("colonise! replaced isz/osz/fsz[$n]= ",sprod, 
-                " with just : because it containts all N=$N of the sz[d]")
-        end
-    end
-
-    return needsizes
-end
-
-==#
 
 """
     star(x,y,...)
@@ -391,8 +333,11 @@ function needview!(getafix::Vector)
     for i=1:length(getafix)
         if getafix[i] == :_ 
             getafix[i] = 1
-        elseif getafix[i] isa Int
+        elseif getafix[i] isa Int || getafix[i] isa Symbol
             out = true
+        elseif getafix[i] isa Colon
+        else
+            error("this should never happen, getafix[i] = ",getafix[i])
         end
     end
     out
