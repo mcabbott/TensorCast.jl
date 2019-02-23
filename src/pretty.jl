@@ -18,8 +18,8 @@ macro pretty(ex)
 end
 
 function pretty(ex::Union{Expr,Symbol})
-	ex = MacroTools.alias_gensyms(ex)
-	# ex = MacroTools.striplines(ex)
+    ex = MacroTools.alias_gensyms(ex)
+    # ex = MacroTools.striplines(ex)
 
     str = string(ex)
 

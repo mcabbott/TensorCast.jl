@@ -1,11 +1,7 @@
 
-# using .RecursiveArrayTools
-
-# import TensorCast: recursive_glue, gluecodecheck, iscodesorted
-
 using RecursiveArrayTools
 
-@inline function recursive_glue(A::AbstractArray{IT,N}, code::Tuple) where {IT,N}
+@inline function lazy_glue(A::AbstractArray{IT,N}, code::Tuple) where {IT,N}
     gluecodecheck(A, code)
     # if code == (:,*)
     #     VectorOfArray(A)

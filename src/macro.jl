@@ -466,7 +466,7 @@ function inputex(inex, canon, flags, store, icheck, where)
         # however only copy_glue and julienne_glue understand arbitrary codes
 
         if :lazy in flags || :mustview in flags
-            ex = :( TensorCast.recursive_glue($ex, $(codeD...,))  )
+            ex = :( TensorCast.lazy_glue($ex, $(codeD...,))  )
 
         elseif :cat in flags
             ex = :( TensorCast.cat_glue($ex, $(codeD...,))  )

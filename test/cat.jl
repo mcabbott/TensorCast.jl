@@ -27,7 +27,7 @@
 end
 @testset "glue" begin
 
-    import TensorCast: copy_glue, glue!, static_glue, cat_glue, red_glue, recursive_glue
+    import TensorCast: copy_glue, glue!, static_glue, cat_glue, red_glue, lazy_glue
 
     B = [ SVector{2}(i .+ rand(2)) for i=1:3 ];
 
@@ -51,7 +51,7 @@ end
     H3 = glue!(similar(H1), C, (:,:,*,*))
     H4 = red_glue(C, (:,:,*,*)) 
     H5 = cat_glue(C, (:,:,*,*)) 
-    H6 = recursive_glue(C, (:,:,*,*)) 
+    H6 = lazy_glue(C, (:,:,*,*)) 
     @test all(H1 .== H2 .== H3 .== H4 .== H5)
 
     D = [ SMatrix{2,3}(k .+ rand(2,3)) for k=1:4 ];
@@ -59,7 +59,7 @@ end
     G5 = copy_glue(D, (:,:,*))
     G6 = cat_glue(D, (:,:,*))
     G7 = red_glue(D, (:,:,*))
-    G8 = recursive_glue(D, (:,:,*))
+    G8 = lazy_glue(D, (:,:,*))
     @test all(G5 .== G6 .== G7 .== G8)
 
     G8 = copy_glue(D, (:,*,:))
