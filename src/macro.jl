@@ -282,6 +282,9 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
             pushfirst!(outex.args, ch) 
         end
     end
+    for tex in store.topex
+    	pushfirst!(outex.args, tex)
+    end
 
     if length(outex.args) == 1
         return esc(outex.args[1])
@@ -375,16 +378,21 @@ function walker(outex, ex, canon, flags, store, icheck, where)
 
     # find any indexed tensor, process it, and replace it
     if @capture(ex, A_[ij__][kl__] ) || @capture(ex, A_[ij__]{kl__} ) || @capture(ex, A_[ij__] )
-        Asym = gensym(:A) 
 
-        # TODO if A = rand(2,3) then pull this out now, and hand inputex & hence parse! a new symbol?
-        # but then sz = (... size(this, 2) ) and size checks need to come after what was inserted.
-        # @pretty @cast A[i]{j:5} |= rand(3,5)[i,j]  assert
+        # if we have f(x)[i,j] then we should evaluate f just once, e.g. 
+        # @pretty @cast A[i]{j:5} |= rand(15)[i\j]
+        if !isa(A, Symbol) #
+        	Atop = gensym(:A) 
+        	push!(store.topex, :(local $Atop = $A ) )
+        	A = Atop
+        end
 
-        Aval = inputex(ex, canon, flags, store, icheck, where)
+        Aval = inputex(A, ex, canon, flags, store, icheck, where)
+
         if isa(Aval, Symbol) 
             ex = Aval
         else
+        	Asym = gensym(:A) 
             push!(outex.args, :(local $Asym = $Aval) ) 
             ex =  Asym 
         end
@@ -404,21 +412,24 @@ end
 
 
 """
-    inputex(:( A[i,j][k] ), canon, flags, store, icheck, where)
+    inputex(:A, :( A[i,j][k] ), canon, flags, store, icheck, where)
 
 Figures out all the steps needed to transform the given tensor to a boring one, 
 aligned with canonical, and returns the necessary expression. 
 Write sizes which can be read from `A` into `store`, and necessary reshapes in terms of `sz_i`.
-"""
-function inputex(inex, canon, flags, store, icheck, where)
 
-    if @capture(inex, A_[outer__][inner__])
+Now needs explicitly the name of tensor `A`, 
+so that when `inex = rand(2,3)[i,j]` this is not evaluated twice.
+"""
+function inputex(A, inex, canon, flags, store, icheck, where)
+
+    if @capture(inex, Aa_[outer__][inner__])
         # push!(flags, :glue)
         glue = :yes
-    elseif @capture(inex, A_[outer__]{inner__})
+    elseif @capture(inex, Aa_[outer__]{inner__})
         # push!(flags, :staticglue)
         glue = :static
-    elseif @capture(inex, A_[outer__])
+    elseif @capture(inex, Aa_[outer__])
         inner = []
         glue = :no
     else error("inputex should not have been called")
