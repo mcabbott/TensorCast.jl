@@ -3,8 +3,6 @@ const flag_list = Any[ :!, :assert, :cat, :glue, :strided, :lazy, :julienne, :ba
 
 #= TODO
 
-* make sz a constant gensym()
-* or better yet, generate :sz_i not sz[n], freeing from canon
 * add ndims checks to sizeassert?
 * pull the function in f(x)[i,j] out, to do it once
 
@@ -90,7 +88,7 @@ function parse!(sdict::SizeDict, A, outer, inner; allowranges=false, flags=nothi
     ### OUTER dimensions never allow flags or ranges,
     # but do allow tuples etc, and fixed indices.
     for (dout, ind) in enumerate(outer)
-        if isconstant(ind)              # then it's a constant slice,
+        if isconstant(ind)
             # removing this "if" will make _ cases produce rview()... but it's slower! 
             if ind == :_                # treat _ almost like 1, but possibly with a check
                 if !isnothing(A)
@@ -105,15 +103,15 @@ function parse!(sdict::SizeDict, A, outer, inner; allowranges=false, flags=nothi
             end
             push!(getafix, ind)         # so when we view(A, getafix...) we need it
             push!(putsz, 1)             # or if driving the other direction, make size=1.
+
         else
-            push!(getafix, Colon() )           # and we want this on the list:
+            push!(getafix, Colon())
             ind = stripminus!(negated, ind) # this looks inside for -, and returns Symbol or Vector{Symbol}
             if !isnothing(A)
                 savesize!(sdict, ind, :( size($A, $dout) ) )
             end
 
-            d = length(flat) + 1 # index in flat of ind, or ind[1]. 
-            push!(putsz, szwrap(ind, d)) 
+            push!(putsz, szwrap(ind) ) # this may be product  sz_i * sz_j  or just one
 
             push_or_append!(flat, ind) 
         end
@@ -147,6 +145,9 @@ end
 
 push_or_append!(list, ind::Symbol) = push!(list, ind)
 push_or_append!(list, inds::Vector) = append!(list, inds)
+
+szwrap(i::Symbol) = Symbol(:sz_,i)
+szwrap(ijk::Vector) = :( TensorCast.star($([ Symbol(:sz_,i) for i in ijk ]...)) )
 
 """
     stripminus(negated, i)
@@ -199,10 +200,6 @@ function stripminus!(negated::Vector, ind::Expr)
     # now we have a vector ijk of symbols, or expressions :(-i), no more
     return Any[ stripminus!(negated, i) for i in ijk ]
 end
-
-szwrap(i::Symbol, d::Int) = :( sz[$d] )
-# szwrap(ijk::Vector, d::Int) = :( *($([ :(sz[$n]) for n=d:(d+length(ijk)-1) ]...)) )
-szwrap(ijk::Vector, d::Int) = :( TensorCast.star($([ :(sz[$n]) for n=d:(d+length(ijk)-1) ]...)) )
 
 """
     oddunique(negated)

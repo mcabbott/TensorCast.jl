@@ -117,7 +117,7 @@ This much is now per RHS term. None need exist outside the function:
 nameA, indA, indAsub
 sizeA      -- known & used for fixing ranges
 getB, numB -- for view(A, get), and number of fixed indices
-sizeC      -- after reshaping outer indices, in terms of sz[]
+sizeC      -- after reshaping outer indices, in terms of sz_i
 codeD      -- for gluing
 indEflat   -- after gluing 
 negF       -- done before permutedims
@@ -137,9 +137,9 @@ canonsize  -- filled with size(A,2) etc, from store, at most one (:)
 redUind    -- if reducing, this is done before slicing
 negV       -- directions to reverse, done here. 
 codeW      -- for slicing. sizeWstatic is Size() of the slice.
-sizeX      -- after slicing, container size, in sz[]
+sizeX      -- after slicing, container size, in sz_i
 getY, numY -- for view(Z, get) in-place, and number fixed
-sizeZ      -- for final reshape, in sz[]
+sizeZ      -- for final reshape, in sz_i
 nameZ, indZ, indZsub, indZred -- given LHS
 
 =#
@@ -274,8 +274,8 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
     #===== finalise =====#
 
     if :needsize in flags
-        canonex = :(($(canonsize...) ,))
-        pushfirst!(outex.args, :(local sz = $canonex ) )
+        szcanon = Any[ Symbol(:sz_,i) for i in canon ]
+        pushfirst!(outex.args, :( local ($(szcanon...),) = ($(canonsize...),) ) )
     end
     if :assert in flags || :(!) in flags || check_options.size
         for ch in store.checks
@@ -339,7 +339,8 @@ function readleft(left, redind, flags, store, icheck, where)
 
     indW = canon[1:length(inner)] # without minuses etc
 
-    sizeX = Any[:(sz[$d]) for d=length(inner)+1:length(canon)-length(redUind)] # only for in-place
+    indX = flat12[length(inner)+1:end]
+    sizeX = Any[ Symbol(:sz_,i) for i in indX ] # only for in-place
 
     numY = count(!isequal(:), getY) # the number of fixed indices in output
 
@@ -407,7 +408,7 @@ end
 
 Figures out all the steps needed to transform the given tensor to a boring one, 
 aligned with canonical, and returns the necessary expression. 
-Write sizes which can be read from `A` into `store`, and necessary reshapes in terms of `sz[d]`.
+Write sizes which can be read from `A` into `store`, and necessary reshapes in terms of `sz_i`.
 """
 function inputex(inex, canon, flags, store, icheck, where)
 
@@ -442,13 +443,9 @@ function inputex(inex, canon, flags, store, icheck, where)
         end
     end
 
-    sizeC = Any[]
-    for i in flatE[length(inner)+1 : end]
-        d = findcheck(i, canon, where) 
-        push!(sizeC, :( sz[$d] ) )
-    end
+    sizeC = Any[ Symbol(:sz_, i) for i in flatE[length(inner)+1 : end] ]
+
     if (length(sizeC) + numB) != length(outer)              # A[i\j]
-        # colonise!(sizeC, canon) # note that this really wants canonsize, which isn't known yet! Damn. 
         sizeCex = :(($(sizeC...) ,))
         ex = :( reshape($ex, $sizeCex) )
         push!(flags, :needsize)
