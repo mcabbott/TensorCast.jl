@@ -283,7 +283,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
         end
     end
     for tex in store.topex
-    	pushfirst!(outex.args, tex)
+        pushfirst!(outex.args, tex)
     end
 
     if length(outex.args) == 1
@@ -382,9 +382,9 @@ function walker(outex, ex, canon, flags, store, icheck, where)
         # if we have f(x)[i,j] then we should evaluate f just once, e.g. 
         # @pretty @cast A[i]{j:5} |= rand(15)[i\j]
         if !isa(A, Symbol) #
-        	Atop = gensym(:A) 
-        	push!(store.topex, :(local $Atop = $A ) )
-        	A = Atop
+            Atop = gensym(:A) 
+            push!(store.topex, :(local $Atop = $A ) )
+            A = Atop
         end
 
         Aval = inputex(A, ex, canon, flags, store, icheck, where)
@@ -392,7 +392,7 @@ function walker(outex, ex, canon, flags, store, icheck, where)
         if isa(Aval, Symbol) 
             ex = Aval
         else
-        	Asym = gensym(:A) 
+            Asym = gensym(:A) 
             push!(outex.args, :(local $Asym = $Aval) ) 
             ex =  Asym 
         end
@@ -412,16 +412,18 @@ end
 
 
 """
-    inputex(:A, :( A[i,j][k] ), canon, flags, store, icheck, where)
+    inputex(:A, :( A[i,j][k] ), target, flags, store, icheck, where)
 
 Figures out all the steps needed to transform the given tensor to a boring one, 
-aligned with canonical, and returns the necessary expression. 
-Write sizes which can be read from `A` into `store`, and necessary reshapes in terms of `sz_i`.
+aligned with the given target, and returns the necessary expression. 
+Writes sizes which can be read from `A` into `store`, and necessary reshapes in terms of `sz_i`.
+
+Now `target` need not be `== canon`, since `sz_i` is independent of that. 
 
 Now needs explicitly the name of tensor `A`, 
 so that when `inex = rand(2,3)[i,j]` this is not evaluated twice.
 """
-function inputex(A, inex, canon, flags, store, icheck, where)
+function inputex(A, inex, target, flags, store, icheck, where)
 
     if @capture(inex, Aa_[outer__][inner__])
         # push!(flags, :glue)
@@ -462,7 +464,7 @@ function inputex(A, inex, canon, flags, store, icheck, where)
         push!(flags, :needsize)
     end
 
-    dirs = [ findcheck(i, canon, where) for i in flatE ]
+    dirs = [ findcheck(i, target, where) for i in flatE ]
 
     if glue == :yes                                         # A[i][k]
         codeD = repeat(Any[*],length(flatE))
@@ -516,8 +518,8 @@ function inputex(A, inex, canon, flags, store, icheck, where)
         # push!(flags, :havecopied)
     end
 
-    if length(flatE) != length(canon)                       # A[i] + B[j]
-        codeH = repeat(Any[*],length(canon))
+    if length(flatE) != length(target)                      # A[i] + B[j]
+        codeH = repeat(Any[*],length(target))
         codeH[dirs] .= (:)
         ex = :( TensorCast.orient($ex, $(codeH...,)) )
     end
