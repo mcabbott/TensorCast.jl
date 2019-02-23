@@ -7,7 +7,6 @@ const flag_list = Any[ :!, :assert, :cat, :glue, :strided, :lazy, :julienne, :ba
 * or better yet, generate :sz_i not sz[n], freeing from canon
 * add ndims checks to sizeassert?
 * pull the function in f(x)[i,j] out, to do it once
-* make parse! take keywords sanely
 
 @pretty @cast A[i\j\k] := B[i,j\k] + C[k] # this could have reshape(right, :) but not worth a fight?
 
@@ -33,20 +32,20 @@ Use this for `A[outer...][inner...]`.
 * `sdict::SizeDict` ends up with `sdict.dict[:i] = ` an expr for length of this index.
   To avoid saving these (if you don't have A yet) set `A = nothing`.
 
-    parse!(sdict, A, outer, reduce_inner, true)
+    parse!(sdict, A, outer, reduce_inner; allowranges=true)
 
 This is for `A[outer...] = sum(inner...) ...` LHS, which are allowed to have sum(a:2, ...) ranges. 
 The allowranges flag *also* disables the use of `size(first(A), 2)` etc,
 to disable `size(A,2)` set `A = nothing` again. 
 
-    parse!(sdict, nothing, [], rex, true, flag_vector)
+    parse!(sdict, nothing, [], rex; allowranges=true, flags=vector)
 
 For dimensions & annotations. 
 Will look for flags because it was given something to push them into. 
 You should now do this first, so that `sdict` is most likely to have these (neater) entries. 
 They are added using savesize!(sdict,...) which now puts later sizes into list of checks. 
 """
-function parse!(sdict::SizeDict, A, outer, inner, allowranges=false, flags=nothing)
+function parse!(sdict::SizeDict, A, outer, inner; allowranges=false, flags=nothing)
 
     flat = Any[]
     getafix = Any[]

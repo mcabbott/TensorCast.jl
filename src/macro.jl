@@ -206,7 +206,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
 
     # parse options both to look for keywords and sizes
     @capture(options, (optvec__,)) || (optvec = Any[options])
-    optind, _,_,_ = parse!(store, nothing, [], optvec, true, flags)
+    optind, _,_,_ = parse!(store, nothing, [], optvec; allowranges=true, flags=flags)
 
     if count(i -> i != nothing, setdiff(optind, canon)) > 0
         str = join(something.(setdiff(optind, canon), "nothing"), ", ")
@@ -326,8 +326,8 @@ function readleft(left, redind, flags, store, icheck, where)
     if !(:inplace in flags)
         Z = nothing # tells parse! not to think about size(Z,...)
     end
-    flat12, getY, sizeZ, negV = parse!(store, Z, outer, inner, true) # true allows A[i]{j:3}
-    redUind, _,_,_ = parse!(store, nothing, [], redind, true) # true means sum(i:3) allowed
+    flat12, getY, sizeZ, negV = parse!(store, Z, outer, inner; allowranges=true) # true allows A[i]{j:3}
+    redUind, _,_,_ = parse!(store, nothing, [], redind; allowranges=true) # true means sum(i:3) allowed
 
     canon = vcat(flat12, redUind) # order here is [inner, outer, reduced]
 

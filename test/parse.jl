@@ -5,7 +5,7 @@
     ## case "rex" 
     dd = SizeDict()
     ff = Any[]
-    flat, getafix, negated = parse!(dd, nothing, [], [:(i:3), :(j:4) ], true, ff)
+    flat, getafix, negated = parse!(dd, nothing, [], [:(i:3), :(j:4) ]; allowranges=true, flags=ff)
     @test unique(ff) == [:assert]
     @test length(dd.dict) == 2
     @test dd.dict[:i] == 3
@@ -29,7 +29,7 @@
 
     ## outside and inside, reduction allowing ranges
     dd = SizeDict()
-    flat, getafix, negated = parse!(dd, :Y, [:a, :(-b\c\e)], [:(k:10), :l], true)
+    flat, getafix, negated = parse!(dd, :Y, [:a, :(-b\c\e)], [:(k:10), :l], allowranges=true)
     @test dd.dict[:k] == 10
     @test dd.dict[ [:b, :c, :e] ] == :(size(Y, 2))
 
