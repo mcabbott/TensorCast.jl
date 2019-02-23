@@ -502,10 +502,12 @@ function inputex(A, inex, target, flags, store, icheck, where)
     perm = ntuple(identity, length(dirs))
     if dirs != sort(dirs)                                   # A[j,i]
         perm = Tuple(sortperm(dirs)) 
-        if perm == (2,1)
-            ex = :( transpose($ex) )
+        if :nolazy in flags
+            ex = :( permutedims($ex, $perm) )
         elseif :strided in flags
             ex = :( strided_permutedims($ex, $perm) )
+        elseif perm == (2,1)
+            ex = :( transpose($ex) )
         else
             ex = :( PermutedDimsArray($ex, $perm) )
         end
@@ -513,9 +515,12 @@ function inputex(A, inex, target, flags, store, icheck, where)
 
     for i in negF                                           # A[-i,j]
         d = invperm(perm)[findcheck(i, flatE, where)]
-        # ex = :( reverse($ex, dims=$d) )
-        ex = :( TensorCast.Reverse{$d}($ex) )
-        # push!(flags, :havecopied)
+        if :nolazy in flags
+            ex = :( reverse($ex, dims=$d) )
+            push!(flags, :havecopied)
+        else
+            ex = :( TensorCast.Reverse{$d}($ex) )
+        end
     end
 
     if length(flatE) != length(target)                      # A[i] + B[j]

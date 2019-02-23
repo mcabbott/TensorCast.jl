@@ -1,5 +1,5 @@
 
-const flag_list = Any[ :!, :assert, :cat, :glue, :strided, :lazy, :julienne, :batched]
+const flag_list = Any[ :!, :assert, :cat, :glue, :strided, :lazy, :julienne, :batched, :nolazy ]
 
 #= TODO
 
