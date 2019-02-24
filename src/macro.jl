@@ -605,7 +605,7 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, siz
         ex = :( reshape($ex, $sizeZex) )
         push!(flags, :needsize)
         for n in filter(!isequal(:), getY)
-            n == 1 || throw(MacroError("can't fix output index to $n != 1, when creating a new array", where))
+            n == 1 || n == :_ || throw(MacroError("can't fix output index to $n != 1, when creating a new array", where))
         end
     end
 

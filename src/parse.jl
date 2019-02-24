@@ -52,6 +52,7 @@ function parse!(sdict::SizeDict, A, outer, inner; allowranges=false, flags=nothi
     negated = Any[]
 
     ### INNER dimensions come first in flat
+    # also used for options / reduced dimensions
     for (din, ind) in enumerate(inner)
 
         # look for flags only in rex case
@@ -90,19 +91,12 @@ function parse!(sdict::SizeDict, A, outer, inner; allowranges=false, flags=nothi
     # but do allow tuples etc, and fixed indices.
     for (dout, ind) in enumerate(outer)
         if isconstant(ind)
-            # removing this "if" will make _ cases produce rview()... but it's slower! 
-            if ind == :_                # treat _ almost like 1, but possibly with a check
-                if !isnothing(A)
-                    str = "direction marked _ must have size 1"
-                    push!(sdict.checks, :(TensorCast.@assert_ size($A, $dout) == 1 $str) )
-                end
-                ind = 1
-            end
+            # if ind == :_  ...         # treat _ almost like 1, now handled by needview! / rview
             if ind isa Expr             # constant slice with $c
                 @assert ind.head == :($)
                 ind = ind.args[1]
             end
-            push!(getafix, ind)         # so when we view(A, getafix...) we need it
+            push!(getafix, ind)         # for view(A, getafix...) if RHS / in-place
             push!(putsz, 1)             # or if driving the other direction, make size=1.
 
         else
@@ -113,7 +107,6 @@ function parse!(sdict::SizeDict, A, outer, inner; allowranges=false, flags=nothi
             end
 
             push!(putsz, szwrap(ind) ) # this may be product  sz_i * sz_j  or just one
-
             push_or_append!(flat, ind) 
         end
     end

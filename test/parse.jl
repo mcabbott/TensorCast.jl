@@ -1,6 +1,6 @@
 @testset "parse!" begin 
 
-    using TensorCast: SizeDict, parse!
+    using TensorCast: SizeDict, parse!, needview!
 
     ## case "rex" 
     dd = SizeDict()
@@ -15,7 +15,9 @@
     dd = SizeDict()
     flat, getafix, negated = parse!(dd, :Z, [:i, :_, :j, 1, :(-k)], [])
     @test flat == [:i, :j, :k]
-    @test getafix == [:, 1, :, 1, :]
+    @test getafix == [:, :_, :, 1, :]
+    @test needview!(getafix)          # true because it contains 1
+    @test getafix == [:, 1, :, 1, :]  # mutated by needview!
     @test_broken negated == [:k]
     @test dd.dict[:k] == :(size(Z, 5))
 
@@ -24,6 +26,7 @@
     flat, getafix, negated = parse!(dd, :X, [:a, :(b\-c), 9], [:k, :(-l)])
     @test flat == [:k, :l, :a, :b, :c]
     @test getafix == [:,:,9]
+    @test needview!(getafix)
     @test_broken negated == [:l, :c]
     @test_broken dd.dict[:l] == :(size(first(X, 2)))
 
