@@ -442,10 +442,8 @@ so that when `inex = rand(2,3)[i,j]` this is not evaluated twice.
 function inputex(A, inex, target, flags, store, icheck, where)
 
     if @capture(inex, Aa_[outer__][inner__])
-        # push!(flags, :glue)
         glue = :yes
     elseif @capture(inex, Aa_[outer__]{inner__})
-        # push!(flags, :staticglue)
         glue = :static
     elseif @capture(inex, Aa_[outer__])
         inner = []
@@ -603,7 +601,6 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, siz
     end
 
     if :outshape in flags                                   # Z[i\j, _, k]
-        # colonise!(sizeZ, canonsize) # now using star() instead
         sizeZex = :(($(sizeZ...) ,))
         ex = :( reshape($ex, $sizeZex) )
         push!(flags, :needsize)
@@ -678,7 +675,6 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
         end
 
         if :backshape in flags
-            # colonise!(sizeX, canonsize) # now using star() instead
             sizeXex = :(($(sizeX...) ,))
             revleft = :( reshape($revleft, $sizeXex) )
             push!(flags, :needsize)
@@ -707,7 +703,6 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
         end
 
         if :backshape in flags
-            # colonise!(sizeX, canonsize) # now using star() instead
             sizeXex = :(($(sizeX...) ,))
             revleft = :( reshape($revleft, $sizeXex) )
             push!(flags, :needsize)
@@ -731,13 +726,6 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
             # revleft = :( view($revleft, $(getY...)) )
             push!(flags, :finalres)
         end
-
-        # if :backshape in flags      # I think you can always skip this
-        #     colonise!(sizeX, canonsize)
-        #     sizeXex = :(($(sizeX...) ,))
-        #     revleft = :( reshape($revleft, $sizeXex) )
-        #     push!(flags, :needsize)
-        # end
 
         ex = :( $copyto!($revleft, $newright) )
 

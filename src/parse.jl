@@ -4,7 +4,6 @@ const flag_list = Any[ :!, :assert, :cat, :glue, :strided, :lazy, :julienne, :ba
 #= TODO
 
 * add ndims checks to sizeassert?
-* pull the function in f(x)[i,j] out, to do it once
 
 @pretty @cast A[i\j\k] := B[i,j\k] + C[k] # this could have reshape(right, :) but not worth a fight?
 
@@ -380,6 +379,5 @@ function Base.showerror(io::IO, err::MacroError)
         printstyled(io, " \n    ", err.where.str; color = :normal)# :blue)
     end
 end
-
 
 
