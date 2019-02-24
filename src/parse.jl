@@ -3,8 +3,6 @@ const flag_list = Any[ :!, :assert, :cat, :glue, :strided, :lazy, :julienne, :ba
 
 #= TODO
 
-* add ndims checks to sizeassert?
-
 @pretty @cast A[i\j\k] := B[i,j\k] + C[k] # this could have reshape(right, :) but not worth a fight?
 
 =#
@@ -109,6 +107,12 @@ function parse!(sdict::SizeDict, A, outer, inner; allowranges=false, flags=nothi
             push!(putsz, szwrap(ind) ) # this may be product  sz_i * sz_j  or just one
             push_or_append!(flat, ind) 
         end
+    end
+
+    if !isnothing(A) && length(outer)>0
+        N = length(outer)
+        str = "expected a $N-tensor $A[" * join(outer, ", ") * "]"
+        push!(sdict.checks, :(TensorCast.@assert_ ndims($A)==$N $str) )
     end
 
     return flat, getafix, putsz, negated
