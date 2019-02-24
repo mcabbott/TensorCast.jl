@@ -29,12 +29,22 @@ but otherwise understands all the same things:
 @reduce W[μ,ν,J] := prod(i:2) V[(i,J)][μ,ν]      # products of pairs of matrices, stacked
 ```
 
+<!--
+Finally `@mul` handles certain matrix multiplications:
+
+```julia
+@mul T[i,_,j] := U[i,k,k′] * V[(k,k′),j]         # matrix multiplication, summing over (k,k′)
+
+@mul W[i,j,β] := X[i,k,β] * Y[k,i,β]             # batched W[:,:,β] = X[:,:,β] * Y[:,:,β] ∀ β
+```
+-->
+
 These are intended to complement the macro from [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl),
 which instead performs Einstein-convention contractions and traces, in a very similar notation. 
 Here it is implicit that repeated indices are summed over: 
 
 ```julia
-@tensor A[i,k] := B[i,j] * C[j,k]           # matrix multiplication, A = B * C
+@tensor A[i] := B[i,j] * C[j,k] * D[k]      # matrix multiplication, A = B * C * D
 @tensor D[i] := E[i] + F[i,k,k]             # partial trace of F only, Dᵢ = Eᵢ + Σⱼ Fᵢⱼⱼ
 ```
 
@@ -70,7 +80,7 @@ The function of `@check!` (see [below](#checking)) is similar to [`tsalib`](http
 
 ## Installation
 
-You need [Julia](https://julialang.org/downloads/) 1.0. This package is now registered, install it like this: 
+You need [Julia](https://julialang.org/downloads/) 1.0 or later. This package is now registered, install it like this: 
 
 ```julia
 pkg> add TensorCast  # press ] for pkg, backspace to leave
@@ -103,7 +113,7 @@ sum_r == sum(rows)  # true
 ```
 
 Notice that the same indices must always appear both on the right and on the left
-(unless they are explicitly reduced over). Indices may not be repeated. 
+(unless they are explicitly reduced over). Indices may not be repeated (except on different tensors). 
 
 This reshapes a matrix into a 3-tensor. The ranges of `i` and `k` would be ambiguous unless you specify 
 (at least) one of them. Such ranges are written `i:2`, and appear as part of a tuple of options after the expression:
@@ -181,7 +191,7 @@ Do this to every line, and also to every vertical line, to obtain `H`.
 
 Notice also that ranges `α:2, β:2` can be specified inside the reduction function, instead of at the end. 
 
-Finally, this takes a 2D slice `W[2,:,4,:]` of a 4D array, transposes it, and then forms it into a 4D array
+This takes a 2D slice `W[2,:,4,:]` of a 4D array, transposes it, and then forms it into a 4D array
 with two trivial dimensions -- such output can be useful for interacting with broadcasting:
 
 ```julia
@@ -190,6 +200,19 @@ W = randn(2,3,5,7);
 @cast Z[_,i,_,k] := W[2,k,4,i]  # equivalent to Z[1,i,1,k] on left
 
 size(Z) == (1,7,1,3)
+```
+
+Finally, you can also create anonymous functions using `->` or `=>` 
+(the only distinction is that `(A + B) -> ...` needs a bracket)
+and writing the output on the right: 
+
+```julia
+f = @cast A[i,j,k] -> X[i\j,_,k]      # A -> reshape(A, :,1,size(A,3))
+
+g = @cast B[b] + log(C[c]) => Y[b,c]  # (B,C) -> B .+ log.(C')
+
+size(f(rand(5,5,9))) == (25,1,9)
+size(g(rand(2), rand(3))) == (2,3)
 ```
 
 ## Inside
@@ -290,7 +313,7 @@ M = rand(1:99, 3,4)
 @cast S[k][i] |= M[i,k]             # [ M[:,k] for k=1:4 ]; using |= demands a copy
 ```
 
-The default way of un-slicing is `reduce(cat, ...)`, which creates a new array. 
+The default way of un-slicing is `reduce(hcat, ...)`, which creates a new array. 
 But there are other options, controlled by keywords after the expression:
 
 ```julia
