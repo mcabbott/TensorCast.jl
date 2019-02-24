@@ -14,8 +14,7 @@ Understands the following things:
   (or when writing to an existing array) you may also write `E[i,3,k]` meaning `view(E, :,3,:)`,
   or `E[i,\$c,j]` to use a variable `c`. Fixing inner indices, like `C[k][i,_]`, is not allowed.
 * `F[i,-j,k]` means roughly `reverse(F, dims=2)`. 
-* `g(x)[i,j,k]` is allowed, but there is some chance that `g(x)` may be evaluated several times,
-  e.g. in `size(g(x),2)`. For now check with `@pretty @cast Z[...] := ...` to find out. 
+* `g(x)[i,j,k]` is allowed, and `g(x)` should be evaluated only once. 
 
 The left and right hand sides must have all the same indices. 
 See `@reduce` for a related macro which can sum over things. 
@@ -30,6 +29,9 @@ The following actions are possible:
 * `=` writes into an existing array, `copyto!(Z, ...)`.
 * `:=` creates a new object... which may or may not be a view of the input:
 * `==` insists on a view of the old object (error if impossible), and `|=` insists on a copy. 
+* `->` or `=>` creates an anonymous function, for which the output must be on the right.
+   For example `@cast (A[i] + B[j]) -> Z[i,j]` gives `(A,B) -> A .+ B'`, 
+   notice that brackets are needed for several terms before `->`, although not with `=>`. 
 
 Re-ordering of indices `Z[k,j,i]` is done lazily with `PermutedDimsArray(A, ...)`. 
 Reversing of an axis `F[i,-j,k]` is also done lazily, by `Reverse{2}(F)` which makes a `view`. 
@@ -42,6 +44,7 @@ Options can be specified at the end (if several, separated by `,` i.e. `options:
   (Providing ranges may also turn these on, but imperfectly, confirm with `@pretty @cast ...`.)
 * `cat` will glue slices by things like `hcat(A...)` instead of `reduce(hcat, A)`,
   and `lazy` will instead make a `VectorOfArrays` container. 
+* `nolazy` disables `PermutedDimsArray` and `Reverse` in favour of `permutedims` and `reverse`.
 * `strided` will place `@strided` in front of broadcasting operations, 
   and use `@strided permutedims(A, ...)` instead of `PermutedDimsArray(A, ...)`. 
   For this you need to install and load the package: `using Strided`.
@@ -188,6 +191,9 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
             push!(flags, :mustcopy)
         elseif @capture(exone, left_ == right_ )
             push!(flags, :mustview)
+                                                            # A[i,j] -> Z[j][i]
+        elseif @capture(exone, right_ -> left_ ) ||  @capture(exone, right_ => left_ )
+            push!(flags, :anonfunc)
         else
             throw(MacroError("@cast doesn't know what to do with $exone", where))
         end
@@ -277,18 +283,26 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
         szcanon = Any[ Symbol(:sz_,i) for i in canon ]
         pushfirst!(outex.args, :( local ($(szcanon...),) = ($(canonsize...),) ) )
     end
+
     if :assert in flags || :(!) in flags || check_options.size
         for ch in store.checks
             pushfirst!(outex.args, ch) 
         end
     end
+
     for tex in store.topex
         pushfirst!(outex.args, tex)
     end
 
     if length(outex.args) == 1
-        return esc(outex.args[1])
-    else 
+        outex = outex.args[1]
+    end
+
+    if :anonfunc in flags
+        leftex = anoninput(store.rightnames, where)
+        outex = :( $leftex -> $outex ) # TODO make this not introduce begin end
+        return esc(outex)
+    else
         return esc(outex)
     end
 end
@@ -379,9 +393,11 @@ function walker(outex, ex, canon, flags, store, icheck, where)
     # find any indexed tensor, process it, and replace it
     if @capture(ex, A_[ij__][kl__] ) || @capture(ex, A_[ij__]{kl__} ) || @capture(ex, A_[ij__] )
 
+        push!(store.rightnames, A) # used for @cast A[i,j] -> B[i\j]
+
         # if we have f(x)[i,j] then we should evaluate f just once, e.g. 
         # @pretty @cast A[i]{j:5} |= rand(15)[i\j]
-        if !isa(A, Symbol) #
+        if !isa(A, Symbol)
             Atop = gensym(:A) 
             push!(store.topex, :(local $Atop = $A ) )
             A = Atop
@@ -732,6 +748,22 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
     end
 
     return ex
+end
+
+"""
+    anoninput(store.rightnames)
+
+Given a vector of names captured from `A_[i...]`, returns ex needed for `(A,B) -> ...`
+"""
+function anoninput(rightnames, where)
+    for A in rightnames
+        isa(A,Symbol) || throw(MacroError("can't use $A as anonymous function input", where))
+    end
+    if length(rightnames) == 1
+        return rightnames[1]
+    else
+        return :( ($(rightnames...),) )
+    end
 end
 
 function packagecheck(flags, where)

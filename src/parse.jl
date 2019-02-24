@@ -15,9 +15,10 @@ struct SizeDict
     checks::Vector{Any}
     seen::Vector{Any}
     topex::Vector{Any}
+    rightnames::Vector{Any}
 end
 
-SizeDict() = SizeDict(Dict{Any, Any}(), Any[], Any[], Any[])
+SizeDict() = SizeDict(Dict{Any, Any}(), Any[], Any[], Any[], Any[])
 
 """
     flat, getafix, putsz, negated = parse!(sdict, A, outer, inner)

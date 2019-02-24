@@ -70,5 +70,24 @@ end
 	@reduce B[_,d\b,_] = sum(c,e) bcde[b,c,d,e] assert
 	@test A ≈ B
 
+end
+@testset "anonymous functions" begin
+
+	f1 = @cast A[i] + B[j]^2 => C[i,j]
+	f2 = @cast (A[i] + B[j]^2) -> C[i,j]
+
+	A = rand(3)
+	B = rand(2)
+	@cast C[i,j] := A[i] + B[j]^2
+
+	@test f1(A,B) == f2(A,B) == C
+
+	f3 = @cast D[i\j,k] -> E[i,-k,j]  i:2
+	f4 = @cast D[i\j,k] => E[i,-k,j]  i:2, nolazy
+
+	D = rand(4,3)
+	@cast E[i,k,j] := D[i\j,-k]  i:2
+
+	@test f3(D) == f4(D) == E
 
 end
