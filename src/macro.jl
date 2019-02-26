@@ -15,6 +15,8 @@ Understands the following things:
   or `E[i,\$c,j]` to use a variable `c`. Fixing inner indices, like `C[k][i,_]`, is not allowed.
 * `F[i,-j,k]` means roughly `reverse(F, dims=2)`. 
 * `g(x)[i,j,k]` is allowed, and `g(x)` should be evaluated only once. 
+* `H[i,j]'` conjugates each element, equivalent to `H'[j,i]` which is the 
+  conjugate-transpose of the matrix. 
 
 The left and right hand sides must have all the same indices. 
 See `@reduce` for a related macro which can sum over things. 
@@ -414,7 +416,9 @@ function walker(outex, ex, canon, flags, store, icheck, where)
         end
         V && @info "walker" ex Aval
 
-    # TODO catch LinearAlgebra.Adjoint(...) and replace with Base.conj(...)
+    # catch A[i,j]' as element-wise conj
+    elseif @capture(ex, arg_')
+        ex = :( Base.conj($arg) )
         
     # try to protect log(2) etc from @. , but not log(A[i])
     elseif @capture(ex, f_(x_Symbol) ) || @capture(ex, f_(x_Int) ) || @capture(ex, f_(x_Float64) ) 
@@ -592,6 +596,7 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, siz
         end
     elseif :staticslice in flags                            # Z[i]{k} :=
         # codeW worked out already, but sizeWstatic must be done here
+        # TODO sizeinfer!(store, canon, where, false)
         sizeWstatic = :( StaticArrays.Size($([store.dict[i] for i in indW]...)) )
         if :outshape in flags
             ex = :( TensorCast.static_slice($ex, $sizeWstatic, false) )
@@ -746,6 +751,7 @@ Given a vector of names captured from `A_[i...]`, returns ex needed for `(A,B) -
 function anoninput(rightnames, where)
     for A in rightnames
         isa(A,Symbol) || throw(MacroError("can't use $A as anonymous function input", where))
+        # TODO make this understand that $B means interpolate not arg
     end
     if length(rightnames) == 1
         return rightnames[1]
@@ -775,6 +781,8 @@ using LazyArrays # now not optional, and thus not always in caller's scope
 Takes the result of `Broadcast.__dot__()` and converts it to have a `LazyArrays.BroadcastArray`.
 """
 makelazy(sym::Symbol) = sym
+
+# TODO replace this with lazy.() trick
 function makelazy(bc::Expr)
     V && @info "before LazyArrays" bc
 
