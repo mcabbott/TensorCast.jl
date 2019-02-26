@@ -7,13 +7,13 @@
 
 This package lets you write many expressions involving N-dimensional arrays in index notation,
 which is often the least confusing way. 
-It defines a pair of macros: `@cast` deals both with "casting" into new shapes (including going 
+It defines a few macros. The first is `@cast`, which deals both with "casting" into new shapes (including going 
 to and from an array-of-arrays) and with broadcasting:
 
 ```julia
-@cast A[row][col] := B[row, col]            # slice a matrix into its rows
+@cast A[row][col] := B[row, col]            # slice a matrix B into its rows
 
-@cast C[(i,j), (k,ℓ)] := D[i,j,k,ℓ]         # reshape a 4-tensor to give a matrix
+@cast C[(i,j), (k,ℓ)] := D[i,j,k,ℓ]         # reshape a 4-tensor D to give a matrix
 
 @cast E[x,y] = F[x]^2 * exp(G[y])           # broadcast E .= F.^2 .* exp.(G') into existing E
 ```
@@ -64,7 +64,7 @@ Instead `@tensor` works out a sequence of contraction and trace operations, call
 The  macros from this package aim to produce simple Julia commands: 
 often just a string of `reshape` and `permutedims` and `eachslice` and so on,
 plus a native [broadcasting expression](https://julialang.org/blog/2017/01/moredots) if needed, 
-and `sum` or  `sum!`.
+and `sum` /  `sum!`, or `*` / `mul!`. 
 This means that they are very generic, and will (mostly) work well on 
 [Flux](https://github.com/FluxML/Flux.jl)'s TrackedArrays, on the GPU via 
 [CuArrays](https://github.com/JuliaGPU/CuArrays.jl),
@@ -92,7 +92,9 @@ help?> @cast  # press ? for help
 ```
 
 From a Jupyter notebook, write instead `using Pkg; pkg"add TensorCast"`.
-If you downloaded this under its former name, you should `rm TensorSlice`.  
+<!-- 
+If you downloaded this under its former name, you should `rm TensorSlice`. 
+-->
 
 ## Examples
 
@@ -104,10 +106,10 @@ mat = (1:4)' .+ rand(2,4)
 @cast rows[r][c] := mat[r,c]
 @cast cols[♜][🚣] := rows[🚣][♜]
 
-@reduce sum_r[c] := sum(r) mat[r,c]  
+@reduce rowsum[c] := sum(r) mat[r,c]  
 
-size(sum_r) == (4,) # @reduce gives a vector, not a 1×4 matrix
-sum_r == sum(rows)  # true
+size(rowsum) == (4,) # @reduce gives a vector, not a 1×4 matrix
+rowsum == sum(rows)  # true
 ```
 
 Notice that the same indices must always appear both on the right and on the left
@@ -181,11 +183,12 @@ This does max-pooling on the above image grid `G`:
 size(G) == 2 .* size(H) # true
 imshow(H)
 ```
-
+<!--
 In words: take a horizontal line of pixels in `G` and re-arrange them into two rows, 
 so that each column contains two formerly-neighbouring pixes. The horizontal position is now `a`, 
 vertical is `α ∈ 1:2`. Take the maximum along these new columns, giving us one line again (half as long). 
 Do this to every line, and also to every vertical line, to obtain `H`. 
+-->
 
 Notice also that ranges `α:2, β:2` can be specified inside the reduction function, instead of at the end. 
 
@@ -197,7 +200,7 @@ W = randn(2,3,5,7);
 
 @cast Z[_,i,_,k] := W[2,k,4,i]  # equivalent to Z[1,i,1,k] on left
 
-size(Z) == (1,7,1,3)
+size(Z) == (1,7,1,3) # true
 ```
 
 Finally, you can also create anonymous functions using `->` or `=>` 
@@ -207,7 +210,7 @@ and writing the output on the right:
 ```julia
 f = @cast A[i,j,k] -> X[i\j,_,k]      # A -> reshape(A, :,1,size(A,3))
 
-g = @cast B[b] + log(C[c]) => Y[b,c]  # (B,C) -> B .+ log.(C')
+g = @cast B[b] + log(C[c]) => Y[b,c]  # (B,C) -> B .+ log.(transpose(C))
 
 size(f(rand(5,5,9))) == (25,1,9)
 size(g(rand(2), rand(3))) == (2,3)
@@ -223,8 +226,10 @@ To inspect what this package produces, there is another macro `@pretty` which wo
 
 @pretty @cast A[k][i,j] := B[i,(j,k)]  k:length(C)
 # begin
-#     local caterpillar = (size(B, 1), :, length(C))  # your animal may vary
-#     A = sliceview(reshape(B, (caterpillar...,)), (:, :, *))
+#     @assert_ ndims(B) == 2 "expected a 2-tensor B[i, (j, k)]"
+#     local (sz_i, sz_j, sz_k) = (size(B, 1), :, length(C))
+#     local emu = reshape(B, (sz_i, sz_j, sz_k))  # your animal may vary
+#     A = sliceview(emu, (:, :, *))
 # end
 ```
 
@@ -233,17 +238,17 @@ Here `TensorCast.sliceview(D, (:,:,*)) = collect(eachslice(D, dims=3))` using th
 but allowing more general `sliceview(D, (:,*,:,*) ≈ eachslice(D, dims=(2,4))`. 
 (In notation borrowed from [JuliennedArrays.jl](https://github.com/bramtayl/JuliennedArrays.jl), see below.)
 
-Adding `assert` or just `!` inserts explicit size checks:
+Adding `assert` or just `!` turns on explicit size checks:
 
 ```julia
 @pretty @reduce H[a, b] := maximum(α:2,β:2) G[α\a, β\b] !
 # begin
-#     @assert rem(size(G, 1), 2) == 0 
-#     @assert rem(size(G, 2), 2) == 0
-#     local fox = (2, 2, size(G, 1) ÷ 2, size(G, 2) ÷ 2)
-#     H = dropdims(maximum(
-#         permutedims(reshape(G, (fox[1], fox[3], fox[2], fox[4])), (1, 3, 2, 4)), 
-#             dims=(3, 4)), dims=(3, 4))
+#     @assert_ rem(size(G, 2), 2) == 0 "inferring range of b from range of β ⊗ b"
+#     @assert_ rem(size(G, 1), 2) == 0 "inferring range of a from range of α ⊗ a"
+#     @assert_ ndims(G) == 2 "expected a 2-tensor G[α \\ a, β \\ b]"
+#     local (sz_a, sz_b, sz_α, sz_β) = (size(G, 1) ÷ 2, size(G, 2) ÷ 2, 2, 2)
+#     local emu = PermutedDimsArray(reshape(G, (sz_α, sz_a, sz_β, sz_b)), (2, 4, 1, 3))
+#     H = dropdims(maximum(emu, dims=(3, 4)), dims=(3, 4))
 # end
 ```
 
