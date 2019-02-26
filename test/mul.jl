@@ -1,3 +1,5 @@
+using Einsum
+
 @testset "matmul" begin 
 
     ## the very basics
@@ -110,7 +112,7 @@ end
     @test A == D == E == F
 
 
-    # permute 
+    ## permute 
     @mul A[n,k,i] := bbb[i,j,n] * bbb2[n,k,j]
     @reduce B[n,k,i] := sum(j) bbb[i,j,n] * bbb2[n,k,j]
     @einsum C[n,k,i] := bbb[i,j,n] * bbb2[n,k,j]
@@ -124,18 +126,17 @@ end
     @einsum F[n,k,i] := bbb[i,j,n] * bbb2[n,k,j]
     @test A == D == E == F
 
-    # readme
+    ## readme & help
     X = rand(2,3,4) 
     Y = rand(3,2,4) 
     @mul W[β][i,j] := X[i,k,β] * Y[k,j,β] 
-    @test W[2] == X[:,:,2] * Y[:,:,2]
+    @test W[2] ≈ X[:,:,2] * Y[:,:,2]
 
-    # help
     B = rand(8)
     C = rand(3,2,4)
     @mul A[_,i][j] := B[i\k] * C[j,2,k]
     rB = reshape(B,2,4)
     @einsum D[i,j] := rB[i,k] * C[j,2,k]
-    @test A[1,2] == D[2,:]
+    @test A[1,2] ≈ D[2,:]
 
 end
