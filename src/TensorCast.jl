@@ -3,11 +3,13 @@ module TensorCast
 
 using MacroTools
 
-V = false # verbose debugging
+const V = false # verbose debugging
 
 include("parse.jl")
 
-include("macro.jl")
+include("macro.jl") # @cast and @reduce
+
+include("matmul.jl") # @mul
 
 include("icheck.jl")
 
@@ -17,11 +19,11 @@ if VERSION < v"1.1.0"
     include("eachslice.jl") 
 end
 
-include("slice.jl")
+include("slice.jl") # slice, glue, orient, etc
 
-include("recursive.jl")
+include("recursive.jl") # RecursiveArrayTools
 
-include("order.jl")
+include("order.jl") # Reverse{D} etc
 
 using Requires
 
@@ -40,6 +42,14 @@ function __init__()
     end
 
     # @require LazyArrays = "5078a376-72f3-5289-bfd5-ec5146d43c02" begin
+    # end
+
+    # @require Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c" begin
+    #   include("flux.jl")
+    # end
+
+    # @require Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f" begin
+    #     include("zygote.jl")
     # end
 
 end

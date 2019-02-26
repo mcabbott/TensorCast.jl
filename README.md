@@ -15,7 +15,7 @@ to and from an array-of-arrays) and with broadcasting:
 
 @cast C[(i,j), (k,ℓ)] := D[i,j,k,ℓ]         # reshape a 4-tensor to give a matrix
 
-@cast E[x,y] = F[x]^2 * log(G[y])           # broadcast E .= F.^2 .* log.(G') into existing E
+@cast E[x,y] = F[x]^2 * exp(G[y])           # broadcast E .= F.^2 .* exp.(G') into existing E
 ```
 
 And `@reduce` takes sums (or other reductions) over some directions, 
@@ -29,15 +29,13 @@ but otherwise understands all the same things:
 @reduce W[μ,ν,J] := prod(i:2) V[(i,J)][μ,ν]      # products of pairs of matrices, stacked
 ```
 
-<!--
-Finally `@mul` handles certain matrix multiplications:
+Finally `@mul` handles some matrix multiplications:
 
 ```julia
-@mul T[i,_,j] := U[i,k,k′] * V[(k,k′),j]         # matrix multiplication, summing over (k,k′)
+@mul T[i,_,j] := U[i,k,k′] * V[(k,k′),j]    # matrix multiplication, summing over (k,k′)
 
-@mul W[i,j,β] := X[i,k,β] * Y[k,i,β]             # batched W[:,:,β] = X[:,:,β] * Y[:,:,β] ∀ β
+@mul W[β][i,j] := X[i,k,β] * Y[k,j,β]       # batched W[β] = X[:,:,β] * Y[:,:,β] ∀ β
 ```
--->
 
 These are intended to complement the macro from [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl),
 which instead performs Einstein-convention contractions and traces, in a very similar notation. 

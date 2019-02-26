@@ -8,6 +8,7 @@ using StaticArrays
 @testset "@reduce" begin include("reduce.jl")  end
 @testset "@cast"   begin include("casting.jl") end
 @testset "@check!" begin include("check.jl")   end
+@testset "@mul"    begin include("mul.jl")     end
 
 @testset "helper functions" begin include("parse.jl") end
 @testset "data functions" begin include("cat.jl") end
@@ -141,21 +142,5 @@ using StaticArrays
         M[1,2]=42; N[2,1]==42          # all views of the original matrix
         @test N[2,1]==42
 
-
-        # using Strided
-        # A = rand(50,50,50,50);
-        # B = permutedims(A, (4,3,2,1)); @strided permutedims(A, (4,3,2,1)); 
-        # @strided permutedims!(B, A, (4,3,2,1)); # compile
-        #
-        # @time C = permutedims(A, (4,3,2,1));       # 130 ms,  47 MB
-        # @time @strided permutedims(A, (4,3,2,1));  # 0.02 ms, 400 bytes, lazy
-        #
-        # @time @cast D[i,j,k,l] := A[l,k,j,i];     # 140 ms,  47 MB,     copy
-        # @time @cast E[i,j,k,l] == A[l,k,j,i];     # 0.02 ms, 256 bytes, view
-        # @time @cast C[i,j,k,l] = A[l,k,j,i];      # 15 ms,   4 KB,  in-place
-
     end
 end
-
-
-
