@@ -2,13 +2,10 @@
 # TensorCast.jl
 
 [![Build Status](https://travis-ci.org/mcabbott/TensorCast.jl.svg?branch=master)](https://travis-ci.org/mcabbott/TensorCast.jl)
-<!--
-<a href="https://travis-ci.org/mcabbott/TensorCast.jl"><img src="https://travis-ci.org/mcabbott/TensorCast.jl.svg?branch=master" align="right" alt="Build Status" padding="20"></a>-->
 
-This package lets you write many expressions involving N-dimensional arrays in index notation,
-which is often the least confusing way. 
-It defines a few macros. The first is `@cast`, which deals both with "casting" into new shapes (including going 
-to and from an array-of-arrays) and with broadcasting:
+This package lets you write expressions involving many-dimensional arrays in index notation,
+by defining a few macros. The first is `@cast`, which deals both with "casting" into new shapes 
+(including going to and from an array-of-arrays) and with broadcasting:
 
 ```julia
 @cast A[row][col] := B[row, col]            # slice a matrix B into its rows
@@ -18,7 +15,7 @@ to and from an array-of-arrays) and with broadcasting:
 @cast E[x,y] = F[x]^2 * exp(G[y])           # broadcast E .= F.^2 .* exp.(G') into existing E
 ```
 
-And `@reduce` takes sums (or other reductions) over some directions, 
+Next, `@reduce` takes sums (or other reductions) over some directions, 
 but otherwise understands all the same things: 
 
 ```julia
@@ -29,7 +26,7 @@ but otherwise understands all the same things:
 @reduce W[μ,ν,J] := prod(i:2) V[(i,J)][μ,ν]      # products of pairs of matrices, stacked
 ```
 
-Finally `@mul` handles some matrix multiplications:
+Finally `@mul` handles matrix multiplication of two tensors (and again understands the same things):
 
 ```julia
 @mul T[i,_,j] := U[i,k,k′] * V[(k,k′),j]    # matrix multiplication, summing over (k,k′)
@@ -78,147 +75,15 @@ The function of `@check!` (see [below](#checking)) is similar to [`tsalib`](http
 
 ## Installation
 
-You need [Julia](https://julialang.org/downloads/) 1.0 or later. This package is now registered, install it like this: 
+You need [Julia](https://julialang.org/downloads/) 1.0 or later. This package is now registered:
 
 ```julia
-pkg> add TensorCast  # press ] for pkg, backspace to leave
-
-pkg> add StaticArrays Strided  TensorOperations Einsum  # optional extras, see below
-pkg> add Flux ImageView FileIO                          # for image examples
-
-julia> using TensorCast
-
-help?> @cast  # press ? for help
-```
-
-From a Jupyter notebook, write instead `using Pkg; pkg"add TensorCast"`.
-<!-- 
-If you downloaded this under its former name, you should `rm TensorSlice`. 
--->
-
-## Examples
-
-This simply slices a matrix into its rows, then re-glues and re-slices to obtain the columns instead:
-
-```julia
-mat = (1:4)' .+ rand(2,4)
-
-@cast rows[r][c] := mat[r,c]
-@cast cols[♜][🚣] := rows[🚣][♜]
-
-@reduce rowsum[c] := sum(r) mat[r,c]  
-
-size(rowsum) == (4,) # @reduce gives a vector, not a 1×4 matrix
-rowsum == sum(rows)  # true
-```
-
-Notice that the same indices must always appear both on the right and on the left
-(unless they are explicitly reduced over). Indices may not be repeated (except on different tensors). 
-
-This reshapes a matrix into a 3-tensor. The ranges of `i` and `k` would be ambiguous unless you specify 
-(at least) one of them. Such ranges are written `i:2`, and appear as part of a tuple of options after the expression:
-
-```julia
-M = randn(Float16, 2*5, 3)
-
-@cast A[i,j,k] := M[(i,k),j]  i:2, k:5
-
-size(A) == (2,3,5) # true
-
-@cast A[i,j,k] = M[(i,k),j]; # writing into existing A, it knows size(A)
-```
-
-This glues and reshapes a list of images into one large image:
-
-<img src="test/famous-digits.png?raw=true" width="336" height="168" align="right" alt="MNIST" padding="20">
-
-```julia
-using Flux, ImageView, FileIO
-imgs = Flux.Data.MNIST.images()[1:32] # vector of matrices
-
-@cast G[(i,I), (j,J)] := imgs[(I,J)][i,j] J:8
-@cast G[ i\I,   j\J ] := imgs[ I\J ][i,j] J:8 # identical
-
-imshow(G) # grid with eight columns, 1 ≤ J ≤ 8
-
-save("famous-digits.png", G)
-```
-
-Note that the order here `(i,I) = (pixel, grid)` is a choice made by this package,
-such that `A[(i,j),k]` and `B[i,j,k]` have the same linear order `A[:] == B[:]`.
-And entries `i` and `i+1` are neighbours because Julia `Array`s are column-major 
-(the opposite of C, and hence of NumPy). The alternative notation `(i,I) == i\I` used here 
-is meant to help me remember which is the large-grid index.
-(The vector of matrices `C[k]{i,j}` also has the same order, if the slices are StaticArrays, below.)
-
-This defines a function which extends [`kron(A,B)`](https://docs.julialang.org/en/latest/stdlib/LinearAlgebra/#Base.kron) one step beyond vectors & matrices: 
-
-```julia
-function Base.kron(A::Array{T,3}, B::Array{T,3}) where {T}
-    @cast D[i\I, j\J, k\K] := A[I,J,K] * B[i,j,k]
-end
-
-A = rand(-20:20, 2,3,1)   # test with 3rd index trivial
-B = ones(Int, 5,7,1);
-
-D = kron(A, B)            # calls this new method
-size(D) == (2*5, 3*7, 1*1)
-
-kron(A[:,:,1], B[:,:,1])  # calls built-in method, same numbers
-```
-
-While *tensor* is often just a fancy word for *N-dimensional array*, it has more specific meanings, 
-and one of them is that the the tensor product of two vector spaces `V ⊗ V` is the one with the product of 
-their dimensions (as opposed to `V × V` which has the sum). The Kronecker product 
-`kron` maps to such a tensor product space (as `vcat` maps into `V × V`). 
-We can always think of these combined indices `(i,I) = i\I` in this way, and now you may write `i⊗I` too. 
-
-This does max-pooling on the above image grid `G`: 
-
-<img src="test/famous-digits-2.png?raw=true" width="224" height="112" align="right" alt="MNIST" padding="20">
-
-```julia
-@reduce H[a, b] := maximum(α:2,β:2)  G[α\a, β\b]  
-
-size(G) == 2 .* size(H) # true
-imshow(H)
-```
-<!--
-In words: take a horizontal line of pixels in `G` and re-arrange them into two rows, 
-so that each column contains two formerly-neighbouring pixes. The horizontal position is now `a`, 
-vertical is `α ∈ 1:2`. Take the maximum along these new columns, giving us one line again (half as long). 
-Do this to every line, and also to every vertical line, to obtain `H`. 
--->
-
-Notice also that ranges `α:2, β:2` can be specified inside the reduction function, instead of at the end. 
-
-This takes a 2D slice `W[2,:,4,:]` of a 4D array, transposes it, and then forms it into a 4D array
-with two trivial dimensions -- such output can be useful for interacting with broadcasting:
-
-```julia
-W = randn(2,3,5,7);
-
-@cast Z[_,i,_,k] := W[2,k,4,i]  # equivalent to Z[1,i,1,k] on left
-
-size(Z) == (1,7,1,3) # true
-```
-
-Finally, you can also create anonymous functions using `->` or `=>` 
-(the only distinction is that `(A + B) -> ...` needs a bracket)
-and writing the output on the right: 
-
-```julia
-f = @cast A[i,j,k] -> X[i\j,_,k]      # A -> reshape(A, :,1,size(A,3))
-
-g = @cast B[b] + log(C[c]) => Y[b,c]  # (B,C) -> B .+ log.(transpose(C))
-
-size(f(rand(5,5,9))) == (25,1,9)
-size(g(rand(2), rand(3))) == (2,3)
+] add TensorCast
 ```
 
 ## Inside
 
-To inspect what this package produces, there is another macro `@pretty` which works like this:
+There is another macro `@pretty` which prints the generated expression: 
 
 ```julia
 @pretty @cast A[(i,j)] = B[i,j]
@@ -228,33 +93,23 @@ To inspect what this package produces, there is another macro `@pretty` which wo
 # begin
 #     @assert_ ndims(B) == 2 "expected a 2-tensor B[i, (j, k)]"
 #     local (sz_i, sz_j, sz_k) = (size(B, 1), :, length(C))
-#     local emu = reshape(B, (sz_i, sz_j, sz_k))  # your animal may vary
+#     local emu = reshape(B, (sz_i, sz_j, sz_k))
 #     A = sliceview(emu, (:, :, *))
 # end
-```
 
-Here `TensorCast.sliceview(D, (:,:,*)) = collect(eachslice(D, dims=3))` using the new
-[eachcol & eachrow](https://github.com/JuliaLang/julia/blob/master/HISTORY.md#new-library-functions) functions,
-but allowing more general `sliceview(D, (:,*,:,*) ≈ eachslice(D, dims=(2,4))`. 
-(In notation borrowed from [JuliennedArrays.jl](https://github.com/bramtayl/JuliennedArrays.jl), see below.)
-
-Adding `assert` or just `!` turns on explicit size checks:
-
-```julia
-@pretty @reduce H[a, b] := maximum(α:2,β:2) G[α\a, β\b] !
+@pretty @reduce V[r] = sum(c) exp( M[r,c]^2 / R[c]' )
 # begin
-#     @assert_ rem(size(G, 2), 2) == 0 "inferring range of b from range of β ⊗ b"
-#     @assert_ rem(size(G, 1), 2) == 0 "inferring range of a from range of α ⊗ a"
-#     @assert_ ndims(G) == 2 "expected a 2-tensor G[α \\ a, β \\ b]"
-#     local (sz_a, sz_b, sz_α, sz_β) = (size(G, 1) ÷ 2, size(G, 2) ÷ 2, 2, 2)
-#     local emu = PermutedDimsArray(reshape(G, (sz_α, sz_a, sz_β, sz_b)), (2, 4, 1, 3))
-#     H = dropdims(maximum(emu, dims=(3, 4)), dims=(3, 4))
+#     local badger = orient(R, (*, :))
+#     sum!(V, exp.((/).((^).(M, 2), conj.(badger))))  # your animal may vary
 # end
 ```
 
-This `@pretty` is really just a variant of the built-in `@macroexpand1`, with animal names from
-[MacroTools.jl](https://github.com/MikeInnes/MacroTools.jl) in place of generated symbols, 
-and some tidying up.
+Here `TensorCast.sliceview(D, (:,:,*)) = collect(eachslice(D, dims=3))`, 
+and  `TensorCast.orient(R, (*,:))` will reshape or tranpose R to lie long the second direction. 
+Notice that `R[j]'` means element-wise complex conjugation.
+
+(`@pretty` is just a variant of the built-in `@macroexpand1`, with animal names from
+[MacroTools.jl](https://github.com/MikeInnes/MacroTools.jl) in place of generated symbols.)
 
 ## Checking
 
@@ -297,12 +152,25 @@ while the above slot-checking is based on the first letter.
 
 ## Options
 
-As mentioned above, expressions with `=` write into an existing array, 
+Expressions with `=` write into an existing array, 
 while those with `:=` do not. This is the same notation as 
 [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl) and [Einsum.jl](https://github.com/ahwillia/Einsum.jl). 
 But unlike those packages, sometimes the result of `@cast` is a view of the original, for instance 
 `@cast A[i,j] := B[j,i]` gives `A = transpose(B)`. You can forbid this, and insist on a copy, 
 by writing `|=` instead. And conversely, if you expect a view, writing `==` will give an error if not.
+
+Various other options can be given after the main expression. `assert` turns on explicit size checks, 
+and ranges like `i:3` specify the size in that direction (sometimes this is necessary to specify the shape).
+Adding these to the example above: 
+```julia
+@pretty @cast A[(i,j)] = B[i,j]  i:3, assert
+# begin
+#     @assert_ ndims(B) == 2 "expected a 2-tensor B[i, j]"
+#     @assert_ 3 == size(B, 1) "range of index i must agree"
+#     @assert_ ndims(A) == 1 "expected a 1-tensor A[(i, j)]"
+#     copyto!(A, B)
+# end
+```
 
 ### Ways of slicing
 
@@ -321,7 +189,7 @@ But there are other options, controlled by keywords after the expression:
 
 ```julia
 @cast A[i,k] := S[k][i]             # A = reduce(hcat, B)
-@cast A[i,k] := S[k][i]  cat        # A = hcat(B...)
+@cast A[i,k] := S[k][i]  cat        # A = hcat(B...); often slow
 @cast A[i,k] := S[k][i]  lazy       # A = VectorOfArrays(B)
 
 size(A) == (3, 4) # true
@@ -330,9 +198,6 @@ size(A) == (3, 4) # true
 The option `lazy` uses [RecursiveArrayTools.jl](https://github.com/JuliaDiffEq/RecursiveArrayTools.jl)
 to create a view of the original vectors. This would also be possible with 
 [JuliennedArrays.jl](https://github.com/bramtayl/JuliennedArrays.jl), I may change what gets used later. 
-
-Combining with `cat` is often much slower, but more generic. For example it will work with 
-[Flux](https://github.com/FluxML/Flux.jl)'s TrackedArrays.
 
 Another kind of slices are provided by [StaticArrays.jl](https://github.com/JuliaArrays/StaticArrays.jl),
 in which a Vector of SVectors is just a different interpretation of the same memory as a Matrix. 
@@ -350,6 +215,7 @@ M[1,2]=42; R[2,1]==42               # all views of the original data
 
 When creating such slices, their size ought to be provided, either as a literal integer or 
 through the types. Note that you may also write `S[k]{i:3}`. 
+<!--
 For example, this function is about 100x slower if not given the
 [value type](https://docs.julialang.org/en/latest/manual/types/index.html#"Value-types"-1) `Val(3)`,
 as the size of the SVector is then not known to the compiler:
@@ -366,7 +232,7 @@ cols_fast(M::Matrix, ::Val{N}) where N = @cast A[j]{i:N} == M[i,j]
 Another potential issue is that, if you create such slices after transposing (or some other lazy transformation), 
 then accessing them tends to be slower. Making a copy with `|=` such as `@cast T[i]{k:4} |= M[i,k]` will 
 avoid this.
-
+-->
 
 ### Better broadcasting
 
@@ -377,15 +243,11 @@ In the following example, the product `V .* V' .* V3` contains about 1GB of data
 the writing of which is avoided by giving the option `lazy`: 
 
 ```julia
-using LazyArrays
 V = rand(500);
-V3 = reshape(V, 1,1,:);
 
-@time sum(V .* V' .* V3; dims=(2,3));                 # 0.6 seconds, 950 MB
-@time @reduce W[i] := sum(j,k) V[i] * V[j] * V[k];    # about the same
+@time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k];        # 0.6 seconds, 950 MB
 
-@time sum(BroadcastArray(*, V, V', V3); dims=(2,3));  # 0.025 s, 5 KB
-@time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k]  lazy;  # about the same 
+@time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k]  lazy;  # 0.025 s, 5 KB
 ```
 
 Finally, the package [Strided.jl](https://github.com/Jutho/Strided.jl) can apply multi-threading to 
@@ -393,62 +255,29 @@ broadcasting, and some other magic. You can enable it with the option `strided`,
 
 ```julia
 using Strided # and export JULIA_NUM_THREADS = 4 before starting
-A = randn(4000,4000); 
-B = similar(A);
-Threads.nthreads() == 4 # true
+A = randn(4000,4000); B = similar(A);
 
-@time B .= (A .+ A') ./ 2;                            # 0.12 seconds
-@time @cast B[i,j] = (A[i,j] + A[j,i])/2;             # the same 
+@time @cast B[i,j] = (A[i,j] + A[j,i])/2;             # 0.12 seconds
 
-@time @strided B .= (A .+ A') ./ 2;                   # 0.025 seconds
-@time @cast B[i,j] = (A[i,j] + A[j,i])/2 strided;     # the same
+@time @cast B[i,j] = (A[i,j] + A[j,i])/2 strided;     # 0.025 seconds
 ```
 
-<!--
-## Wishlist
+### Matrix multiplication
 
-* More torture-tests. This is very new, and probably has many bugs.
+For now this is only on master branch; there may be errors with `Vector * Matrix` cases. 
+`TensorCast.batchmul(B,C)` is a naiive implementation of batched matrix multiplication:
 
-* Better writing into sliced arrays? Right now `@cast A[i]{j} = B[i,j] j:3` is allowed, 
-  but `A[i][j]` with ordinary sub-arrays is not.
-
-* More compact notation? This gets messy with many indices, perahps something closer to [`einops`](https://github.com/arogozhnikov/einops)'s notation could be used
-  without having to parse strings (try this with `macro arrow(exs...) @show(exs); nothing end `):
 ```julia
-Y = @arrow [X]  i j k l -n  =>  (i,k) (j,l) n   [i:2, j:3]
-
-Z = @arrow [Y / sum, i:2, j:3]  i\k  j\l n  =>  k l n
+@pretty @mul A[n][i,k] := B[i,j,n] * C[k,j,n]
+# begin
+#     local donkey = permutedims(C, (2, 1, 3))
+#     A = sliceview(batchmul(B, donkey), (:, :, *))
+# end
 ```
-
-* Support for mutating operators `+=` and `*=` etc. like [@einsum](https://github.com/ahwillia/Einsum.jl) does. 
-
-* Ability to write shifts in this notation:
-```julia
-@cast A[i,j] = B[i+1,j+3]     # circshift!(A, B, (1,3)) or perhaps (-1,-3)
-```
-
-* A mullet as awesome as [Rich DuLaney](https://www.youtube.com/watch?v=Ohidv69WfNQ) had.
--->
 
 ## About
 
 First uploaded January 2019 as `TensorSlice.jl` with only the `@shape` macro, and later `@reduce`. 
+Then I understood how to implement arbitrary broadcasting in `@cast`, and this replaced the 
+earlier implementation. 
 
-Then I understood how to implement arbitrary broadcasting in `@cast`, 
-and this replaced the earlier implementation. 
-
-<!--
-### See also
-
-* [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl) and [Einsum.jl](https://github.com/ahwillia/Einsum.jl) 
-
-* 
-
--->
-<!--
-[![Build Status](https://travis-ci.org/mcabbott/TensorCast.jl.svg?branch=master)](https://travis-ci.org/mcabbott/TensorCast.jl)
-
-<img src="https://raw.githubusercontent.com/mcabbott/TensorCast.jl/master/as-seen-on-TV.png" width="50" height="40" align="right"><img src = "https://camo.githubusercontent.com/890acbdcb87868b382af9a4b1fac507b9659d9bf/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f6c6963656e73652d4d49542d626c75652e737667" align="right">
--->
-
-<!-- pandoc -s -o README.html  README.md -->
