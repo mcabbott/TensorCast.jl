@@ -131,9 +131,9 @@ If you need to leave index notation and return, you can insert `@check!` to conf
 (The `!` is because it alters a dictionary, off-stage somewhere.)
 
 ```julia
-@cast! D[α,_,β,_] := C[α,β]         # reshape to size(D,2) == size(D,4) == 1
-E = calculate(D)
-@check! E[n,α]                      # just the check, with no calculation
+@cast! E[α,_,β,_] := C[α,β]         # reshape to size(E,2) == size(D,4) == 1
+F = calculate(E)
+@check! F[n,α]                      # just the check, with no calculation
 ```
 
 These macros are (by definition) run when your code is loaded, not during the calculation, 

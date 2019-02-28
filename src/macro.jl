@@ -373,7 +373,7 @@ function readleft(left, redind, flags, store, icheck, where)
 
     checkZ = nothing
     if icheck
-        checknow = check_macro(:($nameZ[$(outer...)]), where)
+        checknow = check_one(:($nameZ[$(outer...)]), where)
         if check_options.size
             checkZ = checknow # check!(...) to be inserted
         end
@@ -462,7 +462,7 @@ function inputex(A, inex, target, flags, store, icheck, where)
 
     ex = A
     if icheck
-        ex = check_macro(:($A[$(outer...)]), where)         # @check!
+        ex = check_one(:($A[$(outer...)]), where)           # @check!
     end
 
     numB = count(!isequal(:), getB)
@@ -523,7 +523,7 @@ function inputex(A, inex, target, flags, store, icheck, where)
         if :nolazy in flags
             ex = :( permutedims($ex, $perm) )
         elseif :strided in flags
-            ex = :( strided_permutedims($ex, $perm) )
+            ex = :( TensorCast.strided_permutedims($ex, $perm) )
         elseif perm == (2,1)
             ex = :( transpose($ex) )
         else
