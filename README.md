@@ -23,10 +23,10 @@ but otherwise understands all the same things:
 
 @reduce S[i] = sum(n) -P[i,n] * log(P[i,n]/Q[n]) # sum!(S, @. -P*log(P/Q')) into exising S
 
-@reduce W[μ,ν,J] := prod(i:2) V[(i,J)][μ,ν]      # products of pairs of matrices, stacked
+@reduce W[μ,ν,_,J] := prod(i:2) V[(i,J)][μ,ν]    # products of pairs of matrices, stacked
 ```
 
-Finally `@mul` handles matrix multiplication of two tensors (and again understands the same things):
+Finally `@mul` handles matrix multiplication of exactly two tensors:
 
 ```julia
 @mul T[i,_,j] := U[i,k,k′] * V[(k,k′),j]    # matrix multiplication, summing over (k,k′)
@@ -34,8 +34,9 @@ Finally `@mul` handles matrix multiplication of two tensors (and again understan
 @mul W[β][i,j] := X[i,k,β] * Y[k,j,β]       # batched W[β] = X[:,:,β] * Y[:,:,β] ∀ β
 ```
 
-These are intended to complement the macro from [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl),
-which instead performs Einstein-convention contractions and traces, in a very similar notation. 
+These are intended to complement the macros from some existing packages.
+[TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl) 
+performs Einstein-convention contractions and traces, in a very similar notation. 
 Here it is implicit that repeated indices are summed over: 
 
 ```julia
@@ -44,7 +45,7 @@ Here it is implicit that repeated indices are summed over:
 ```
 
 Similar notation is also used by the macro from [Einsum.jl](https://github.com/ahwillia/Einsum.jl),
-where again it is implicit that all indices appearing only on the right are summed over. 
+which sums the entire right hand side over any indices not appearing on the left. 
 This allows arbitrary (element-wise) functions:
 
 ```julia
@@ -55,17 +56,20 @@ This allows arbitrary (element-wise) functions:
 There is some overlap of operations which can be done with two (or all three) of these packages. 
 However they produce very different code for actually doing what you request. 
 The original `@einsum` simply writes the necessary set of nested loops. 
-Instead `@tensor` works out a sequence of contraction and trace operations, calling optimised BLAS routines where possible. 
-<!-- (And [ArrayMeta.jl](https://github.com/shashi/ArrayMeta.jl) aimed to do a wide variety of operations efficiently, but seems to be abandonned.) -->
+Instead `@tensor` works out a sequence of contraction and trace operations, 
+calling optimised BLAS routines where possible. 
+(And [ArrayMeta.jl](https://github.com/shashi/ArrayMeta.jl) aimed to do a wide variety of operations efficiently, 
+but seems to be abandonned.)
 
-The  macros from this package aim to produce simple Julia commands: 
+The  macros from this package aim instead to produce simple Julia commands: 
 often just a string of `reshape` and `permutedims` and `eachslice` and so on,
 plus a native [broadcasting expression](https://julialang.org/blog/2017/01/moredots) if needed, 
 and `sum` /  `sum!`, or `*` / `mul!`. 
-This means that they are very generic, and will (mostly) work well on 
-[Flux](https://github.com/FluxML/Flux.jl)'s TrackedArrays, on the GPU via 
-[CuArrays](https://github.com/JuliaGPU/CuArrays.jl),
-and on almost any other kind of N-dimensional array.
+This means that they are very generic, and will (mostly) work well 
+with small [StaticArrays](https://github.com/JuliaArrays/StaticArrays.jl), 
+with [Flux](https://github.com/FluxML/Flux.jl)'s TrackedArrays, 
+on the GPU via [CuArrays](https://github.com/JuliaGPU/CuArrays.jl),
+and on almost anything else.
 
 For those who speak Python, `@cast` and `@reduce` allow similar operations to 
 [`einops`](https://github.com/arogozhnikov/einops) (minus the cool video, but plus broadcasting)
@@ -75,7 +79,7 @@ The function of `@check!` (see [below](#checking)) is similar to [`tsalib`](http
 
 ## Installation
 
-You need [Julia](https://julialang.org/downloads/) 1.0 or later. This package is now registered:
+You need [Julia](https://julialang.org/downloads/) 1.0 or later:
 
 ```julia
 ] add TensorCast
@@ -83,17 +87,17 @@ You need [Julia](https://julialang.org/downloads/) 1.0 or later. This package is
 
 ## Inside
 
-There is another macro `@pretty` which prints the generated expression: 
+Use the macro `@pretty` to print out the generated expression: 
 
 ```julia
 @pretty @cast A[(i,j)] = B[i,j]
 # copyto!(A, B)
 
-@pretty @cast A[k][i,j] := B[i,(j,k)]  k:length(C)
+@pretty @cast A[k][i,j] := B[i,(j,k),3]  k:length(C)
 # begin
-#     @assert_ ndims(B) == 2 "expected a 2-tensor B[i, (j, k)]"
+#     @assert_ ndims(B) == 3 "expected a 3-tensor B[i, (j, k), 3]"
 #     local (sz_i, sz_j, sz_k) = (size(B, 1), :, length(C))
-#     local emu = reshape(B, (sz_i, sz_j, sz_k))
+#     local emu = reshape(view(B, :, :, 3), (sz_i, sz_j, sz_k))
 #     A = sliceview(emu, (:, :, *))
 # end
 
@@ -106,7 +110,7 @@ There is another macro `@pretty` which prints the generated expression:
 
 Here `TensorCast.sliceview(D, (:,:,*)) = collect(eachslice(D, dims=3))`, 
 and  `TensorCast.orient(R, (*,:))` will reshape or tranpose R to lie long the second direction. 
-Notice that `R[j]'` means element-wise complex conjugation.
+Notice that `R[c]'` means element-wise complex conjugation.
 
 (`@pretty` is just a variant of the built-in `@macroexpand1`, with animal names from
 [MacroTools.jl](https://github.com/MikeInnes/MacroTools.jl) in place of generated symbols.)
@@ -132,7 +136,7 @@ If you need to leave index notation and return, you can insert `@check!` to conf
 
 ```julia
 @cast! E[α,_,β,_] := C[α,β]         # reshape to size(E,2) == size(D,4) == 1
-F = calculate(E)
+F = identity(E)
 @check! F[n,α]                      # just the check, with no calculation
 ```
 
@@ -215,24 +219,6 @@ M[1,2]=42; R[2,1]==42               # all views of the original data
 
 When creating such slices, their size ought to be provided, either as a literal integer or 
 through the types. Note that you may also write `S[k]{i:3}`. 
-<!--
-For example, this function is about 100x slower if not given the
-[value type](https://docs.julialang.org/en/latest/manual/types/index.html#"Value-types"-1) `Val(3)`,
-as the size of the SVector is then not known to the compiler:
-
-```julia
-cols_slow(M::Matrix) = @cast A[j]{i} == M[i,j]  i:size(M,1)
-
-cols_fast(M::Matrix, ::Val{N}) where N = @cast A[j]{i:N} == M[i,j]
-
-@code_warntype cols_slow(M) # with complaints ::Any in red
-@code_warntype cols_fast(M, Val(3))
-```
-
-Another potential issue is that, if you create such slices after transposing (or some other lazy transformation), 
-then accessing them tends to be slower. Making a copy with `|=` such as `@cast T[i]{k:4} |= M[i,k]` will 
-avoid this.
--->
 
 ### Better broadcasting
 
@@ -243,7 +229,7 @@ In the following example, the product `V .* V' .* V3` contains about 1GB of data
 the writing of which is avoided by giving the option `lazy`: 
 
 ```julia
-V = rand(500);
+V = rand(500); V3 = reshape(V,1,1,:);
 
 @time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k];        # 0.6 seconds, 950 MB
 
