@@ -212,16 +212,16 @@ end
 end
 @testset "combined" begin
 
-    Bc = [ rand(3) for b=1:2 ]
+    Bc = [ rand(3) for b=1:2 ] # Bc = [(1:3) .+ 10i for i=1:2]
     @cast f[(b,c)] := Bc[b][c]
     @test size(f) == (6,)
-    @cast bc[b,c] := f[(b,c)] b:2
+    @cast bc[b,c] |= f[(b,c)] b:2 # for in-place to work below, this bc is NOT a view of f
     @test size(bc) == (2,3)
     @test bc[1,2] == Bc[1][2]
 
     @cast f[(c,b)] = Bc[b][c] ! # in-place
     @cast bc[b,c] = f[(c,b)] !  # in-place
-    @test_broken bc[1,2] == Bc[1][2]
+    @test bc[1,2] == Bc[1][2]
 
     Cdaeb = [rand(4,1,5,2) for i=1:3]; # sizes match abcde now
     Z = @cast [(c,d),e][a,b] := Cdaeb[c][d,a,e,b] # alphabetical = canonical
@@ -320,6 +320,14 @@ end
     A2 = @cast A[(i,j)] := B[i][j]
     A3 = @cast A[(i,j)] = B[i][j] # for a while this in-place thing returned the wrong shape
     @test size(A) == size(A2) == size(A3) == (6,)
+
+    # This was broken above for a while:
+    Bc = [(1:3) .+ 10i for i=1:2]
+    @cast f[(b,c)] := Bc[b][c]
+    @cast bc[b,c] := f[(b,c)] b:2 # this bc is a view of f, NB
+    @cast f[(c,b)] = Bc[b][c]
+    @cast bc[b,c] = f[(c,b)]  # thus this copyto! is confusing
+    @test bc[1,2] != Bc[1][2] # and in fact leads to duplicates here
 
 end
 @testset "errors" begin

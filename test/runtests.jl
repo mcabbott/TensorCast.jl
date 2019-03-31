@@ -2,21 +2,21 @@
 using TensorCast
 using Test
 
-using StaticArrays 
+using StaticArrays
 
-@testset "@shape"  begin include("shape.jl")   end
+@testset "ex-@shape" begin include("shape.jl") end
 @testset "@reduce" begin include("reduce.jl")  end
 @testset "@cast"   begin include("casting.jl") end
 @testset "@check!" begin include("check.jl")   end
 @testset "@mul"    begin include("mul.jl")     end
 
 @testset "helper functions" begin include("parse.jl") end
-@testset "data functions" begin include("cat.jl") end
+@testset "data functions"   begin include("cat.jl")   end
 
 @testset "advertising" begin
     @testset "new readme" begin
 
-        
+
         mat = (1:4)' .+ rand(2,4)
         @cast rows[r][c] := mat[r,c]
         @cast cols[♜][🚣] := rows[🚣][♜]  # unicode 👍
@@ -27,7 +27,7 @@ using StaticArrays
         B = rand(2*5, 3)
         @cast A[i,j,k] := B[(i,k),j]  i:2
         @test size(A) == (2,3,5)
-        @cast A[i,j,k] = B[(i,k),j]; 
+        @cast A[i,j,k] = B[(i,k),j];
 
 
         imgs = [ rand(8,8) for i=1:16 ];
@@ -42,7 +42,7 @@ using StaticArrays
         @test size(G) == 2 .* size(H)
 
         @reduce H4[a, b] := maximum(α:4,β:4)  G[α\a, β\b]
-        @test size(G) == 4 .* size(H4) 
+        @test size(G) == 4 .* size(H4)
 
         W = randn(2,3,5,7);
         @cast Z[_,i,_,k] := W[2,k,4,i]  # equivalent to Z[1,i,1,k] on left
@@ -129,7 +129,7 @@ using StaticArrays
         @test size(Z) == (3,4)
 
         B = [rand(2,3) for k=1:4, l=1:5];
-        @cast A[i,j,k,l] := B[k,l][i,j]  
+        @cast A[i,j,k,l] := B[k,l][i,j]
         @test size(A) == (2,3,4,5)
 
 
