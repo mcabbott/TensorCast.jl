@@ -4,56 +4,55 @@ export @cast, @cast!, @reduce, @reduce!
     @cast Z[i,j,...] := f(A[j,k,...])  options
 
 Macro for broadcasting, reshaping, and slicing of arrays in index notation.
-Understands the following things: 
+Understands the following things:
 * `A[i,j,k]` is a three-tensor with these indices.
-* `B[(i,j),k]` is the same thing, reshaped to a matrix. Its first axis (the bracket) is indexed 
+* `B[(i,j),k]` is the same thing, reshaped to a matrix. Its first axis (the bracket) is indexed
   by `n = i + (j-1) * N` where `i ∈ 1:N`. This may also be written `B[i\\j,k]`.
 * `C[k][i,j]` is a vector of matrices.
 * `D[j,k]{i}` is an ordinary matrix of `SVector`s, which may be reinterpreted from `A[i,j,k]`.
-* `E[i,_,k]` has two nontrivial dimensions, and `size(E,2)==1`. On the right hand side 
+* `E[i,_,k]` has two nontrivial dimensions, and `size(E,2)==1`. On the right hand side
   (or when writing to an existing array) you may also write `E[i,3,k]` meaning `view(E, :,3,:)`,
   or `E[i,\$c,j]` to use a variable `c`. Fixing inner indices, like `C[k][i,_]`, is not allowed.
-* `F[i,-j,k]` means roughly `reverse(F, dims=2)`. 
-* `g(x)[i,j,k]` is allowed, and `g(x)` should be evaluated only once. 
-* `H[i,j]'` conjugates each element, equivalent to `H'[j,i]` which is the 
-  conjugate-transpose of the matrix. 
+* `F[i,-j,k]` means roughly `reverse(F, dims=2)`.
+* `g(x)[i,j,k]` is allowed, and `g(x)` should be evaluated only once.
+* `H[i,j]'` conjugates each element, equivalent to `H'[j,i]` which is the
+  conjugate-transpose of the matrix.
 
-The left and right hand sides must have all the same indices. 
-See `@reduce` for a related macro which can sum over things. 
+The left and right hand sides must have all the same indices.
+See `@reduce` and `@mul` for related macros which can sum over things.
 
-If several tensors appear on the right hand side, then this represents a broadcasting operation, 
-and the necessary re-orientations of axes are automatically inserted. 
-Some attempt is made to shield scalar functions from broadcasting, 
-e.g. `@cast A[i] := log(B[i]) / log(2)` will avoid `log.(2)` and evaluate `log(2)` once. 
-But this is imperfect, confirm with `@pretty @cast ...` if concerned. 
+If several tensors appear on the right hand side, then this represents a broadcasting operation,
+and the necessary re-orientations of axes are automatically inserted.
+Some attempt is made to shield scalar functions from broadcasting,
+e.g. `@cast A[i] := log(B[i]) / log(2)` will avoid `log.(2)` and evaluate `log(2)` once.
+But this is imperfect, confirm with `@pretty @cast ...` if concerned.
 
 The following actions are possible:
 * `=` writes into an existing array, `copyto!(Z, ...)`.
 * `:=` creates a new object... which may or may not be a view of the input:
-* `==` insists on a view of the old object (error if impossible), and `|=` insists on a copy. 
-* `->` or `=>` creates an anonymous function, for which the output must be on the right.
-   For example `@cast (A[i] + B[j]) -> Z[i,j]` gives `(A,B) -> A .+ B'`, 
-   notice that brackets are needed for several terms before `->`, although not with `=>`. 
+* `==` insists on a view of the old object (error if impossible), and `|=` insists on a copy.
+* `=>` creates an anonymous function, for which the output must be on the right.
+   For example `@cast A[i] + B[j]' => Z[i,j]` gives `(A,B) -> A .+ B'`.
 
-Re-ordering of indices `Z[k,j,i]` is done lazily with `PermutedDimsArray(A, ...)`. 
-Reversing of an axis `F[i,-j,k]` is also done lazily, by `Reverse{2}(F)` which makes a `view`. 
-Using `|=` (or broadcasting) will produce a simple `Array`. 
+Re-ordering of indices `Z[k,j,i]` is done lazily with `PermutedDimsArray(A, ...)`.
+Reversing of an axis `F[i,-j,k]` is also done lazily, by `Reverse{2}(F)` which makes a `view`.
+Using `|=` (or broadcasting) will produce a simple `Array`.
 
 Options can be specified at the end (if several, separated by `,` i.e. `options::Tuple`)
-* `i:3` supplies the range of index `i`. Variables and functions like `j:Nj, k:length(K)` 
-  are allowed. 
-* `assert` or `!` will turn on explicit dimension checks of the input. 
+* `i:3` supplies the range of index `i`. Variables and functions like `j:Nj, k:length(K)`
+  are allowed.
+* `assert` or `!` will turn on explicit dimension checks of the input.
   (Providing ranges may also turn these on, but imperfectly, confirm with `@pretty @cast ...`.)
-* `cat` will glue slices by things like `hcat(A...)` instead of `reduce(hcat, A)`,
-  and `lazy` will instead make a `VectorOfArrays` container. 
+* `cat` will glue slices by things like `hcat(A...)` instead of the default `reduce(hcat, A)`,
+  and `lazy` will instead make a `VectorOfArrays` container.
 * `nolazy` disables `PermutedDimsArray` and `Reverse` in favour of `permutedims` and `reverse`.
-* `strided` will place `@strided` in front of broadcasting operations, 
-  and use `@strided permutedims(A, ...)` instead of `PermutedDimsArray(A, ...)`. 
+* `strided` will place `@strided` in front of broadcasting operations,
+  and use `@strided permutedims(A, ...)` instead of `PermutedDimsArray(A, ...)`.
   For this you need to install and load the package: `using Strided`.
 
-Static slices `D[j,k]{i}` need `using StaticArrays`, and to create them you should give all 
+Static slices `D[j,k]{i}` need `using StaticArrays`, and to create them you should give all
 slice dimensions explicitly. You may write `D[k]{i:2,j:2}` to specify `Size(2,2)` slices.
-They are made most cleanly from the first indices of the input. 
+They are made most cleanly from the first indices of the input, i.e. this `D` from `A[i,j,k]`.
 """
 macro cast(exs...)
     where = (mod=__module__, src=__source__, str=unparse("@cast", exs...))
@@ -71,34 +70,34 @@ macro cast!(exs...)
 end
 
 """
-    @reduce A[i] := sum(j,k) B[i,j,k]             # A = vec(sum(B, dims=(2,3))) 
+    @reduce A[i] := sum(j,k) B[i,j,k]             # A = vec(sum(B, dims=(2,3)))
     @reduce A[i] := prod(j) B[i] + ε * C[i,j]     # A = vec(prod(B .+ ε .* C, dims=2))
     @reduce A[i] = sum(j) exp( C[i,j] / D[j] )    # sum!(A, exp.(C ./ D') )
 
 Tensor reduction macro:
-* The reduction function can be anything which works like `sum(B, dims=(1,3))`, 
-  for instance `prod` and `maximum` and `Statistics.mean`. 
-* In-place operations `Z[j] = sum(...` will construct the banged version of the given function's name, 
+* The reduction function can be anything which works like `sum(B, dims=(1,3))`,
+  for instance `prod` and `maximum` and `Statistics.mean`.
+* In-place operations `Z[j] = sum(...` will construct the banged version of the given function's name,
   which must work like `sum!(Z, A)`.
-* The tensors can be anything that `@cast` understands, including gluing of slices `B[i,k][j]` 
-  and reshaping `B[i\\j,k]`. 
-* If there are several tensors (or scalars) on the right, then this is a broadcasting operation. 
-* Index ranges may be given afterwards (as for `@cast`) or inside the reduction `sum(i:3, k:4)`. 
-* All indices appearing on the right must appear either within `sum(...)` etc, or on the left. 
+* The tensors can be anything that `@cast` understands, including gluing of slices `B[i,k][j]`
+  and reshaping `B[i\\j,k]`. See `? @cast` for the complete list.
+* If there are several tensors (or scalars) on the right, then this is a broadcasting operation.
+* Index ranges may be given afterwards (as for `@cast`) or inside the reduction `sum(i:3, k:4)`.
+* All indices appearing on the right must appear either within `sum(...)` etc, or on the left.
 
 
     F = @reduce sum(i,j)  B[i] + γ * D[j]         # sum(B .+ γ .* D')
     @reduce G[] := sum(i,j)  B[i] + γ * D[j]      # F == G[]
 
-Complete reduction to a scalar output `F`, or a zero-dim array `G`. 
+Complete reduction to a scalar output `F`, or a zero-dim array `G`.
 
     @reduce Z[k] := sum(i,j) A[i] * B[j] * C[k]  lazy, i:N, j:N, k:N
 
-The option `lazy` replaces the broadcast expression with a `BroadcastArray`, 
-to avoid `materialize`ing the entire array before summing. In the example this is of size `N^3`.  
+The option `lazy` replaces the broadcast expression with a `BroadcastArray`,
+to avoid `materialize`ing the entire array before summing. In the example this is of size `N^3`.
 
-The option `strided` will place `@strided` in front of the broadcasting operation. 
-You need `using Strided` for this to work. 
+The option `strided` will place `@strided` in front of the broadcasting operation.
+You need `using Strided` for this to work.
 """
 macro reduce(exs...)
     where = (mod=__module__, src=__source__, str=unparse("@reduce", exs...)) # wtf?
@@ -124,14 +123,14 @@ sizeA      -- known & used for fixing ranges
 getB, numB -- for view(A, get), and number of fixed indices
 sizeC      -- after reshaping outer indices, in terms of sz_i
 codeD      -- for gluing
-indEflat   -- after gluing 
+indEflat   -- after gluing
 negF       -- done before permutedims
 shiftG     -- ditto, but not yet written
-permH      -- 
-codeI      -- to orient, if lacking some indices. 
-            
-Of these things from LHS, only really store + canon need to be passed to RHS function inputex() 
-via walker(). But many need to be passed from readleft() to output, packaged into: 
+permH      --
+codeI      -- to orient, if lacking some indices.
+
+Of these things from LHS, only really store + canon need to be passed to RHS function inputex()
+via walker(). But many need to be passed from readleft() to output, packaged into:
 outUZ = (redUind, negV, codeW, sizeX, getY, numY, sizeZ, nameZ)
 
 flags      -- todo, to-done, and options
@@ -140,7 +139,7 @@ canon      -- canonical list of indices
 canonsize  -- filled with size(A,2) etc, from store, at most one (:)
 
 redUind    -- if reducing, this is done before slicing
-negV       -- directions to reverse, done here. 
+negV       -- directions to reverse, done here.
 codeW      -- for slicing. sizeWstatic is Size() of the slice.
 sizeX      -- after slicing, container size, in sz_i
 getY, numY -- for view(Z, get) in-place, and number fixed
@@ -176,7 +175,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
             right = extwo
             options = exthree
             push!(flags, :reduce)
-            push!(flags, :scalar) 
+            push!(flags, :scalar)
             V && @info "full reduce" right redfun Tuple(redind)
 
         else
@@ -199,7 +198,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
         else
             throw(MacroError("@cast doesn't know what to do with $exone", where))
         end
-        V && @info "no reduction" left right 
+        V && @info "no reduction" left right
         options = extwo
         redind = []
         redfun = identity
@@ -225,7 +224,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
 
     outex = MacroTools.@q begin end
 
-    if @capture(right, AA_[ii__] ) || @capture(right, AA_{ii__} ) 
+    if @capture(right, AA_[ii__] ) || @capture(right, AA_{ii__} )
         newright = walker(outex, right, canon, flags, store, icheck, where)
     else
         newright = MacroTools.prewalk(
@@ -244,7 +243,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
 
     V && @info "before in/out choice" store flags Tuple(canonsize)
 
-    if :inplace in flags 
+    if :inplace in flags
 
         #===== in-place output  =====#
 
@@ -257,8 +256,8 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
         if :finalres in flags
             push!(outex.args, nameZ)
         end
-    
-    else 
+
+    else
         #===== out-of-place output  =====#
 
         if :broadcast in flags
@@ -288,7 +287,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
 
     if :assert in flags || :(!) in flags || check_options.size
         for ch in store.checks
-            pushfirst!(outex.args, ch) 
+            pushfirst!(outex.args, ch)
         end
     end
 
@@ -313,8 +312,8 @@ end
 """
     canon, outUZ, nameZ, checkZ = readleft(left, redind, flags, store, icheck, where)
 
-outUZ = (redUind, negV, codeW, sizeX, getY, numY, sizeZ) 
-are things passed to output construction. 
+outUZ = (redUind, negV, codeW, sizeX, getY, numY, sizeZ)
+are things passed to output construction.
 """
 function readleft(left, redind, flags, store, icheck, where)
 
@@ -329,7 +328,7 @@ function readleft(left, redind, flags, store, icheck, where)
         inner = []
         outer = []
         Z = nothing
-    else 
+    else
         throw(MacroError("readleft doesn't know what to do with $left", where))
     end
 
@@ -397,32 +396,32 @@ function walker(outex, ex, canon, flags, store, icheck, where)
 
         push!(store.rightnames, A) # used for @cast A[i,j] -> B[i\j]
 
-        # if we have f(x)[i,j] then we should evaluate f just once, e.g. 
+        # if we have f(x)[i,j] then we should evaluate f just once, e.g.
         # @pretty @cast A[i]{j:5} |= rand(15)[i\j]
         if !isa(A, Symbol)
-            Atop = gensym(:A) 
+            Atop = gensym(:A)
             push!(store.topex, :(local $Atop = $A ) )
             A = Atop
         end
 
         Aval = inputex(A, ex, canon, flags, store, icheck, where)
 
-        if isa(Aval, Symbol) 
+        if isa(Aval, Symbol)
             ex = Aval
         else
-            Asym = gensym(:A) 
-            push!(outex.args, :(local $Asym = $Aval) ) 
-            ex =  Asym 
+            Asym = gensym(:A)
+            push!(outex.args, :(local $Asym = $Aval) )
+            ex =  Asym
         end
         V && @info "walker" ex Aval
 
     # catch A[i,j]' as element-wise conj
     elseif @capture(ex, arg_')
         ex = :( Base.conj($arg) )
-        
+
     # try to protect log(2) etc from @. , but not log(A[i])
-    elseif @capture(ex, f_(x_Symbol) ) || @capture(ex, f_(x_Int) ) || @capture(ex, f_(x_Float64) ) 
-        fxsym = gensym(:fx) 
+    elseif @capture(ex, f_(x_Symbol) ) || @capture(ex, f_(x_Int) ) || @capture(ex, f_(x_Float64) )
+        fxsym = gensym(:fx)
         push!(outex.args, :( local $fxsym = $ex ))
         ex = fxsym
     end
@@ -434,13 +433,13 @@ end
 """
     inputex(:A, :( A[i,j][k] ), target, flags, store, icheck, where)
 
-Figures out all the steps needed to transform the given tensor to a boring one, 
-aligned with the given target, and returns the necessary expression. 
+Figures out all the steps needed to transform the given tensor to a boring one,
+aligned with the given target, and returns the necessary expression.
 Writes sizes which can be read from `A` into `store`, and necessary reshapes in terms of `sz_i`.
 
-Now `target` need not be `== canon`, since `sz_i` is independent of that. 
+Now `target` need not be `== canon`, since `sz_i` is independent of that.
 
-Now needs explicitly the name of tensor `A`, 
+Now needs explicitly the name of tensor `A`,
 so that when `inex = rand(2,3)[i,j]` this is not evaluated twice.
 """
 function inputex(A, inex, target, flags, store, icheck, where)
@@ -492,7 +491,7 @@ function inputex(A, inex, target, flags, store, icheck, where)
             codeD = [*,:]
             dirs = [dirs[2], dirs[1]]
         end
-        # you could perform more elaborate versions of that, e.g. for this: 
+        # you could perform more elaborate versions of that, e.g. for this:
         # @pretty @reduce A[i\j,_] = sum(k) B[i,j][k]
         # however only copy_glue and julienne_glue understand arbitrary codes
 
@@ -519,13 +518,13 @@ function inputex(A, inex, target, flags, store, icheck, where)
 
     perm = ntuple(identity, length(dirs))
     if dirs != sort(dirs)                                   # A[j,i]
-        perm = Tuple(sortperm(dirs)) 
+        perm = Tuple(sortperm(dirs))
         if :nolazy in flags
             ex = :( permutedims($ex, $perm) )
         elseif :strided in flags
             ex = :( TensorCast.strided_permutedims($ex, $perm) )
-        elseif perm == (2,1)
-            ex = :( transpose($ex) )
+        # elseif perm == (2,1)
+        #     ex = :( transpose($ex) ) # now avoiding transpose because it's recursive
         else
             ex = :( PermutedDimsArray($ex, $perm) )
         end
@@ -557,12 +556,12 @@ end
 """
      outputnew(newright, outUZ, redfun, canonsize, canon, flags, store, where)
 
-For the case of `:=`, this constructs the expression to do reduction if needed, 
-and slicing/reshaping/reversing for LHS. 
+For the case of `:=`, this constructs the expression to do reduction if needed,
+and slicing/reshaping/reversing for LHS.
 
 outUZ = (redUind, negV, codeW, indW, sizeX, getY, numY, sizeZ)
 """
-function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, sizeZ), 
+function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, sizeZ),
         redfun, canonsize, canon, flags, store, where)
 
     ex = newright
@@ -580,7 +579,7 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, siz
         ex = :( $redfun($ex, dims=$rdims) )
         if :outshape in flags && !(:slice in flags || :staticslice in flags)
             # then we need not dropdims, as reshape will handle it
-        else 
+        else
             ex = :( dropdims($ex, dims=$rdims) )
         end
     end
@@ -617,7 +616,7 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, siz
     if :mustcopy in flags && !(:havecopied in flags) && !(:broadcast in flags)
         ex = :( copy($ex) )                                 # Z[i] |= ...
     elseif :mustcopy in flags && :staticslice in flags
-        ex = :( copy($ex) )  
+        ex = :( copy($ex) )
 
     elseif :mustview in flags && :havecopied in flags       # Z[i] == ...
         m_error("can't do what you ask without copying, sorry", where)
@@ -642,12 +641,12 @@ end
 For the case of `=` this figures out how to write RHS into LHS, in one of three ways:
 * reduction `sum!(Z, newright)`
 * broadcasting `@. Z[...] = newright`
-* neither, `copyto!(Z, newright)` 
+* neither, `copyto!(Z, newright)`
 
 No longer attempts to write `permutedims!(Z, A, ...)`, now just `copyto!(Z, PermutedDimsArray(A, ...))`.
 Doesn't really need so many arguments...
 """
-function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, sizeZ), 
+function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, sizeZ),
         redfun, canonsize, canon, flags, store, nameZ, where)
 
     if :slice in flags
@@ -657,7 +656,7 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
         m_error("can't reverse axes of in-place output, try moving -$(negV[1]) to right hand side", where)
     end
 
-    if :reduce in flags                                     # sum!(revleft, newright) 
+    if :reduce in flags                                     # sum!(revleft, newright)
 
         if :broadcast in flags
             newright = Broadcast.__dot__(newright)
@@ -666,7 +665,7 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
             end
         end
 
-        # working backwards 
+        # working backwards
         revleft = nameZ
 
         if numY > 0
@@ -694,7 +693,7 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
 
     elseif :broadcast in flags                              # @. revleft[...] = newright
 
-        # working backwards 
+        # working backwards
         revleft = nameZ
 
         if numY > 0 # when getY has only : and 1, and backshape, then you could skip this
@@ -717,9 +716,9 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
         bc = Broadcast.__dot__(newright)
         ex = :( $revleft .= $bc )
 
-    else                                                    # copyto!(revleft, newright) 
+    else                                                    # copyto!(revleft, newright)
 
-        # working backwards 
+        # working backwards
         revleft = nameZ
 
         if numY > 0
@@ -765,10 +764,10 @@ function packagecheck(flags, where)
     if :staticslice in flags || :staticglue in flags && where != nothing
         isdefined(where.mod, :StaticArrays) || m_error("can't use static arrays without using StaticArrays", where)
     end
-    if :strided in flags 
+    if :strided in flags
         isdefined(TensorCast, :Strided) || m_error("can't use option strided without using Strided", where)
     end
-    if :julienne in flags 
+    if :julienne in flags
         isdefined(TensorCast, :JuliennedArrays) || m_error("can't use option julienne without using JuliennedArrays", where)
     end
 end
@@ -787,7 +786,7 @@ function makelazy(bc::Expr)
     V && @info "before LazyArrays" bc
 
     @assert bc.head == :(.)      # always a dot
-    oprator = bc.args[1]         # is the first operator 
+    oprator = bc.args[1]         # is the first operator
     bc.args[2]                   # is its tuple of arguments
     @assert length(bc.args) == 2 # and there's nothing more
     @assert bc.args[2].head == :tuple
