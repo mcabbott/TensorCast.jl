@@ -234,3 +234,12 @@ Lazy like `transpose`, but not recursive.
 """
 PermuteDims(A::AbstractMatrix) = PermutedDimsArray(A, (2,1))
 PermuteDims(A::AbstractVector) = reshape(A,1,:)
+
+"""
+    diagview(M)
+Like `diag(M)` but makes a view.
+"""
+function diagview(A::AbstractMatrix)
+    r,c = size(A)
+    view(A, 1:(r+1):r*c)
+end

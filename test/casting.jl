@@ -15,7 +15,7 @@
     @cast Z1[j,i] = bc[i,j] .+ b[i] .* c[j]^3
     @test A == Z1[:,:,1]
 
-    A = @. exp(-bc + 2*c') / sqrt(b)    
+    A = @. exp(-bc + 2*c') / sqrt(b)
     @cast B[i,j] := exp(-bc[i,j] + 2*c[j]) / sqrt(b[i])
     @test A == B
 
@@ -72,7 +72,7 @@ end
 
 end
 @testset "complex" begin
-    
+
     C = rand(3,3) .+ im .* rand(3,3)
     R = rand(1:33, 3,3)
 
@@ -84,6 +84,31 @@ end
 
     @cast B[i,j] := R[i,j] + C'[i,j]
     @test B == R .+ C'
+
+end
+@testset "diag" begin
+
+    B = rand(4,5)
+    @test TensorCast.diagview(B) == TensorCast.diag(B) # really LinearAlgebra!
+
+    R = rand(2,2)
+    @cast V[i] := R[i,i]
+    @cast V2[i] := R[i,i] nolazy
+
+    @test V[1] == R[1,1]
+    @test V[2] == R[2,2]
+    @test V == V2
+
+    # R4 = rand(1:10, 4)
+    # @cast W[i] := R4[i\i]^2 # diag(reshape(R4, (sz_i, sz_i))) with sz_i = (:)
+    # @test W[1] == R4[1]^2
+    # @test W[2] == R4[4]^2
+
+    M = [repeat([10i+j],2) for i=1:3, j=1:3]
+    @cast A[i,k] := M[i,i][k]
+
+    @test A[1,1] == A[1,2] == 11
+    @test A[3,1] == A[3,2] == 33
 
 end
 @testset "anonymous functions" begin

@@ -7,7 +7,7 @@ Macro for broadcasting, reshaping, and slicing of arrays in index notation.
 Understands the following things:
 * `A[i,j,k]` is a three-tensor with these indices.
 * `B[(i,j),k]` is the same thing, reshaped to a matrix. Its first axis (the bracket) is indexed
-  by `n = i + (j-1) * N` where `i ∈ 1:N`. This may also be written `B[i\\j,k]`.
+  by `n = i + (j-1) * N` where `i ∈ 1:N`. This may also be written `B[i\\j,k]` or `B[i⊗j,k]`.
 * `C[k][i,j]` is a vector of matrices.
 * `D[j,k]{i}` is an ordinary matrix of `SVector`s, which may be reinterpreted from `A[i,j,k]`.
 * `E[i,_,k]` has two nontrivial dimensions, and `size(E,2)==1`. On the right hand side
@@ -17,8 +17,10 @@ Understands the following things:
 * `g(x)[i,j,k]` is allowed, and `g(x)` should be evaluated only once.
 * `H[i,j]'` conjugates each element, equivalent to `H'[j,i]` which is the
   conjugate-transpose of the matrix.
+* `J[i,i]` means `diag(J)[i]`, but only for matrices: `K[i,i,k]` is an error.
 
-The left and right hand sides must have all the same indices.
+The left and right hand sides must have all the same indices,
+with the sole exception of `J[i,i]`.
 See `@reduce` and `@mul` for related macros which can sum over things.
 
 If several tensors appear on the right hand side, then this represents a broadcasting operation,
@@ -467,7 +469,7 @@ function inputex(A, inex, target, flags, store, icheck, where)
 
     flatE, getB, _, negF = parse!(store, A, outer, inner)
 
-    checkrepeats(flatE, " in term $inex", where)
+    # checkrepeats(flatE, " in term $inex", where)
     append!(store.seen, flatE)
 
     ex = A
@@ -491,6 +493,17 @@ function inputex(A, inex, target, flags, store, icheck, where)
         ex = :( reshape($ex, $sizeCex) )
         push!(flags, :needsize)
     end
+
+    if length(flatE)-length(inner) == 2 && flatE[end] == flatE[end-1]  # A[i,i] special case
+        if :nolazy in flags
+            ex = :( TensorCast.diag($ex) ) # LinearAlgebra might not be loaded by caller
+        else
+            ex = :( TensorCast.diagview($ex) )
+        end
+        pop!(flatE) # remove repeated index from the end
+    end
+
+    checkrepeats(flatE, " in term $inex", where) # after dealing with diag story
 
     dirs = [ findcheck(i, target, where) for i in flatE ]
 
