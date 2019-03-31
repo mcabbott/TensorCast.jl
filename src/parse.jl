@@ -1,9 +1,25 @@
 
-const flag_list = Any[ :!, :assert, :cat, :glue, :strided, :lazy, :julienne, :batched, :nolazy ]
+const flag_list = Any[ :!, :assert,
+    :cat, :glue, :lazy, :nolazy,
+    :strided, :julienne, :batched,
+    :named, :axis ]
 
 #= TODO
 
-@pretty @cast A[i\j\k] := B[i,j\k] + C[k] # this could have reshape(right, :) but not worth a fight?
+# this gives an error -- change to sizeinfer! which updates dict, and call that?
+# or perhaps just check at :staticslice & throw an error
+@pretty @cast A[k]{i,j} := B[i,(j,k)]  k:length(C)
+
+# I thought this was broken for a bit, but now looks OK, add to tests?
+@pretty @cast A[i,j] := B[i][-j]
+
+# this could have reshape(right, :) but not worth a fight?
+@pretty @cast A[i\j\k] := B[i,j\k] + C[k]
+
+# namedarrays:
+B = rand(2,3);
+@cast A[i,j,_] := B[j,i] named # works now
+@reduce D[i] := sum(j)  A[i,j] # 3×1, wtf?
 
 =#
 
@@ -20,27 +36,27 @@ SizeDict() = SizeDict(Dict{Any, Any}(), Any[], Any[], Any[], Any[])
 """
     flat, getafix, putsz, negated = parse!(sdict, A, outer, inner)
 
-Use this for `A[outer...][inner...]`. 
-* `flat` is a list of symbols, naming the indices, in order. 
-* `negated` is the subset which had - in front. 
-* `getafix` is the thing for making views of given input or target array, : in non-fixed directions. 
-* `putsz` is a tuple of `sz[n]` and products, which you want for reshaping to the very final array; 
-  the numbers `n` refer to position in `flat`. 
+Use this for `A[outer...][inner...]`.
+* `flat` is a list of symbols, naming the indices, in order.
+* `negated` is the subset which had - in front.
+* `getafix` is the thing for making views of given input or target array, : in non-fixed directions.
+* `putsz` is a tuple of `sz[n]` and products, which you want for reshaping to the very final array;
+  the numbers `n` refer to position in `flat`.
 * `sdict::SizeDict` ends up with `sdict.dict[:i] = ` an expr for length of this index.
   To avoid saving these (if you don't have A yet) set `A = nothing`.
 
     parse!(sdict, A, outer, reduce_inner; allowranges=true)
 
-This is for `A[outer...] = sum(inner...) ...` LHS, which are allowed to have sum(a:2, ...) ranges. 
+This is for `A[outer...] = sum(inner...) ...` LHS, which are allowed to have sum(a:2, ...) ranges.
 The allowranges flag *also* disables the use of `size(first(A), 2)` etc,
-to disable `size(A,2)` set `A = nothing` again. 
+to disable `size(A,2)` set `A = nothing` again.
 
     parse!(sdict, nothing, [], rex; allowranges=true, flags=vector)
 
-For dimensions & annotations. 
-Will look for flags because it was given something to push them into. 
-You should now do this first, so that `sdict` is most likely to have these (neater) entries. 
-They are added using savesize!(sdict,...) which now puts later sizes into list of checks. 
+For dimensions & annotations.
+Will look for flags because it was given something to push them into.
+You should now do this first, so that `sdict` is most likely to have these (neater) entries.
+They are added using savesize!(sdict,...) which now puts later sizes into list of checks.
 """
 function parse!(sdict::SizeDict, A, outer, inner; allowranges=false, flags=nothing)
 
@@ -60,7 +76,7 @@ function parse!(sdict::SizeDict, A, outer, inner; allowranges=false, flags=nothi
         end
 
         # in rex or sum(a, b:3, c), some indices may have explicit ranges
-        if allowranges 
+        if allowranges
 
             if @capture(ind , i_:ilength_ )
                 savesize!(sdict, i, ilength)
@@ -71,16 +87,18 @@ function parse!(sdict::SizeDict, A, outer, inner; allowranges=false, flags=nothi
                 end
             else
                 i = ind    # replace nothing from @capture
+                # i = stripminus!(negated, ind) # now i isa Symbol # this gives errors
             end
+            # TODO should I have stripminus! here? @pretty @cast A[i,j] := B[i][-j]
             push!(flat, i) # all need to go into flat!
 
-        # for simple slicing, always want iflat, but size(first(A),d) only if we know A. 
+        # for simple slicing, always want iflat, but size(first(A),d) only if we know A.
         else
             i = stripminus!(negated, ind) # now i isa Symbol
             push!(flat, i)
 
-            if !isnothing(A) # only save these if we can access A. 
-                savesize!(sdict, i, :( size(first($A), $din) ) ) 
+            if !isnothing(A) # only save these if we can access A.
+                savesize!(sdict, i, :( size(first($A), $din) ) )
             end
         end
     end
@@ -105,7 +123,7 @@ function parse!(sdict::SizeDict, A, outer, inner; allowranges=false, flags=nothi
             end
 
             push!(putsz, szwrap(ind) ) # this may be product  sz_i * sz_j  or just one
-            push_or_append!(flat, ind) 
+            push_or_append!(flat, ind)
         end
     end
 
@@ -119,7 +137,7 @@ function parse!(sdict::SizeDict, A, outer, inner; allowranges=false, flags=nothi
 end
 
 isconstant(i::Int) = true
-isconstant(i::Symbol) = i == :_ 
+isconstant(i::Symbol) = i == :_
 isconstant(ex::Expr) = ex.head == :($)
 
 function findcheck(i::Symbol, ind::Vector, where=nothing)
@@ -127,7 +145,7 @@ function findcheck(i::Symbol, ind::Vector, where=nothing)
     d isa Nothing && throw(MacroError("can't find index $i", where))
     return d
 end
-findcheck(i::Expr, ind::Vector, where=nothing) = 
+findcheck(i::Expr, ind::Vector, where=nothing) =
     throw(MacroError("don't know what to do with index $i, expected a single symbol", where))
 
 function savesize!(store::SizeDict, ind, long)
@@ -150,10 +168,10 @@ szwrap(ijk::Vector) = :( TensorCast.star($([ Symbol(:sz_,i) for i in ijk ]...)) 
 """
     stripminus(negated, i)
 
-For any index, or vector of indices, or vector of indices containing tuples / backslash combos, 
+For any index, or vector of indices, or vector of indices containing tuples / backslash combos,
 this pushes every letter with a minus in front into negated list.
 
-It returns an index, or a tidied-up vector of indices, in which tuples etc have become vectors.   
+It returns an index, or a tidied-up vector of indices, in which tuples etc have become vectors.
 """
 stripminus!(negated::Vector, ind::Symbol) = ind  # get one Symol & you're done
 
@@ -163,7 +181,7 @@ function stripminus!(negated::Vector, ind::Expr)
     # minus one index
     if @capture(ind, -i_Symbol)
         push!(negated, i)       # add that to the negated list
-        return i                # and go home. 
+        return i                # and go home.
 
     # tuple notation
     elseif @capture(ind, -(ijk__,) )
@@ -191,7 +209,7 @@ function stripminus!(negated::Vector, ind::Expr)
     elseif @capture(ind, i_⊗j_ )
         ijk = Any[i,j]
 
-    else 
+    else
         throw(MacroError("stuck on $ind, doesn't look like a valid index, or set of indices"))
     end
 
@@ -202,7 +220,7 @@ end
 """
     oddunique(negated)
 
-Returns a list in which anything repeated evenly many times has been removed, then `unique`. 
+Returns a list in which anything repeated evenly many times has been removed, then `unique`.
 """
 function oddunique(negated)  # -1 * -1 = +1
     set = Set{Symbol}()
@@ -219,7 +237,7 @@ end
 """
     checkrepeats(flat)
 
-Throws an error if there are repeated indices. 
+Throws an error if there are repeated indices.
 Also a good place to check whether flat is flat... e.g. A[i][j\\k] will arrive here
 """
 function checkrepeats(flat, msg="", where=nothing)
@@ -247,27 +265,27 @@ end
 """
     sizeinfer(store, icannon, where, leaveone=true)
 
-This is the point of SizeDict. 
-The goal is to produce a canonical vector of sizes, corresponding to vector of symbols icannon. 
+This is the point of SizeDict.
+The goal is to produce a canonical vector of sizes, corresponding to vector of symbols icannon.
 If these sizes are known, easy!
 
 But for unknown ones, we do a second pass, looking for entries in sizedict like [:i, :j]
-which come from tuples of indices, for which we know the product of their dimensions. 
+which come from tuples of indices, for which we know the product of their dimensions.
 """
 function sizeinfer(store::SizeDict, icanon::Vector, where=nothing, leaveone = true)
     sizes = Any[ (:) for i in icanon ]
 
     # first pass looks for single indices whose lengths are known directly
     for pair in store.dict
-        if isa(pair.first, Symbol)  
+        if isa(pair.first, Symbol)
             d = findcheck(pair.first, icanon, where)
             sizes[d] = pair.second  # so write it into the answer
         end
     end
 
-    if leaveone && count(isequal(:), sizes) < 2 
+    if leaveone && count(isequal(:), sizes) < 2
         V && count(isequal(:), sizes)==1 &&  @info "sizeinfer -- leaving one : in sizes" repr(sizes)
-        return sizes 
+        return sizes
     end
     V && @info "sizeinfer -- first pass" sizes
 
@@ -289,7 +307,7 @@ function sizeinfer(store::SizeDict, icanon::Vector, where=nothing, leaveone = tr
                 d = findcheck(first(pair.first[.!known]), icanon, where)
                 sizes[d] = rat      # save that size
 
-                str = "inferring range of $(icanon[d]) from range of $(join(pair.first, " ⊗ "))" 
+                str = "inferring range of $(icanon[d]) from range of $(join(pair.first, " ⊗ "))"
                 push!(store.checks, :( TensorCast.@assert_ rem($num, $den)==0 $str) )
             end
         end
@@ -307,7 +325,7 @@ end
 """
     star(x,y,...)
 
-Like `*` but intended for multiplying sizes, and understands that `:` is a wildcard. 
+Like `*` but intended for multiplying sizes, and understands that `:` is a wildcard.
 """
 star(x,y) = *(x,y)
 star(::Colon,y) = Colon()
@@ -318,14 +336,14 @@ star(x,y,zs...) = star(star(x,y), zs...)
     needview!([:, 3, :])   # true, need view(A, :,3,:)
     needview!([:, :_, :])  # false, can use rview(A, :,1,:)
 
-Mutates the given vector, replacing symbol `:_` with `1`. 
+Mutates the given vector, replacing symbol `:_` with `1`.
 If the vector contains only colons & underscores, then the result is suitable for use with `rview`,
 but if not, we need a real view, so it returns `true`.
 """
 function needview!(getafix::Vector)
     out = false
     for i=1:length(getafix)
-        if getafix[i] == :_ 
+        if getafix[i] == :_
             getafix[i] = 1
         elseif getafix[i] isa Int || getafix[i] isa Symbol
             out = true
@@ -340,7 +358,7 @@ end
 """
     @assert_ cond str
 
-Like `@assert`, but prints both the given string and the condition. 
+Like `@assert`, but prints both the given string and the condition.
 """
 macro assert_(ex, str)
     strex = Main.Base.string(ex)
@@ -353,6 +371,8 @@ function unparse(str::String, exs...)
     @capture(exs[1], left_ := right_ ) && return string(str, " ", left, " := ", right, "  ", join(exs[2:end],"  "))
     @capture(exs[1], left_ |= right_ ) && return string(str, " ", left, " |= ", right, "  ", join(exs[2:end],"  "))
     @capture(exs[1], left_ == right_ ) && return string(str, " ", left, " == ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ -> right_ ) && return string(str, " ", left, " == ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ => right_ ) && return string(str, " ", left, " == ", right, "  ", join(exs[2:end],"  "))
     return string(exs)
 end
 

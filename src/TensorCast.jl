@@ -16,7 +16,7 @@ include("icheck.jl")
 include("pretty.jl")
 
 if VERSION < v"1.1.0"
-    include("eachslice.jl") 
+    include("eachslice.jl")
 end
 
 include("slice.jl") # slice, glue, orient, etc
@@ -50,6 +50,14 @@ function __init__()
 
     # @require Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f" begin
     #     include("zygote.jl")
+    # end
+
+    @require NamedArrays = "86f7a689-2022-50b4-a561-43c23ac3c673" begin
+        include("named.jl")
+    end
+
+    # @require AxisArrays = "39de3d68-74b9-583c-8d2d-e117c070f3a9" begin
+    #     include("axis.jl")
     # end
 
 end

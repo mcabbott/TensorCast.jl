@@ -131,7 +131,7 @@ codeI      -- to orient, if lacking some indices.
 
 Of these things from LHS, only really store + canon need to be passed to RHS function inputex()
 via walker(). But many need to be passed from readleft() to output, packaged into:
-outUZ = (redUind, negV, codeW, sizeX, getY, numY, sizeZ, nameZ)
+outUZ = (redUind, negV, codeW, sizeX, getY, numY, indZ, sizeZ, nameZ)
 
 flags      -- todo, to-done, and options
 store      -- information from parse! with sizes etc.
@@ -312,7 +312,7 @@ end
 """
     canon, outUZ, nameZ, checkZ = readleft(left, redind, flags, store, icheck, where)
 
-outUZ = (redUind, negV, codeW, sizeX, getY, numY, sizeZ)
+outUZ = (redUind, negV, codeW, sizeX, getY, numY, indZ, sizeZ)
 are things passed to output construction.
 """
 function readleft(left, redind, flags, store, icheck, where)
@@ -355,9 +355,9 @@ function readleft(left, redind, flags, store, icheck, where)
     codeW = repeat(Any[*], length(canon) - length(redUind))
     codeW[1:length(inner)] .= (:)
 
-    indW = canon[1:length(inner)] # without minuses etc
+    indW = canon[1:length(inner)] # inner without minuses etc
 
-    indX = flat12[length(inner)+1:end]
+    indX = flat12[length(inner)+1:end] # flattened outer without minuses, also without fixed
     sizeX = Any[ Symbol(:sz_,i) for i in indX ] # only for in-place
 
     numY = count(!isequal(:), getY) # the number of fixed indices in output
@@ -370,6 +370,17 @@ function readleft(left, redind, flags, store, icheck, where)
         push!(flags, :outshape) # whether final reshaping is needed, for := case
     end
 
+    indZ = [] # like indX, but with fixed indices re-inserted, for :named / :axis
+    iz = 1
+    for g in getY
+        if g == (:)
+            push!(indZ, indX[iz])
+            iz += 1
+        else
+            push!(indZ, g)
+        end
+    end
+
     checkZ = nothing
     if icheck
         checknow = check_one(:($nameZ[$(outer...)]), where)
@@ -378,7 +389,7 @@ function readleft(left, redind, flags, store, icheck, where)
         end
     end
 
-    outUZ = (redUind, negV, codeW, indW, sizeX, getY, numY, sizeZ)
+    outUZ = (redUind, negV, codeW, indW, sizeX, getY, numY, indZ, sizeZ)
     V && @info "readleft" Tuple(canon) outUZ nameZ
     return canon, outUZ, nameZ, checkZ
 end
@@ -559,9 +570,9 @@ end
 For the case of `:=`, this constructs the expression to do reduction if needed,
 and slicing/reshaping/reversing for LHS.
 
-outUZ = (redUind, negV, codeW, indW, sizeX, getY, numY, sizeZ)
+outUZ = (redUind, negV, codeW, indW, sizeX, getY, numY, indZ, sizeZ)
 """
-function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, sizeZ),
+function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, indZ, sizeZ),
         redfun, canonsize, canon, flags, store, where)
 
     ex = newright
@@ -624,13 +635,19 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, siz
         m_error("can't broadcast without copying, sorry", where)
     end
 
-    if :scalar in flags
+    if :scalar in flags                                     # Z = @reduce sum(i) ...
         ex = :( first($ex) )
     end
 
     # if :strided in flags
     #     ex = :( Strided.@strided $ex )
     # end
+
+    if :named in flags                                      # Z[i] := ... named
+        ex = :( TensorCast.namedarray($ex, $(indZ...,) ) )
+    # elseif :axis in flags
+    #     ex = :( TensorCast.axisarray($ex, $(indZ...,) ) )
+    end
 
     return ex
 end
@@ -646,7 +663,7 @@ For the case of `=` this figures out how to write RHS into LHS, in one of three 
 No longer attempts to write `permutedims!(Z, A, ...)`, now just `copyto!(Z, PermutedDimsArray(A, ...))`.
 Doesn't really need so many arguments...
 """
-function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, sizeZ),
+function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, indZ, sizeZ),
         redfun, canonsize, canon, flags, store, nameZ, where)
 
     if :slice in flags
@@ -770,6 +787,12 @@ function packagecheck(flags, where)
     if :julienne in flags
         isdefined(TensorCast, :JuliennedArrays) || m_error("can't use option julienne without using JuliennedArrays", where)
     end
+    if :named in flags
+        isdefined(TensorCast, :NamedArrays) || m_error("can't use option named without using NamedArrays", where)
+    end
+    # if :axis in flags
+    #     isdefined(TensorCast, :AxisArrays) || m_error("can't use option axis without using AxisArrays", where)
+    # end
 end
 
 using LazyArrays # now not optional, and thus not always in caller's scope
