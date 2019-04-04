@@ -810,6 +810,8 @@ end
 
 using LazyArrays # now not optional, and thus not always in caller's scope
 
+using LinearAlgebra  # for diag()
+
 """
     makelazy(bc)
 

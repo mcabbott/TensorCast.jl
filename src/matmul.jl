@@ -4,33 +4,42 @@ export @mul
 #= TODO:
 
 # vector times matrix:
-@mul Z[i] := rand(2)[j] * rand(2,2)[j,i] 
+@mul Z[i] := rand(2)[j] * rand(2,2)[j,i]
 
 # from a typo in readme, but should work:
-X = rand(2,3,4); Y = rand(3,2,4) 
+X = rand(2,3,4); Y = rand(3,2,4)
 @mul W[β,i,j] := X[i,k,β] * Y[k,i,β]
 
 # add @check! version
+
+# shouldn't this be an error?
+@pretty @mul A[n][i,k] = B[i,j,n] * C[k,j,n]
+
+# Mason Potter's example:
+W = rand(2,2,2,2); M = rand(2,2,2);
+@reduce N[σ, b\a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]
+@mul N2[σ, b\a, b′\a′] := W[σ,σ′,b,b′] * M[σ′,a,a′]
+sort(vec(N)) ≈ sort(vec(N2)) # true
 
 =#
 
 """
     @mul A[i,j] := B[i,k,k′] * C[k,k′,j]
 
-Matrix multiplication macro. This expects two tensors on the right, 
-whose shared index (or indices) will be sumed over. 
+Matrix multiplication macro. This expects two tensors on the right,
+whose shared index (or indices) will be sumed over.
 
     @mul A[_,i][j] := B[i\\k] * C[j,2,k]
 
-Each tensor factor will be processed in the same way as for `@cast` / `@reduce`, 
-allowing for slicing and reshaping, permuting indices, and fixing their values. 
+Each tensor factor will be processed in the same way as for `@cast` / `@reduce`,
+allowing for slicing and reshaping, permuting indices, and fixing their values.
 (The same tuple of options understood by `@cast` may be given after the expression, too.)
-But the right hand side must be simply a product of two tensors, nothing else. 
-Thus it is both more limited, and more general, than `@tensor` / `@einsum`. 
+But the right hand side must be simply a product of two tensors, nothing else.
+Thus it is both more limited, and more general, than `@tensor` / `@einsum`.
 
 The same operations can be written `@reduce A[i,j] := sum(k) B[i,k] * C[k,j]`,
-but this broadcasts out to a 3-tensor before reducing, 
-rather than just calling `A = B * C`. 
+but this broadcasts out to a 3-tensor before reducing,
+rather than just calling `A = B * C`.
 
 The in-place form `@mul A[i,j] = B[i,k] * C[k,j]` calls instead `mul!(A,B,C)`.
 
@@ -58,6 +67,8 @@ end
 
 function _mul(ex, options=nothing; icheck=false, where=where)
     flags = Set{Symbol}()
+
+    # @warn "The macro @mul has bugs!" maxlog=1
 
     #===== parse basic expression =====#
 
@@ -98,7 +109,7 @@ function _mul(ex, options=nothing; icheck=false, where=where)
     if length(batchind) > 0
         push!(flags, :bmm)
     end
-    if length(sumind)>1 || length(batchind)>1 # then result of * (or batchmul) is wrong shape 
+    if length(sumind)>1 || length(batchind)>1 # then result of * (or batchmul) is wrong shape
         push!(flags, :outshape)
     end
 
@@ -107,7 +118,7 @@ function _mul(ex, options=nothing; icheck=false, where=where)
 
     if length(indAonly) > 1 || length(indBonly) > 1 || length(batchind) > 1
         push!(flags, :midshape) # result of * will not be have canonical dimensions
-    end 
+    end
 
     canon = vcat(indZ, sumind)
 
@@ -126,24 +137,24 @@ function _mul(ex, options=nothing; icheck=false, where=where)
     if :nolazy in flags
         m_error("@mul always ignores option nolazy, try |= to copy output", where)
     end
-    push!(flags, :nolazy) # exA & exB should use permutedims 
+    push!(flags, :nolazy) # exA & exB should use permutedims
 
     exA = matexin!(outex, nameA, mid, (indAonly, sumind, batchind), flags, store, icheck, where)
     exB = matexin!(outex, nameB, right, (sumind, indBonly, batchind), flags, store, icheck, where)
 
     if :inplace in flags
-        pop!(flags, :nolazy) # exZ must not use permutedims 
+        pop!(flags, :nolazy) # exZ must not use permutedims
 
         exZ = matexin!(outex, nameZ, left, (indAonly, indBonly, batchind), flags, store, icheck, where)
     else
         # exZ will not be used for in-place mul!, but for out-of-place... can borrow readleft from @cast:
         _, outUZ, nameZ, checkZ = readleft(left, sumind, flags, store, icheck, where)
 
-        # but unlike @cast/@reduce, the RHS does not arrive in canonical order... 
+        # but unlike @cast/@reduce, the RHS does not arrive in canonical order...
         V && @info "more" Tuple(indZ) Tuple(vcat(indAonly,indBonly,batchind))
 
-        p1 = sortperm(indZ) 
-        p2 = sortperm(vcat(indAonly,indBonly,batchind)) 
+        p1 = sortperm(indZ)
+        p2 = sortperm(vcat(indAonly,indBonly,batchind))
         permU = invperm(p1)[p2]
         if permU != 1:length(permU)
             push!(flags, :outperm)
@@ -152,22 +163,26 @@ function _mul(ex, options=nothing; icheck=false, where=where)
 
     packagecheck(flags, where)
 
-    canonsize = sizeinfer(store, canon, where, true) 
+    canonsize = sizeinfer(store, canon, where, true)
 
     if :inplace in flags
+
+        # if :slice in flags # doesn't work
+        #     throw(MacroError("can't write to sliced arrays in-place, for now", where))
+        # end
 
         #===== in-place output =====#
 
         if :batched in flags && :bmm in flags
             error("can't use batched yet!")
         elseif :bmm in flags
-            opex =  :( TensorCast.batchmul!($exZ, $exA, $exB)) 
+            opex =  :( TensorCast.batchmul!($exZ, $exA, $exB))
         else
             opex = :( TensorCast.mul!($exZ, $exA, $exB))  # LinearAlgebra.mul! is available here
         end
 
         if :strided in flags # this functions mostly to prevent a slowdown if "inputex" has used strided
-            opex = :( Strided.@strided $opex )           
+            opex = :( Strided.@strided $opex )
         end
 
         push!(outex.args, opex )
@@ -195,9 +210,9 @@ function _mul(ex, options=nothing; icheck=false, where=where)
             if :strided in flags
                 ex = :( strided_permutedims($ex, $perm) )
             elseif permU == [2,1]
-                newright = :( transpose($newright) ) 
+                newright = :( transpose($newright) )
             else
-                newright = :( PermutedDimsArray($newright, ($(permU...),) )) 
+                newright = :( PermutedDimsArray($newright, ($(permU...),) ))
             end
         end
 
@@ -218,7 +233,7 @@ function _mul(ex, options=nothing; icheck=false, where=where)
     end
     if :assert in flags || :(!) in flags || check_options.size
         for ch in store.checks
-            pushfirst!(outex.args, ch) 
+            pushfirst!(outex.args, ch)
         end
     end
     for tex in store.topex
@@ -227,7 +242,7 @@ function _mul(ex, options=nothing; icheck=false, where=where)
 
     if length(outex.args) == 1
         return esc(outex.args[1])
-    else 
+    else
         return esc(outex)
     end
 end
@@ -235,8 +250,8 @@ end
 """
     indA, A = firstpass(store, ex)
 
-Aim is just to get the list of indices for each piece, to figure out which ones are contracted, 
-and to have canonical order (now can't be got from one side alone). 
+Aim is just to get the list of indices for each piece, to figure out which ones are contracted,
+and to have canonical order (now can't be got from one side alone).
 """
 function firstpass!(sdict, ex, where, canseeA=true)
 
@@ -244,7 +259,7 @@ function firstpass!(sdict, ex, where, canseeA=true)
     elseif @capture(ex, A_[outer__]{inner__}) || @capture(ex, [outer__]{inner__})
     elseif @capture(ex, A_[outer__]) || @capture(ex, [outer__])
         inner = []
-    else 
+    else
         throw(MacroError("don't know what to do with $left", where))
     end
 
@@ -252,7 +267,7 @@ function firstpass!(sdict, ex, where, canseeA=true)
 
         # if we have f(x)[i,j] then we should evaluate f just once
         if !isa(A, Symbol)
-            Atop = gensym(:A) 
+            Atop = gensym(:A)
             push!(sdict.topex, :(local $Atop = $A ) )
             A = Atop
         end
@@ -268,9 +283,9 @@ end
     matexin!(outex, A, ex, (ind1,ind2,ind3), flags, store, icheck, where)
 
 Produces the expression which will glue/permutedims etc A to form `ind1,ind2,ind3` (as `@cast`),
-and then reshape A to be either a matrix (indices `⨷ind1, ⨷ind2`) 
-or for the batched case, a 3-tensor (indices `⨷ind1, ⨷ind2, ⨷ind3`). 
-Pushes this into outex & returns the symbol it is assigned to. 
+and then reshape A to be either a matrix (indices `⨷ind1, ⨷ind2`)
+or for the batched case, a 3-tensor (indices `⨷ind1, ⨷ind2, ⨷ind3`).
+Pushes this into outex & returns the symbol it is assigned to.
 """
 function matexin!(outex, A, ex, (ind1,ind2,ind3), flags, store, icheck, where)
 
@@ -287,15 +302,15 @@ function matexin!(outex, A, ex, (ind1,ind2,ind3), flags, store, icheck, where)
     end
 
     # push pre-processing step into outex if nontrivial, as walker did
-    if isa(Aval, Symbol) 
+    if isa(Aval, Symbol)
         ex = Aval
     else
-        Asym = gensym(:A) 
-        push!(outex.args, :(local $Asym = $Aval) ) 
-        ex =  Asym 
+        Asym = gensym(:A)
+        push!(outex.args, :(local $Asym = $Aval) )
+        ex =  Asym
     end
 
-    # return what should appear in mul! etc. 
+    # return what should appear in mul! etc.
     return ex
 end
 
