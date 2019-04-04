@@ -26,6 +26,7 @@ but otherwise understands all the same things:
 @reduce W[μ,ν,_,J] := prod(i:2) V[(i,J)][μ,ν]    # products of pairs of matrices, stacked
 ```
 
+<!-- # master only for now
 Finally `@mul` handles matrix multiplication of exactly two tensors:
 
 ```julia
@@ -33,6 +34,7 @@ Finally `@mul` handles matrix multiplication of exactly two tensors:
 
 @mul W[β][i,j] := X[i,k,β] * Y[k,j,β]       # batched W[β] = X[:,:,β] * Y[:,:,β] ∀ β
 ```
+-->
 
 These are intended to complement the macros from some existing packages.
 [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl) 
@@ -101,16 +103,19 @@ Use the macro `@pretty` to print out the generated expression:
 #     A = sliceview(emu, (:, :, *))
 # end
 
-@pretty @reduce V[r] = sum(c) exp( M[r,c]^2 / R[c]' )
+@pretty @reduce V[r] = sum(c) exp( fun(M)[r,c]^2 / R[c]' ) * D[c,c]
 # begin
-#     local badger = orient(R, (*, :))
-#     sum!(V, exp.((/).((^).(M, 2), conj.(badger))))  # your animal may vary
+#     local bat = fun(M)  # your animals may vary
+#     local hare = orient(R, (*, :))
+#     local zebra = orient(diag(D), (*, :))
+#     sum!(V, (*).(exp.((/).((^).(bat, 2), Base.conj.(hare))), zebra))
 # end
 ```
 
 Here `TensorCast.sliceview(D, (:,:,*)) = collect(eachslice(D, dims=3))`, 
-and  `TensorCast.orient(R, (*,:))` will reshape or tranpose R to lie long the second direction. 
-Notice that `R[c]'` means element-wise complex conjugation.
+and  `TensorCast.orient(R, (*,:))` will reshape or tranpose `R` to lie long the second direction. 
+Notice that `R[c]'` means element-wise complex conjugation,
+and `D[c,c]` means `diag(D)` -- this is the only repeated index allowed. 
 
 (`@pretty` is just a variant of the built-in `@macroexpand1`, with animal names from
 [MacroTools.jl](https://github.com/MikeInnes/MacroTools.jl) in place of generated symbols.)
@@ -136,7 +141,7 @@ If you need to leave index notation and return, you can insert `@check!` to conf
 
 ```julia
 @cast! E[α,_,β,_] := C[α,β]         # reshape to size(E,2) == size(D,4) == 1
-F = identity(E)
+F = calculate(A,E)
 @check! F[n,α]                      # just the check, with no calculation
 ```
 
@@ -250,7 +255,7 @@ A = randn(4000,4000); B = similar(A);
 
 ### Matrix multiplication
 
-For now this is only on master branch; there may be errors with `Vector * Matrix` cases. 
+For now this is only on master branch, as there are some errors (especially with `Vector * Matrix` cases). 
 `TensorCast.batchmul(B,C)` is a naiive implementation of batched matrix multiplication:
 
 ```julia
@@ -261,9 +266,19 @@ For now this is only on master branch; there may be errors with `Vector * Matrix
 # end
 ```
 
+### Anonymous functions
+
+Also a little experimental, you can make functions with `=>`, like this:
+
+```julia
+@pretty @cast A[i,j] + 3 + B[j,j]^2 => Z[i,j]  nolazy
+# (A, B) -> begin
+#     local herring = orient(diag(B), (*, :))
+#     Z = (+).(A, 3, (^).(herring, 2))
+# end
+```
+
 ## About
 
-First uploaded January 2019 as `TensorSlice.jl` with only the `@shape` macro, and later `@reduce`. 
-Then I understood how to implement arbitrary broadcasting in `@cast`, and this replaced the 
-earlier implementation. 
+First uploaded January 2019 as `TensorSlice.jl`. 
 
