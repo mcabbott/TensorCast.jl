@@ -8,7 +8,7 @@ using StaticArrays
 @testset "@reduce" begin include("reduce.jl")  end
 @testset "@cast"   begin include("casting.jl") end
 @testset "@check!" begin include("check.jl")   end
-# @testset "@mul"    begin include("mul.jl")     end
+@testset "@mul"    begin include("mul.jl")     end
 
 @testset "helper functions" begin include("parse.jl") end
 @testset "data functions"   begin include("cat.jl")   end

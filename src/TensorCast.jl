@@ -9,7 +9,7 @@ include("parse.jl")
 
 include("macro.jl") # @cast and @reduce
 
-# include("matmul.jl") # @mul
+include("matmul.jl") # @mul
 
 include("icheck.jl")
 
