@@ -2,6 +2,7 @@
 # TensorCast.jl
 
 [![Build Status](https://travis-ci.org/mcabbott/TensorCast.jl.svg?branch=master)](https://travis-ci.org/mcabbott/TensorCast.jl)
+[![Documentation](https://camo.githubusercontent.com/f7b92a177c912c1cc007fc9b40f17ff3ee3bb414/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f646f63732d737461626c652d626c75652e737667)](https://pkg.julialang.org/docs/TensorCast/lkx9a/0.1.3/)
 
 This package lets you write expressions involving many-dimensional arrays in index notation,
 by defining a few macros. The first is `@cast`, which deals both with "casting" into new shapes 
@@ -27,6 +28,7 @@ but otherwise understands all the same things:
 ```
 
 <!-- # master only for now
+  
 Finally `@mul` handles matrix multiplication of exactly two tensors:
 
 ```julia
@@ -86,6 +88,9 @@ You need [Julia](https://julialang.org/downloads/) 1.0 or later:
 ```julia
 ] add TensorCast
 ```
+
+There is help available as `? @cast` etc, or at [pkg.julialang.org](https://pkg.julialang.org/docs/TensorCast/lkx9a/0.1.3/).
+And also some notebooks in folder [/docs/](https://github.com/mcabbott/TensorCast.jl/tree/master/docs). 
 
 ## Inside
 
@@ -216,12 +221,10 @@ By another slight abuse of notation, such slices are written here as curly brack
 using StaticArrays
 
 @cast S[k]{i} == M[i,k]  i:3        # S = reinterpret(SVector{3,Int}, vec(M)) 
-
 @cast R[k,i] == S[k]{i}             # such slices can be reinterpreted back again
-
-M[1,2]=42; R[2,1]==42               # all views of the original data
 ```
 
+Both `S` and `R` here are views of the original matrix `M`. 
 When creating such slices, their size ought to be provided, either as a literal integer or 
 through the types. Note that you may also write `S[k]{i:3}`. 
 
@@ -237,7 +240,6 @@ the writing of which is avoided by giving the option `lazy`:
 V = rand(500); V3 = reshape(V,1,1,:);
 
 @time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k];        # 0.6 seconds, 950 MB
-
 @time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k]  lazy;  # 0.025 s, 5 KB
 ```
 
@@ -249,7 +251,6 @@ using Strided # and export JULIA_NUM_THREADS = 4 before starting
 A = randn(4000,4000); B = similar(A);
 
 @time @cast B[i,j] = (A[i,j] + A[j,i])/2;             # 0.12 seconds
-
 @time @cast B[i,j] = (A[i,j] + A[j,i])/2 strided;     # 0.025 seconds
 ```
 
