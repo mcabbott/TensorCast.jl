@@ -10,7 +10,7 @@ end
 Reverse(A::AbstractArray; dims=ndims(A)) = Reverse{dims}(A)
 
 # The reverse() function in Base is twice as quick as copying this view,
-# somewhere I had a real type in order to exploit this? 
+# somewhere I had a real type in order to exploit this?
 
 using Random
 

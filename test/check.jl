@@ -1,9 +1,9 @@
 @testset "check" begin
-	
+
 	using TensorCast: _check!, index_store, size_store
 
 	@check!  throw=true empty
-	
+
 	A = rand(3)
 	@check! A[i]
 
@@ -41,8 +41,22 @@ end
 	# C = rand(3)
 	# @shape! A[j] = C[j]
 
-	# @test_throws ErrorException _shape( :( A[z] = C[z] ); icheck=true) 
-	# @test_throws ErrorException _reduce( :( A[z] := sum(i) ), :( D[z,i] ); icheck=true) 
+	# @test_throws ErrorException _shape( :( A[z] = C[z] ); icheck=true)
+	# @test_throws ErrorException _reduce( :( A[z] := sum(i) ), :( D[z,i] ); icheck=true)
 
+
+end
+@testset "einsum!" begin
+
+    @check!  throw=true  empty
+
+    AB = rand(4,4)
+    XY = rand(4,4)
+
+    @reduce! A[a] := sum(b) AB[a,b]
+    @cast! ABC[a,b,c] := A[a] + AB[b,c]
+
+    # @einsum! AC[a,c] := AB[a,b] * AB[b,c]
+    # @test AC == AB * AB
 
 end

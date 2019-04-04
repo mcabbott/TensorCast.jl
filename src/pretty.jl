@@ -10,10 +10,9 @@ comments are deleted, module names are removed from functions,
 and the final expression is fed to `println()`.
 
 To copy and run the printed expression, you may need various functions which aren't exported. 
-Try something like `using TensorCast: orient, star, _view, @assert_, red_glue, sliceview`
+Try something like `using TensorCast: orient, star, rview, @assert_, red_glue, sliceview, batchmul`
 """
 macro pretty(ex)
-    # :( macroexpand($(__module__), $(ex,)[1], recursive=false) |> MacroTools.alias_gensyms |> pretty |> println )
     :( macroexpand($(__module__), $(ex,)[1], recursive=false) |> pretty |> println )
 end
 

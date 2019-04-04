@@ -5,29 +5,30 @@ export @check!, @einsum!, @vielsum!, @tensor!
     @check!(A[i, j, μ, ν])
 
 Adds `A` to the store of known tensors, and records that it expects indices `i,j,μ,ν`.
-If it is already in the store, then instead this checks whether the present indices differ 
-from the saved ones. Only the first letter is examined: `α` and `α2` are similar, as are nearby 
-letters `β`, `γ3`. More complicated indices like `Z[(i,j), -k, _, 3]` will be ignored. 
+If it is already in the store, then instead this checks whether the present indices differ
+from the saved ones. Only the first letter is examined: `α` and `α2` are similar, as are nearby
+letters `β`, `γ3`. More complicated indices like `Z[(i,j), -k, _, 3]` will be ignored.
 This happens while parsing your source code, there is zero run-time penalty. Returns `A`.
 
 In addition, with `size=true` option, it can insert size checks to be performed at run-time,
-by returning `check!(A, stuff)`. 
-At the first occurrance this saves `i: => size(A,1)` etc., and on subsequent uses of 
-the same index (even on different tensors) it gives an error if the sizes do not match. 
-Here the whole index is used: `α`, `β` and `β2` may have different ranges. 
-This will need to look up indices in a dictionary, which takes ... 50ns, really? 
+by returning `check!(A, stuff)`.
+At the first occurrance this saves `i: => size(A,1)` etc., and on subsequent uses of
+the same index (even on different tensors) it gives an error if the sizes do not match.
+Here the whole index is used: `α`, `β` and `β2` may have different ranges.
+This will need to look up indices in a dictionary, which takes ... 50ns, really?
 
 
     @check! B[i,j] C[μ,ν] D[i] E[j]
 
-Checks several tensors, returns nothing. 
+Checks several tensors, returns nothing.
+
 
     @check!  alpha=true  tol=3  size=false  throw=false  info  empty
 
-Controls options for `@check!` and related macros (`@shape!`, `@reduce!`, `@einsum!` etc). 
+Controls options for `@check!` and related macros (`@shape!`, `@reduce!`, `@einsum!` etc).
 These are the default settings:
 * `alpha=true` turns on the parse-time checking, based on index letters.
-* `tol=3` sets how close together letters must be: `B[j,k]` is not an error but `B[a,b]` will be. 
+* `tol=3` sets how close together letters must be: `B[j,k]` is not an error but `B[a,b]` will be.
 * `size=false` turns off run-time size checking.
 * `throw=false` means that errors are given using `@error`, without interrupting your program.
 * `empty` deletes all saved letters and sizes -- there is one global store for each, for now.
@@ -41,8 +42,8 @@ These are the default settings:
     @vielsum! B[i,j] := D[i] * E[j]
     @tensor!  B[i,j] := D[i] * E[j]
 
-Versions of the macros from this package, and from Einsum.jl and TensorOperations.jl, 
-which call `@check!` on each of their tensors, before proceeding as normal. 
+Versions of the macros from this package, and from Einsum.jl and TensorOperations.jl,
+which call `@check!` on each of their tensors, before proceeding as normal.
 """
 macro check!(exs...)
     where = (mod=__module__, src=__source__, str=unparse("@check!", exs...))
@@ -50,7 +51,9 @@ macro check!(exs...)
 end
 
 const index_store = Dict{Symbol, Tuple}()
-const size_store  = Dict{Symbol, Int}()
+
+const size_store  = Dict{Symbol, Int}() # TODO: alter check!() to avoid dictionary lookup, the macro
+                                        # can push nothing to size_store::Vector, and index...
 
 mutable struct CheckOptions
     alpha::Bool
@@ -89,7 +92,7 @@ function _check!(exs...; where=nothing)
         elseif ex == :info
             @info "@check! info" check_options index_store size_store
 
-        else 
+        else
             @error "@check! doesn't know what to do with $ex"
 
         end
@@ -100,8 +103,8 @@ end
 """
     check_one(A[i,j,k], (mod=Module, src=...))
 
-Does the work of `@check!`, on one index expression, 
-returning `A` or `check!(A,...)` according to global flags. 
+Does the work of `@check!`, on one index expression,
+returning `A` or `check!(A,...)` according to global flags.
 """
 function check_one(ex, where=nothing)
     @capture(ex, A_[vec__]) || error("check_one can't understand $ex, expected something like A[i,j]")
@@ -125,7 +128,7 @@ function check_one(ex, where=nothing)
                 end
                 si = String(i)
                 sj = String(j)
-                length(si)>1 || length(sj)>1 && continue    
+                length(si)>1 || length(sj)>1 && continue
                 if abs(Int(si[1])-Int(sj[1])) > check_options.tol
                     check_err("@check! $ex now has index $i where previously it had $j", where)
                 end
@@ -154,8 +157,8 @@ end
 """
     check!(A, (:i,:j), "A[i,j]", (mod=..., src=...))
 
-Performs run-time size checking, on behalf of the `@check!` macro, returns `A`. 
-The string and tuple are just for the error message. 
+Performs run-time size checking, on behalf of the `@check!` macro, returns `A`.
+The string and tuple are just for the error message.
 """
 function check!(A::AbstractArray{T,N}, ind::Tuple, str::String, where=nothing) where {T,N}
     if N != length(ind)
@@ -176,7 +179,7 @@ end
 """
     @einsum! A[i,j] := B[i,k] * C[k,j]
 
-Variant of `@einsum` from package Einsum.jl, 
+Variant of `@einsum` from package Einsum.jl,
 equivalent to wrapping every tensor with `@check!()`.
 """
 macro einsum!(ex)
@@ -187,7 +190,7 @@ end
 """
     @vielsum! A[i,j] := B[i,k] * C[k,j]
 
-Variant of `@vielsum` from package Einsum.jl, 
+Variant of `@vielsum` from package Einsum.jl,
 equivalent to wrapping every tensor with `@check!()`.
 """
 macro vielsum!(ex)
@@ -198,7 +201,7 @@ end
 """
     @tensor! A[i,j] := B[i,k] * C[k,j]
 
-Variant of `@tensor` from package TensorOperations.jl, 
+Variant of `@tensor` from package TensorOperations.jl,
 equivalent to wrapping every tensor with `@check!()`.
 """
 macro tensor!(ex)
@@ -207,15 +210,15 @@ macro tensor!(ex)
 end
 
 function _tensor!(ex, where=nothing)
-    if @capture(ex, lhs_ := rhs_ ) || @capture(ex, lhs_ = rhs_ )  
+    if @capture(ex, lhs_ := rhs_ ) || @capture(ex, lhs_ = rhs_ )
 
         outex = quote end
-        function f(x)                                                         
-            if @capture(x, A_[ijk__] )   
-                push!(outex.args, check_one(x, where))                                      
-            end                                                                    
-            x                                                                    
-        end   
+        function f(x)
+            if @capture(x, A_[ijk__] )
+                push!(outex.args, check_one(x, where))
+            end
+            x
+        end
         MacroTools.prewalk(f, rhs)
 
         if check_options.size == false
@@ -233,15 +236,15 @@ function _tensor!(ex, where=nothing)
 end
 
 function _einsum!(ex, where=nothing; threads = false)
-    if @capture(ex, lhs_ := rhs_ ) || @capture(ex, lhs_ = rhs_ ) 
+    if @capture(ex, lhs_ := rhs_ ) || @capture(ex, lhs_ = rhs_ )
 
         outex = quote end
-        function f(x)                                                         
-            if @capture(x, A_[ijk__] )   
-                push!(outex.args, check_one(x, where))                                      
-            end                                                                    
-            x                                                                    
-        end   
+        function f(x)
+            if @capture(x, A_[ijk__] )
+                push!(outex.args, check_one(x, where))
+            end
+            x
+        end
         MacroTools.prewalk(f, rhs)
 
         if check_options.size == false
@@ -273,8 +276,6 @@ B = rand(2,3); C = rand(3,2);
 A = B * C
 @einsum A[i,j] := B[i,k] * C[k,j]
 @tensor A[i,j] := B[i,k] * C[k,j]
-
-@einsum A[i,j] := B[i,k] * C[k,zz] # not an error... will be fixed soon, https://github.com/ahwillia/Einsum.jl/pull/31
 
 
 using TensorCast
