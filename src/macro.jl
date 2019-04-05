@@ -239,7 +239,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
 
     #===== almost done =====#
 
-    packagecheck(flags, where)
+    # packagecheck(flags, where) # disabled for issue #2
 
     canonsize = sizeinfer(store, canon, where, true)
 
