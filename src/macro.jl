@@ -92,6 +92,7 @@ Tensor reduction macro:
     @reduce G[] := sum(i,j)  B[i] + γ * D[j]      # F == G[]
 
 Complete reduction to a scalar output `F`, or a zero-dim array `G`.
+`G[]` involves `sum(A, dims=(1,2))` rather than `sum(A)`.
 
     @reduce Z[k] := sum(i,j) A[i] * B[j] * C[k]  lazy, i:N, j:N, k:N
 
@@ -597,7 +598,9 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, ind
         ex = :( reverse($ex, dims=$d) )
     end
 
-    if :reduce in flags                                     # := sum(i)
+    if :reduce in flags && :scalar in flags                 # Z = @reduce sum(i) ...
+        ex = :( $redfun($ex) )
+    elseif :reduce in flags                                 # Z[i] := sum(j) ...
         rdims = Tuple([findcheck(i, canon, where) for i in redUind])
         if length(rdims)==1
             rdims = first(rdims)
@@ -648,10 +651,6 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, ind
         m_error("can't do what you ask without copying, sorry", where)
     elseif :mustview in flags && :broadcast in flags
         m_error("can't broadcast without copying, sorry", where)
-    end
-
-    if :scalar in flags                                     # Z = @reduce sum(i) ...
-        ex = :( first($ex) )
     end
 
     # if :strided in flags
