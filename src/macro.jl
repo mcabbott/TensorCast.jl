@@ -479,7 +479,9 @@ function inputex(A, inex, target, flags, store, icheck, where)
 
     numB = count(!isequal(:), getB)
     if numB > 0                                             # A[_,i]
-        if needview!(getB)
+        if numB == length(getB) # then all indices are fixed
+            ex = :( $ex[$(getB...)] )
+        elseif needview!(getB) # then at least one index fixed and not _
             ex = :(view($ex, $(getB...) ))
         else
             ex = :(TensorCast.rview($ex, $(getB...) )) # really a reshape
@@ -564,7 +566,7 @@ function inputex(A, inex, target, flags, store, icheck, where)
         end
     end
 
-    if length(flatE) != length(target)                      # A[i] + B[j]
+    if length(flatE) != length(target) && dirs != 1:length(dirs) # A[i] + B[j]
         codeH = repeat(Any[*],length(target))
         codeH[dirs] .= (:)
         ex = :( TensorCast.orient($ex, $(codeH...,)) )
