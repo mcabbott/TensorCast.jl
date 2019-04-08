@@ -240,7 +240,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
 
     #===== almost done =====#
 
-    # packagecheck(flags, where) # disabled for issue #2
+    packagecheck(flags, where) # disabled for issue #2
 
     canonsize = sizeinfer(store, canon, where, true)
 
@@ -791,25 +791,26 @@ function anoninput(rightnames, where)
 end
 
 function packagecheck(flags, where)
-    # thanks to LazyArrays, StaticArrays is always defined here, so check caller's scope?
-    if :staticslice in flags || :staticglue in flags && where != nothing
+    where === nothing && return
+    # now check in caller's scope?
+    if :staticslice in flags || :staticglue in flags
         isdefined(where.mod, :StaticArrays) || m_error("can't use static arrays without using StaticArrays", where)
     end
     if :strided in flags
-        isdefined(TensorCast, :Strided) || m_error("can't use option strided without using Strided", where)
+        isdefined(where.mod, :Strided) || m_error("can't use option strided without using Strided", where)
     end
     if :julienne in flags
-        isdefined(TensorCast, :JuliennedArrays) || m_error("can't use option julienne without using JuliennedArrays", where)
+        isdefined(where.mod, :JuliennedArrays) || m_error("can't use option julienne without using JuliennedArrays", where)
     end
     if :named in flags
-        isdefined(TensorCast, :NamedArrays) || m_error("can't use option named without using NamedArrays", where)
+        isdefined(where.mod, :NamedArrays) || m_error("can't use option named without using NamedArrays", where)
     end
     # if :axis in flags
-    #     isdefined(TensorCast, :AxisArrays) || m_error("can't use option axis without using AxisArrays", where)
+    #     isdefined(where.mod, :AxisArrays) || m_error("can't use option axis without using AxisArrays", where)
     # end
 end
 
-using LazyArrays # now not optional, and thus not always in caller's scope
+using LazyArrays # for BroadcastArray
 
 using LinearAlgebra  # for diag()
 
