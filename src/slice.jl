@@ -243,3 +243,5 @@ function diagview(A::AbstractMatrix)
     r,c = size(A)
     view(A, 1:(r+1):r*c)
 end
+
+diagview(A::LinearAlgebra.Diagonal) = A.diag

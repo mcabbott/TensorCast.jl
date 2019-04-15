@@ -47,7 +47,8 @@ Options can be specified at the end (if several, separated by `,` i.e. `options:
   (Providing ranges may also turn these on, but imperfectly, confirm with `@pretty @cast ...`.)
 * `cat` will glue slices by things like `hcat(A...)` instead of the default `reduce(hcat, A)`,
   and `lazy` will instead make a `VectorOfArrays` container.
-* `nolazy` disables `PermutedDimsArray` and `Reverse` in favour of `permutedims` and `reverse`.
+* `nolazy` disables `PermutedDimsArray` and `Reverse` in favour of `permutedims` and `reverse`,
+  and `Diagonal` in favour of `diagm` for `Z[i,i]` output.
 * `strided` will place `@strided` in front of broadcasting operations,
   and use `@strided permutedims(A, ...)` instead of `PermutedDimsArray(A, ...)`.
   For this you need to install and load the package: `using Strided`.
@@ -350,6 +351,14 @@ function readleft(left, redind, flags, store, icheck, where)
     flat12, getY, sizeZ, negV = parse!(store, Z, outer, inner; allowranges=true) # true allows A[i]{j:3}
     redUind, _,_,_ = parse!(store, nothing, [], redind; allowranges=true) # true means sum(i:3) allowed
 
+    if length(flat12)-length(inner) == 2 && flat12[end] == flat12[end-1] # Z[i,i] special case
+        length(getY) == 2 || throw(MacroError("can't fix output index with Diagonal output", where)) # because I'm lazy, this would not be impossible
+        push!(flags, :diagleft)
+        pop!(flat12) # remove index from flat list
+        pop!(getY)
+        pop!(sizeZ)
+    end
+
     canon = vcat(flat12, redUind) # order here is [inner, outer, reduced]
 
     checkrepeats(flat12, " on left hand side", where)
@@ -413,6 +422,9 @@ function walker(outex, ex, canon, flags, store, icheck, where)
         # if we have f(x)[i,j] then we should evaluate f just once, e.g.
         # @pretty @cast A[i]{j:5} |= rand(15)[i\j]
         if !isa(A, Symbol)
+        # if isa(A, Symbol) || @capture(A, Astruct_.field_)
+        #     @show A
+        # else
             Atop = gensym(:A)
             push!(store.topex, :(local $Atop = $A ) )
             A = Atop
@@ -470,7 +482,6 @@ function inputex(A, inex, target, flags, store, icheck, where)
 
     flatE, getB, _, negF = parse!(store, A, outer, inner)
 
-    # checkrepeats(flatE, " in term $inex", where)
     append!(store.seen, flatE)
 
     ex = A
@@ -480,7 +491,8 @@ function inputex(A, inex, target, flags, store, icheck, where)
 
     numB = count(!isequal(:), getB)
     if numB > 0                                             # A[_,i]
-        if numB == length(getB) # then all indices are fixed
+        if numB == length(getB) || :nolazy in flags
+            needview!(getB) # replace _ with 1 if any
             ex = :( $ex[$(getB...)] )
         elseif needview!(getB) # then at least one index fixed and not _
             ex = :(view($ex, $(getB...) ))
@@ -500,6 +512,7 @@ function inputex(A, inex, target, flags, store, icheck, where)
     if length(flatE)-length(inner) == 2 && flatE[end] == flatE[end-1]  # A[i,i] special case
         if :nolazy in flags
             ex = :( TensorCast.diag($ex) ) # LinearAlgebra might not be loaded by caller
+            push!(flags, :havecopied)
         else
             ex = :( TensorCast.diagview($ex) )
         end
@@ -538,6 +551,7 @@ function inputex(A, inex, target, flags, store, icheck, where)
             ex = :( TensorCast.red_glue($ex, $(codeD...,))  )
             push!(flags, :havecopied)
         end
+
     elseif glue == :static                                  # A[i]{k}
         ex = :( TensorCast.static_glue($ex)  )
         push!(flags, :staticglue) # for packagecheck
@@ -653,6 +667,14 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, ind
         m_error("can't broadcast without copying, sorry", where)
     end
 
+    if :diagleft in flags                                   # Z[i,i] := ...
+        if :nolazy in flags
+            ex = :( TensorCast.diagm(0 => $ex) )
+        else
+            ex = :( TensorCast.Diagonal($ex) )
+        end
+    end
+
     # if :strided in flags
     #     ex = :( Strided.@strided $ex )
     # end
@@ -705,8 +727,11 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
             else
                 revleft = :(TensorCast.rview($revleft, $(getY...) )) # really a reshape
             end
-            # revleft = :( view($revleft, $(getY...)) )
             push!(flags, :finalres)
+        end
+
+        if :diagleft in flags
+            revleft = :( TensorCast.diagview($revleft) )
         end
 
         if :backshape in flags
@@ -733,8 +758,11 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
             else
                 revleft = :(TensorCast.rview($revleft, $(getY...) )) # really a reshape
             end
-            # revleft = :( view($revleft, $(getY...)) )
             push!(flags, :finalres)
+        end
+
+        if :diagleft in flags
+            revleft = :( TensorCast.diagview($revleft) )
         end
 
         if :backshape in flags
@@ -758,8 +786,11 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
             else
                 revleft = :(TensorCast.rview($revleft, $(getY...) )) # really a reshape
             end
-            # revleft = :( view($revleft, $(getY...)) )
             push!(flags, :finalres)
+        end
+
+        if :diagleft in flags
+            revleft = :( TensorCast.diagview($revleft) )
         end
 
         ex = :( $copyto!($revleft, $newright) )
