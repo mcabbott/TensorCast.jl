@@ -6,6 +6,10 @@ const flag_list = Any[ :!, :assert,
 
 #= TODO
 
+# this is less lazy than it could be:
+# fix by upgrading how you do broadcastarrays?
+@pretty @reduce gterm[ρ,b] = sum(μ) (2β) * gd[μ,ρ] * (θd[μ]-θ[μ,b])  lazy
+
 # this gives an error -- change to sizeinfer! which updates dict, and call that?
 # or perhaps just check at :staticslice & throw an error
 @pretty @cast A[k]{i,j} := B[i,(j,k)]  k:length(C)

@@ -65,7 +65,7 @@ macro mul!(exs...)
 end
 =#
 
-function _mul(ex, options=nothing; icheck=false, where=where)
+function _mul(ex, options=nothing; icheck=false, where=where, recurse=false)
     flags = Set{Symbol}()
 
     # @warn "The macro @mul has bugs!" maxlog=1
@@ -238,6 +238,11 @@ function _mul(ex, options=nothing; icheck=false, where=where)
     end
     for tex in store.topex
         pushfirst!(outex.args, tex)
+    end
+
+    if recurse==true # only for @mul inside of something
+        indZ = outUZ[end-1]
+        return outex, indZ
     end
 
     if length(outex.args) == 1

@@ -254,9 +254,53 @@ A = randn(4000,4000); B = similar(A);
 @time @cast B[i,j] = (A[i,j] + A[j,i])/2 strided;     # 0.025 seconds
 ```
 
+### Less lazy
+
+To disable the default use of `PermutedDimsArray` etc, give the option `nolazy`: 
+
+```julia
+@pretty @cast Z[y,x] := M[x,-y]  nolazy
+# Z = reverse(permutedims(M), dims=1)
+@pretty @cast Z[y,x] := M[x,-y] 
+# Z = Reverse{1}(PermutedDimsArray(M, (2, 1)))
+@pretty @cast Z[y,x] |= M[x,-y]
+# Z = copy(Reverse{1}(PermutedDimsArray(M, (2, 1))))
+```
+
+Here `TensorCast.Reverse{1}(B)` creates a view, with `reverse(axes(B,1))`.
+
+## Caveat Emptor
+
+Some new features, not well tested, and some only on master branch:
+
+### Recursion
+
+The macro now looks for `@reduce` inside other expressions, and processes this first. 
+It isn't smart enough to infer the order of the un-summed indices, so you must tell it, 
+although you need not name the intermediate array. 
+For example, this is `Σᵢ Aᵢ log(Σⱼ Aⱼ exp(Bᵢⱼ))` with `caribou[i]` the result of `Σⱼ`:
+
+```julia
+@pretty @reduce sum(i) A[i] * log( @reduce [i] := sum(j) A[j] * exp(B[i,j]) )
+# begin
+#     local kangaroo = begin
+#         local turtle = orient(A, (*, :))
+#         caribou = dropdims(sum((*).(turtle, exp.(B)), dims=2), dims=2)
+#     end
+#     mallard = sum((*).(A, log.(kangaroo)))
+# end
+```
+
 ### Matrix multiplication
 
-For now this is only on master branch, as there are some errors (especially with `Vector * Matrix` cases). 
+The macro `@mul` expects exactly two tensors, nothing else.
+There is an implicit sum over indices repeated on the right: 
+
+```julia
+@mul T[i,_,j] := U[i,k,k′] * V[(k,k′),j]    # matrix multiplication, summing over (k,k′)
+```
+
+But this still has some errors (especially with `Vector * Matrix` cases). 
 `TensorCast.batchmul(B,C)` is a naiive implementation of batched matrix multiplication:
 
 ```julia

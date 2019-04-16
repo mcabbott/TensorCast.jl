@@ -152,7 +152,8 @@ nameZ, indZ, indZsub, indZred -- given LHS
 
 =#
 
-function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=false, where=nothing)
+function _macro(exone, extwo=nothing, exthree=nothing;
+    reduce=false, icheck=false, where=nothing, recurse=false)
 
     flags = Set{Symbol}()
 
@@ -303,6 +304,12 @@ function _macro(exone, extwo=nothing, exthree=nothing; reduce=false, icheck=fals
         outex = outex.args[1]
     end
 
+    if recurse==true # only for @reduce inside something
+        indZ = outUZ[end-1]
+        # @info "recursive" outex indZ
+        return outex, indZ
+    end
+
     if :anonfunc in flags
         leftex = anoninput(store.rightnames, where)
         outex = :( $leftex -> $outex ) # TODO make this not introduce begin end
@@ -413,6 +420,26 @@ Called by `MacroTools.prewalk` on RHS, finds tensors & pushes `:( sym = inputex(
 `outex.args`, and then replaces them with `sym`.
 """
 function walker(outex, ex, canon, flags, store, icheck, where)
+
+    # allow @reduce inside RHS, by simply calling the entire macro first
+    if @capture(ex, @reduce(redex__))
+        Rsym = gensym(:R)
+        Rval, Rind = _macro(redex...; reduce=true, where=where, recurse=true)
+
+        # sew the result of that into outex
+        push!(outex.args, :(local $Rsym = $Rval ) )
+
+        # construct name for resulting tensor, for outer @cast to further process
+        ex =  :( $Rsym[$(Rind...)] )
+
+    elseif @capture(ex, @mul(mulex__))
+        Msym = gensym(:M)
+        Mval, Mind = _mul(mulex...; where=where, recurse=true)
+
+        push!(outex.args, :(local $Msym = $Mval ) )
+
+        ex =  :( $Msym[$(Mind...)] )
+    end
 
     # find any indexed tensor, process it, and replace it
     if @capture(ex, A_[ij__][kl__] ) || @capture(ex, A_[ij__]{kl__} ) || @capture(ex, A_[ij__] )
