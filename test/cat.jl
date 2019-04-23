@@ -32,26 +32,26 @@ end
     B = [ SVector{2}(i .+ rand(2)) for i=1:3 ];
 
     G0 = cat_glue(B, (:,*))
-    G1 = copy_glue(B, (:,*)) 
+    G1 = copy_glue(B, (:,*))
     G2 = static_glue(B)
     G3 = glue!(similar(G1), B, (:,*))
     G4 = red_glue(B, (:,*))
     @test all(G0 .== G1 .== G2 .== G3 .== G4)
 
     G0T = cat_glue(B, (*,:))
-    G1T = copy_glue(B, (*,:)) 
+    G1T = copy_glue(B, (*,:))
     G3T = glue!(similar(G1T), B, (*,:))
     G4T = red_glue(B, (*,:))
     @test all(G0T .== G1T .== G3T .== G4T)
 
     C = [ SMatrix{2,3}(rand(2,3)) for i=1:4, j=1:5 ];
 
-    H1 = copy_glue(C, (:,:,*,*)) 
+    H1 = copy_glue(C, (:,:,*,*))
     H2 = static_glue(C)
     H3 = glue!(similar(H1), C, (:,:,*,*))
-    H4 = red_glue(C, (:,:,*,*)) 
-    H5 = cat_glue(C, (:,:,*,*)) 
-    H6 = lazy_glue(C, (:,:,*,*)) 
+    H4 = red_glue(C, (:,:,*,*))
+    H5 = cat_glue(C, (:,:,*,*))
+    H6 = lazy_glue(C, (:,:,*,*))
     @test all(H1 .== H2 .== H3 .== H4 .== H5)
 
     D = [ SMatrix{2,3}(k .+ rand(2,3)) for k=1:4 ];
@@ -65,5 +65,30 @@ end
     G8 = copy_glue(D, (:,*,:))
     G9 = glue!(similar(G8), D, (:,*,:))
     @test all(G8 .== G9)
+
+end
+@testset "diag" begin
+
+    A = collect(reshape(1:16,4,4))
+
+    @cast M[i,i] := A[i,i]  nolazy
+    @test M isa Matrix
+    @test M[3,3] == A[3,3]
+    @test M[1,4] == 0
+
+    using LinearAlgebra
+    @cast D[i,i] := A[i,i]
+    @test D isa LinearAlgebra.Diagonal
+
+    @cast M[i,i] = A[i,i] + 2 * D[i,i]
+    @test M[2,2] == 3 * A[2,2]
+    @cast M[i,i] = A[i,i] + 2 * D[i,i]  nolazy, assert
+    @test M[2,2] == 3 * A[2,2]
+
+    @reduce D[i,i] := sum(k) A[i,k] + 10
+    @test D.diag == vec(sum(A, dims=2) .+ 40)
+
+    @reduce M[i,i] = sum(k) A[i,k] + 10 # sum!(diagview(M))
+    @test D.diag == diag(M)
 
 end

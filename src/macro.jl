@@ -759,6 +759,7 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
 
         if :diagleft in flags
             revleft = :( TensorCast.diagview($revleft) )
+            push!(flags, :finalres)
         end
 
         if :backshape in flags
@@ -790,6 +791,7 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
 
         if :diagleft in flags
             revleft = :( TensorCast.diagview($revleft) )
+            push!(flags, :finalres)
         end
 
         if :backshape in flags
@@ -799,7 +801,7 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
             push!(flags, :finalres)
         end
 
-        ex = :( Base.@__dot__ $revleft = $newright )
+        ex = :( $revleft .= Base.@__dot__ $newright ) # don't apply @. to reshape(diagview(Z))
 
     else                                                    # copyto!(revleft, newright)
 
@@ -817,6 +819,7 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
 
         if :diagleft in flags
             revleft = :( TensorCast.diagview($revleft) )
+            push!(flags, :finalres)
         end
 
         ex = :( $copyto!($revleft, $newright) )

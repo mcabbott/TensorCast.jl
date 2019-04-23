@@ -261,13 +261,28 @@ To disable the default use of `PermutedDimsArray` etc, give the option `nolazy`:
 ```julia
 @pretty @cast Z[y,x] := M[x,-y]  nolazy
 # Z = reverse(permutedims(M), dims=1)
+
 @pretty @cast Z[y,x] := M[x,-y] 
-# Z = Reverse{1}(PermutedDimsArray(M, (2, 1)))
-@pretty @cast Z[y,x] |= M[x,-y]
-# Z = copy(Reverse{1}(PermutedDimsArray(M, (2, 1))))
+# Z = Reverse{1}(PermutDims(M))
 ```
 
-Here `TensorCast.Reverse{1}(B)` creates a view, with `reverse(axes(B,1))`.
+This also controls how the extraction of diagonal elements
+and creation of diagonal matrices are done:
+
+```julia
+@pretty @cast M[i,i] := A[i,i]  nolazy
+# M = diagm(0 => diag(A))
+
+@pretty @cast D[i,i] := A[i,i]
+# D = Diagonal(TensorCast.diagview(A))
+
+@pretty @cast M[i,i] = A[i,i]  nolazy  # into diagonal of existing matrix M
+# copyto!(diagview(M), diag(A)); M
+```
+
+Here `TensorCast.Reverse{1}(B)` creates a view with `reverse(axes(B,1))`. 
+`TensorCast.PermutDims(M)` is `transpose(M)` on a matrix of numbers, else `PermutedDimsArray`.
+And `TensorCast.diagview(A)` is something like `view(A, 1:rows+1:end)`.
 
 ## Caveat Emptor
 
