@@ -181,8 +181,8 @@ by inserting axes on which `size(B, d) == 1` as needed.
 end
 
 # because of https://github.com/JuliaArrays/LazyArrays.jl/issues/16
-# orient(A::AbstractVector{T}, ::Tuple{typeof(*),Colon}) where {T <: Number} = transpose(A)
-# orient(A::AbstractVector{T}, ::Tuple{typeof(*),Colon,typeof(*)}) where {T <: Number} = transpose(A)
+orient(A::AbstractVector{T}, ::Tuple{typeof(*),Colon}) where {T <: Number} = PermuteDims(A)
+orient(A::AbstractVector{T}, ::Tuple{typeof(*),Colon,typeof(*)}) where {T <: Number} = PermuteDims(A)
 
 # tidier but not strictly necc: for @cast Z[i] = A[3] + B[i]
 orient(A::AbstractArray{<:Any, 0}, ::Tuple{typeof(*)}) = first(A)
@@ -233,7 +233,10 @@ end
 Lazy like `transpose`, but not recursive.
 """
 PermuteDims(A::AbstractMatrix) = PermutedDimsArray(A, (2,1))
+PermuteDims(A::AbstractMatrix{T}) where {T<:Number} = transpose(A)
+
 PermuteDims(A::AbstractVector) = reshape(A,1,:)
+PermuteDims(A::AbstractVector{T}) where {T<:Number} = transpose(A)
 
 """
     diagview(M)

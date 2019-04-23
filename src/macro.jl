@@ -591,8 +591,8 @@ function inputex(A, inex, target, flags, store, icheck, where)
             ex = :( permutedims($ex, $perm) )
         elseif :strided in flags
             ex = :( TensorCast.strided_permutedims($ex, $perm) )
-        # elseif perm == (2,1)
-        #     ex = :( transpose($ex) ) # now avoiding transpose because it's recursive
+        elseif perm == (2,1)
+            ex = :( TensorCast.PermuteDims($ex) ) # avoids transpose, except on numbers, because it's recursive
         else
             ex = :( PermutedDimsArray($ex, $perm) )
         end

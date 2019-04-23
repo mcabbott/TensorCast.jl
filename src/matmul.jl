@@ -210,7 +210,7 @@ function _mul(ex, options=nothing; icheck=false, where=where, recurse=false)
             if :strided in flags
                 ex = :( strided_permutedims($ex, $perm) )
             elseif permU == [2,1]
-                newright = :( transpose($newright) )
+                newright = :( TensorCast.PermuteDims($newright) )
             else
                 newright = :( PermutedDimsArray($newright, ($(permU...),) ))
             end

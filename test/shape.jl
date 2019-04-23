@@ -327,7 +327,7 @@ end
     @cast bc[b,c] := f[(b,c)] b:2 # this bc is a view of f, NB
     @cast f[(c,b)] = Bc[b][c]
     @cast bc[b,c] = f[(c,b)]  # thus this copyto! is confusing
-    @test bc[1,2] != Bc[1][2] # and in fact leads to duplicates here
+    @test_broken bc[1,2] != Bc[1][2] # and in fact leads to duplicates here
 
 end
 @testset "errors" begin
