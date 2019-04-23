@@ -266,10 +266,10 @@ function _macro(exone, extwo=nothing, exthree=nothing;
         #===== out-of-place output  =====#
 
         if :broadcast in flags
-            newright = Broadcast.__dot__(newright)
             if (:reduce in flags) && (:lazy in flags)
-                newright = makelazy(newright)
+                newright = :( TensorCast.lazy($newright) ) # really LazyArrays.lazy, can be inside @.
             end
+            newright = :( Base.@__dot__ $newright ) # prettier in @pretty
             if :strided in flags
                 newright = :( Strided.@strided $newright )
             end
@@ -739,10 +739,10 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
     if :reduce in flags                                     # sum!(revleft, newright)
 
         if :broadcast in flags
-            newright = Broadcast.__dot__(newright)
             if :lazy in flags
-                newright = makelazy(newright)
+                newright = :( TensorCast.lazy($newright) ) # really LazyArrays.lazy
             end
+            newright = :( Base.@__dot__ $newright )
         end
 
         # working backwards
@@ -799,8 +799,7 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
             push!(flags, :finalres)
         end
 
-        bc = Broadcast.__dot__(newright)
-        ex = :( $revleft .= $bc )
+        ex = :( Base.@__dot__ $revleft = $newright )
 
     else                                                    # copyto!(revleft, newright)
 
@@ -848,6 +847,11 @@ function anoninput(rightnames, where)
     end
 end
 
+using LazyArrays
+using LazyArrays: lazy
+
+using LinearAlgebra  # for diag()
+
 function packagecheck(flags, where)
     where === nothing && return
     # now check in caller's scope?
@@ -866,34 +870,8 @@ function packagecheck(flags, where)
     # if :axis in flags
     #     isdefined(where.mod, :AxisArrays) || m_error("can't use option axis without using AxisArrays", where)
     # end
-end
-
-using LazyArrays # for BroadcastArray
-
-using LinearAlgebra  # for diag()
-
-"""
-    makelazy(bc)
-
-Takes the result of `Broadcast.__dot__()` and converts it to have a `LazyArrays.BroadcastArray`.
-"""
-makelazy(sym::Symbol) = sym
-
-# TODO replace this with lazy.() trick
-function makelazy(bc::Expr)
-    V && @info "before LazyArrays" bc
-
-    @assert bc.head == :(.)      # always a dot
-    oprator = bc.args[1]         # is the first operator
-    bc.args[2]                   # is its tuple of arguments
-    @assert length(bc.args) == 2 # and there's nothing more
-    @assert bc.args[2].head == :tuple
-    arguments = bc.args[2].args  # is the args of first op
-
-    # lazybc = Expr(:call, :(LazyArrays.BroadcastArray), oprator, arguments...)
-    lazybc = Expr(:call, :(TensorCast.BroadcastArray), oprator, arguments...)
-
-
-    V && @info "after LazyArrays" lazybc
-    return lazybc
+    if (:lazy in flags) && (:broadcast in flags) && (:reduce in flags)
+        # isdefined(where.mod, :LazyArrays) || m_error("can't use lazy broadcasting without using LazyArrays", where)
+        # isdefined(where.mod, :LazyArrays) || @warn "I may make you load LazyArrays for lazy broadcasting, soon"
+    end
 end

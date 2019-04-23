@@ -110,10 +110,10 @@ Use the macro `@pretty` to print out the generated expression:
 
 @pretty @reduce V[r] = sum(c) exp( fun(M)[r,c]^2 / R[c]' ) * D[c,c]
 # begin
-#     local bat = fun(M)  # your animals may vary
-#     local hare = orient(R, (*, :))
-#     local zebra = orient(diag(D), (*, :))
-#     sum!(V, (*).(exp.((/).((^).(bat, 2), Base.conj.(hare))), zebra))
+#     local kangaroo = fun(M)  # your animals may vary
+#     local turtle = orient(R, (*, :))
+#     local caribou = orient(diag(D), (*, :))
+#     sum!(V, @__dot__(exp(kangaroo ^ 2 / conj(turtle)) * caribou))
 # end
 ```
 
@@ -285,9 +285,9 @@ For example, this is `Σᵢ Aᵢ log(Σⱼ Aⱼ exp(Bᵢⱼ))` with `caribou[i]`
 # begin
 #     local kangaroo = begin
 #         local turtle = orient(A, (*, :))
-#         caribou = dropdims(sum((*).(turtle, exp.(B)), dims=2), dims=2)
+#         caribou = dropdims(sum(@__dot__(turtle * exp(B)), dims=2), dims=2)
 #     end
-#     mallard = sum((*).(A, log.(kangaroo)))
+#     mallard = sum(@__dot__(A * log(kangaroo)))
 # end
 ```
 
@@ -316,10 +316,10 @@ But this still has some errors (especially with `Vector * Matrix` cases).
 Also a little experimental, you can make functions with `=>`, like this:
 
 ```julia
-@pretty @cast A[i,j] + 3 + B[j,j]^2 => Z[i,j]  nolazy
+@pretty @cast A[i,j] + 3 + B[j,j]^2 => Z[i,j]
 # (A, B) -> begin
-#     local herring = orient(diag(B), (*, :))
-#     Z = (+).(A, 3, (^).(herring, 2))
+#     local herring = orient(diagview(B), (*, :))
+#     Z = @__dot__(A + 3 + herring ^ 2)
 # end
 ```
 
