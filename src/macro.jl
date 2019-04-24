@@ -227,7 +227,7 @@ function _macro(exone, extwo=nothing, exthree=nothing;
 
     #===== parse and process RHS =====#
 
-    outex = MacroTools.@q begin end
+    outex = quote end
 
     if @capture(right, AA_[ii__] ) || @capture(right, AA_{ii__} )
         newright = walker(outex, right, canon, flags, store, icheck, where)
@@ -258,6 +258,7 @@ function _macro(exone, extwo=nothing, exthree=nothing;
 
         inout = outputinplace(newright, outUZ, redfun, canonsize, canon, flags, store, nameZ, where)
         push!(outex.args, inout)
+
         if :finalres in flags
             push!(outex.args, nameZ)
         end
@@ -275,6 +276,7 @@ function _macro(exone, extwo=nothing, exthree=nothing;
                 newright = :( Base.@__dot__ $newright ) # prettier in @pretty
             end
         end
+
         finalright = outputnew(newright, outUZ, redfun, canonsize, canon, flags, store, where)
         push!(outex.args, :( $nameZ =  $finalright ) )
 
@@ -301,21 +303,18 @@ function _macro(exone, extwo=nothing, exthree=nothing;
         pushfirst!(outex.args, tex)
     end
 
-    if length(outex.args) == 1
-        outex = outex.args[1]
-    end
-
     if recurse==true # only for @reduce inside something
         indZ = outUZ[end-1]
-        # @info "recursive" outex indZ
         return outex, indZ
     end
 
     if :anonfunc in flags
         leftex = anoninput(store.rightnames, where)
-        outex = :( $leftex -> $outex ) # TODO make this not introduce begin end, MacroTools.unblock(ex)
+        outex = :( $leftex -> $outex )
+        outex.args[2] = MacroTools.unblock(outex.args[2])
         return esc(outex)
     else
+        outex = MacroTools.unblock(outex) # removes begin end if it can
         return esc(outex)
     end
 end
@@ -738,12 +737,6 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
 
     if :reduce in flags                                     # sum!(revleft, newright)
 
-        # if :broadcast in flags
-        #     if :lazy in flags
-        #         newright = :( TensorCast.lazy($newright) ) # really LazyArrays.lazy
-        #     end
-        #     newright = :( Base.@__dot__ $newright )
-        # end
         if :broadcast in flags
             if :lazy in flags
                 newright = :( Base.@__dot__ TensorCast.lazy($newright) ) # really LazyArrays.lazy
@@ -845,10 +838,6 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
 
     end
 
-    # if :strided in flags
-    #     ex = :( Strided.@strided $ex )
-    # end
-
     return ex
 end
 
@@ -892,8 +881,4 @@ function packagecheck(flags, where)
     # if :axis in flags
     #     isdefined(where.mod, :AxisArrays) || m_error("can't use option axis without using AxisArrays", where)
     # end
-    if (:lazy in flags) && (:broadcast in flags) && (:reduce in flags)
-        # isdefined(where.mod, :LazyArrays) || m_error("can't use lazy broadcasting without using LazyArrays", where)
-        # isdefined(where.mod, :LazyArrays) || @warn "I may make you load LazyArrays for lazy broadcasting, soon"
-    end
 end

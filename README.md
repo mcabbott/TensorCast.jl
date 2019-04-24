@@ -108,19 +108,18 @@ Use the macro `@pretty` to print out the generated expression:
 #     A = sliceview(emu, (:, :, *))
 # end
 
-@pretty @reduce V[r] = sum(c) exp( fun(M)[r,c]^2 / R[c]' ) * D[c,c]
+@pretty @reduce V[r] = sum(c) exp( fun(M)[r,c]^2 / R[c]' )
 # begin
 #     local kangaroo = fun(M)  # your animals may vary
 #     local turtle = orient(R, (*, :))
-#     local caribou = orient(diag(D), (*, :))
-#     sum!(V, @__dot__(exp(kangaroo ^ 2 / conj(turtle)) * caribou))
+#     sum!(V, @__dot__(exp(kangaroo ^ 2 / conj(turtle))))
 # end
 ```
 
 Here `TensorCast.sliceview(D, (:,:,*)) = collect(eachslice(D, dims=3))`, 
 and  `TensorCast.orient(R, (*,:))` will reshape or tranpose `R` to lie long the second direction. 
-Notice that `R[c]'` means element-wise complex conjugation,
-and `D[c,c]` means `diag(D)` -- this is the only repeated index allowed. 
+Notice that `R[c]'` means element-wise complex conjugation, 
+applied by `@__dot__` (also written `@.`).
 
 (`@pretty` is just a variant of the built-in `@macroexpand1`, with animal names from
 [MacroTools.jl](https://github.com/MikeInnes/MacroTools.jl) in place of generated symbols.)
@@ -263,7 +262,7 @@ To disable the default use of `PermutedDimsArray` etc, give the option `nolazy`:
 # Z = reverse(permutedims(M), dims=1)
 
 @pretty @cast Z[y,x] := M[x,-y] 
-# Z = Reverse{1}(PermutDims(M))
+# Z = Reverse{1}(PermuteDims(M))
 ```
 
 This also controls how the extraction of diagonal elements
@@ -274,14 +273,14 @@ and creation of diagonal matrices are done:
 # M = diagm(0 => diag(A))
 
 @pretty @cast D[i,i] := A[i,i]
-# D = Diagonal(TensorCast.diagview(A))
+# D = Diagonal(diagview(A))
 
 @pretty @cast M[i,i] = A[i,i]  nolazy  # into diagonal of existing matrix M
 # copyto!(diagview(M), diag(A)); M
 ```
 
 Here `TensorCast.Reverse{1}(B)` creates a view with `reverse(axes(B,1))`. 
-`TensorCast.PermutDims(M)` is `transpose(M)` on a matrix of numbers, else `PermutedDimsArray`.
+`TensorCast.PermuteDims(M)` is `transpose(M)` on a matrix of numbers, else `PermutedDimsArray`.
 And `TensorCast.diagview(A)` is something like `view(A, 1:rows+1:end)`.
 
 ## Caveat Emptor
