@@ -33,9 +33,9 @@ function __init__()
         include("static.jl")
     end
 
-    @require Strided = "5e0ebb24-38b0-5f93-81fe-25c709ecae67" begin
-        include("strided.jl")
-    end
+    # @require Strided = "5e0ebb24-38b0-5f93-81fe-25c709ecae67" begin
+    #     include("strided.jl")
+    # end
 
     @require JuliennedArrays = "5cadff95-7770-533d-a838-a1bf817ee6e0" begin
         include("julienne.jl")

@@ -267,11 +267,12 @@ function _macro(exone, extwo=nothing, exthree=nothing;
 
         if :broadcast in flags
             if (:reduce in flags) && (:lazy in flags)
-                newright = :( TensorCast.lazy($newright) ) # really LazyArrays.lazy, can be inside @.
-            end
-            newright = :( Base.@__dot__ $newright ) # prettier in @pretty
-            if :strided in flags
-                newright = :( Strided.@strided $newright )
+                newright = :( Base.@__dot__ TensorCast.lazy($newright) ) # really LazyArrays.lazy
+            elseif :strided in flags
+                dotted = Broadcast.__dot__(newright) # @strided does not work on @.
+                newright = :( Strided.@strided $dotted )
+            else
+                newright = :( Base.@__dot__ $newright ) # prettier in @pretty
             end
         end
         finalright = outputnew(newright, outUZ, redfun, canonsize, canon, flags, store, where)
@@ -312,7 +313,7 @@ function _macro(exone, extwo=nothing, exthree=nothing;
 
     if :anonfunc in flags
         leftex = anoninput(store.rightnames, where)
-        outex = :( $leftex -> $outex ) # TODO make this not introduce begin end
+        outex = :( $leftex -> $outex ) # TODO make this not introduce begin end, MacroTools.unblock(ex)
         return esc(outex)
     else
         return esc(outex)
@@ -589,8 +590,9 @@ function inputex(A, inex, target, flags, store, icheck, where)
         perm = Tuple(sortperm(dirs))
         if :nolazy in flags
             ex = :( permutedims($ex, $perm) )
+            push!(flags, :havecopied)
         elseif :strided in flags
-            ex = :( TensorCast.strided_permutedims($ex, $perm) )
+            ex = :( Strided.@strided permutedims($ex, $perm) )
         elseif perm == (2,1)
             ex = :( TensorCast.PermuteDims($ex) ) # avoids transpose, except on numbers, because it's recursive
         else
@@ -613,10 +615,6 @@ function inputex(A, inex, target, flags, store, icheck, where)
         codeH[dirs] .= (:)
         ex = :( TensorCast.orient($ex, $(codeH...,)) )
     end
-
-    # if :strided in flags
-    #     ex = :( Strided.@strided $ex )
-    # end
 
     return ex
 end
@@ -683,15 +681,21 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, ind
         end
     end
 
-    if :mustcopy in flags && !(:havecopied in flags) && !(:broadcast in flags)
-        ex = :( copy($ex) )                                 # Z[i] |= ...
-    elseif :mustcopy in flags && :staticslice in flags
-        ex = :( copy($ex) )
+    if :mustcopy in flags                                   # Z[i] |= ...
+        if !(:havecopied in flags) && !(:broadcast in flags)
+            ex = :( collect($ex) )
+        elseif (:slice in flags) && (:strided in flags)     # Z[i][j] |= ... strided
+            ex = :( collect.($ex) ) # because slicecopy actually makes views here
+        elseif (:staticslice in flags) || (:strided in flags) # i.e. then copy even if there was a broadcast etc.
+            ex = :( collect($ex) )
+        end
 
-    elseif :mustview in flags && :havecopied in flags       # Z[i] == ...
-        m_error("can't do what you ask without copying, sorry", where)
-    elseif :mustview in flags && :broadcast in flags
-        m_error("can't broadcast without copying, sorry", where)
+    elseif :mustview in flags                               # Z[i] == ...
+        if :havecopied in flags
+            m_error("can't do what you ask without copying, sorry", where)
+        elseif :broadcast in flags
+            m_error("can't broadcast without copying, sorry", where)
+        end
     end
 
     if :diagleft in flags                                   # Z[i,i] := ...
@@ -701,10 +705,6 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, ind
             ex = :( TensorCast.Diagonal($ex) )
         end
     end
-
-    # if :strided in flags
-    #     ex = :( Strided.@strided $ex )
-    # end
 
     if :named in flags                                      # Z[i] := ... named
         ex = :( TensorCast.namedarray($ex, $(indZ...,) ) )
@@ -738,11 +738,21 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
 
     if :reduce in flags                                     # sum!(revleft, newright)
 
+        # if :broadcast in flags
+        #     if :lazy in flags
+        #         newright = :( TensorCast.lazy($newright) ) # really LazyArrays.lazy
+        #     end
+        #     newright = :( Base.@__dot__ $newright )
+        # end
         if :broadcast in flags
             if :lazy in flags
-                newright = :( TensorCast.lazy($newright) ) # really LazyArrays.lazy
+                newright = :( Base.@__dot__ TensorCast.lazy($newright) ) # really LazyArrays.lazy
+            elseif :strided in flags
+                dotted = Broadcast.__dot__(newright) # @strided does not work on @.
+                newright = :( Strided.@strided $dotted )
+            else
+                newright = :( Base.@__dot__ $newright ) # prettier in @pretty
             end
-            newright = :( Base.@__dot__ $newright )
         end
 
         # working backwards
@@ -801,9 +811,18 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
             push!(flags, :finalres)
         end
 
-        ex = :( $revleft .= Base.@__dot__ $newright ) # don't apply @. to reshape(diagview(Z))
+        if :strided in flags
+            dotted = Broadcast.__dot__(newright)
+            ex = :( Strided.@strided $revleft .= $dotted )
+        else
+            ex = :( $revleft .= Base.@__dot__ $newright ) # don't apply @. to reshape(diagview(Z))
+        end
 
     else                                                    # copyto!(revleft, newright)
+
+        if :strided in flags
+            newright = :( Strided.@strided $newright )
+        end
 
         # working backwards
         revleft = nameZ
@@ -826,9 +845,9 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
 
     end
 
-    if :strided in flags
-        ex = :( Strided.@strided $ex )
-    end
+    # if :strided in flags
+    #     ex = :( Strided.@strided $ex )
+    # end
 
     return ex
 end
