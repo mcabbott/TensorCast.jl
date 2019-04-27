@@ -3,7 +3,7 @@
 	bc = rand(2,3)
 	bcde = rand(2,3,4,5);
 
-	@reduce C[c] := sum(b) bc[b,c] 
+	@reduce C[c] := sum(b) bc[b,c]
 	@test C == vec(sum(bc, dims=1))
 
 	@reduce B[b] := prod(c:3) bc[b,c] !
@@ -45,8 +45,8 @@ end
 
 end
 @testset "inference" begin
-    
-    # inference for a\b\c had an (Any[]...) dots problem at first 
+
+    # inference for a\b\c had an (Any[]...) dots problem at first
     B = randn(8,24);
     @reduce A[b,c, y,z] := sum(a:2, x:2) B[a\b\c, x⊗y⊗z]  b:2, y:3, assert
     @test size(A) == (2,2, 3,4)
@@ -55,8 +55,28 @@ end
     @reduce C[b,c, y,z] = sum(a, x) B[a\b\c, x⊗y⊗z]  assert
     @test C ≈ A
 
-    # with a:2 given, it doesn't try product inference, just leaves a :, which is OK. 
+    # with a:2 given, it doesn't try product inference, just leaves a :, which is OK.
     @reduce C[b,c, y,z] = sum(a:2, x) B[a\b\c, x⊗y⊗z]  assert
     @test C ≈ A
+
+end
+@testset "recursion" begin
+
+    # from readme
+    A = rand(4);
+    B = randn(4,4);
+    R = @reduce sum(i) A[i] * log( @reduce [i] := sum(j) A[j] * exp(B[i,j]) )
+    @reduce inner[i] := sum(j) A[j] * exp(B[i,j])
+    S = @reduce sum(i) A[i] * log(inner[i])
+    @test S == R
+
+    R2 = @reduce sum(i) A[i] * log( @reduce inner[i] = sum(j) A[j] * exp(B[i,j]) )
+    @test S == R2
+
+    # scalar result inside
+    tot = @reduce sum(i) A[i]
+    @cast N[i] := A[i] / tot
+    @cast M[i] := A[i] / @reduce sum(i) A[i]
+    @test N == M
 
 end
