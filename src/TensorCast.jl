@@ -25,6 +25,8 @@ include("recursive.jl") # RecursiveArrayTools
 
 include("order.jl") # Reverse{D} etc
 
+include("lazy.jl") # LazyCast
+
 using Requires
 
 function __init__()

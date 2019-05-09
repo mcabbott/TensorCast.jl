@@ -860,9 +860,6 @@ function anoninput(rightnames, where)
     end
 end
 
-using LazyArrays
-using LazyArrays: lazy
-
 using LinearAlgebra  # for diag()
 
 function packagecheck(flags, where)
@@ -877,13 +874,10 @@ function packagecheck(flags, where)
     if :julienne in flags
         isdefined(where.mod, :JuliennedArrays) || m_error("can't use option julienne without using JuliennedArrays", where)
     end
-    if :named in flags
-        @warn """option "named" used to produce a NamedArray, now that's "namedarray" so that it can be used for NamedDims, probably."""
-    end
     if :namedarray in flags
         isdefined(where.mod, :NamedArrays) || m_error("can't use option namedarray without using NamedArrays", where)
     end
-    if :nameddims in flags
+    if :named in flags || :nameddims in flags
         isdefined(where.mod, :NamedDims) || m_error("can't use option nameddims without using NamedDims", where)
     end
     # if :axis in flags
