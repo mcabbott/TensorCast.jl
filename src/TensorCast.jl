@@ -52,8 +52,12 @@ function __init__()
     #     include("zygote.jl")
     # end
 
+    # @require NamedDims = "356022a1-0364-5f58-8944-0da4b18d706f" begin
+    #     include("nameddims.jl")
+    # end
+
     @require NamedArrays = "86f7a689-2022-50b4-a561-43c23ac3c673" begin
-        include("named.jl")
+        include("namedarrays.jl")
     end
 
     # @require AxisArrays = "39de3d68-74b9-583c-8d2d-e117c070f3a9" begin

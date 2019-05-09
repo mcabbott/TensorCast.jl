@@ -2,13 +2,11 @@
 const flag_list = Any[ :!, :assert,
     :cat, :glue, :lazy, :nolazy,
     :strided, :julienne, :batched,
-    :named, :axis ]
+    :named, :nameddims, :namedarray, :axis ]
 
 #= TODO
 
-# this is less lazy than it could be:
-# fix by upgrading how you do broadcastarrays?
-@pretty @reduce gterm[ρ,b] = sum(μ) (2β) * gd[μ,ρ] * (θd[μ]-θ[μ,b])  lazy
+# add tests for recursion
 
 # this gives an error -- change to sizeinfer! which updates dict, and call that?
 # or perhaps just check at :staticslice & throw an error
