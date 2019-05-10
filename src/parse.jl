@@ -370,8 +370,8 @@ function unparse(str::String, exs...)
     @capture(exs[1], left_ := right_ ) && return string(str, " ", left, " := ", right, "  ", join(exs[2:end],"  "))
     @capture(exs[1], left_ |= right_ ) && return string(str, " ", left, " |= ", right, "  ", join(exs[2:end],"  "))
     @capture(exs[1], left_ == right_ ) && return string(str, " ", left, " == ", right, "  ", join(exs[2:end],"  "))
-    @capture(exs[1], left_ -> right_ ) && return string(str, " ", left, " == ", right, "  ", join(exs[2:end],"  "))
-    @capture(exs[1], left_ => right_ ) && return string(str, " ", left, " == ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ -> right_ ) && return string(str, " ", left, " -> ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ => right_ ) && return string(str, " ", left, " => ", right, "  ", join(exs[2:end],"  "))
     return string(exs)
 end
 

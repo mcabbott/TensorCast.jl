@@ -88,7 +88,6 @@ end
     glue!(B, A, code)
 end
 
-@doc @doc(glue)
 function glue!(B::AbstractArray{T,N}, A::AbstractArray{IT,ON}, code::Tuple) where {T,N,IT,ON}
     gluecodecheck(A, code)
     N == ndims(A) + ndims(first(A))  || throw(DimensionMismatch("wrong size target"))
@@ -159,6 +158,7 @@ end
 
 Reshapes `A` such that its nontrivial axes lie in the directions where `code` contains a `:`,
 by inserting axes on which `size(B, d) == 1` as needed.
+Throws an error if `ndims(A) != length(code)`.
 """
 @generated function orient(A::AbstractArray, code::Tuple)
     list = Any[]
@@ -228,9 +228,11 @@ end
 end
 
 """
-    PermuteDims(::Matrix)
-    PermuteDims(::Vector)
-Lazy like `transpose`, but not recursive.
+    PermuteDims(A::Matrix)
+    PermuteDims(A::Vector)
+
+Lazy like `transpose`, but not recursive:
+calls `PermutedDimsArray` unless `eltype(A) <: Number`.
 """
 PermuteDims(A::AbstractMatrix) = PermutedDimsArray(A, (2,1))
 PermuteDims(A::AbstractMatrix{T}) where {T<:Number} = transpose(A)
@@ -240,6 +242,7 @@ PermuteDims(A::AbstractVector{T}) where {T<:Number} = transpose(A)
 
 """
     diagview(M)
+
 Like `diag(M)` but makes a view.
 """
 function diagview(A::AbstractMatrix)
