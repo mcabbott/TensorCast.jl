@@ -320,12 +320,12 @@ function _macro(exone, extwo=nothing, exthree=nothing;
 end
 
 
-"""
+#="""
     canon, outUZ, nameZ, checkZ = readleft(left, redind, flags, store, icheck, where)
 
 outUZ = (redUind, negV, codeW, sizeX, getY, numY, indZ, sizeZ)
 are things passed to output construction.
-"""
+"""=#
 function readleft(left, redind, flags, store, icheck, where)
 
     if @capture(left, Z_[outer__][inner__]) ||  @capture(left, [outer__][inner__])
@@ -413,12 +413,12 @@ function readleft(left, redind, flags, store, icheck, where)
     return canon, outUZ, nameZ, checkZ
 end
 
-"""
+#="""
     walker(outex, x, canon, flags, store, icheck, where)
 
 Called by `MacroTools.prewalk` on RHS, finds tensors & pushes `:( sym = inputex(this) )` into
 `outex.args`, and then replaces them with `sym`.
-"""
+"""=#
 function walker(outex, ex, canon, flags, store, icheck, where)
 
     # allow @reduce inside RHS, by simply calling the entire macro first
@@ -483,7 +483,7 @@ function walker(outex, ex, canon, flags, store, icheck, where)
 end
 
 
-"""
+#="""
     inputex(:A, :( A[i,j][k] ), target, flags, store, icheck, where)
 
 Figures out all the steps needed to transform the given tensor to a boring one,
@@ -494,7 +494,7 @@ Now `target` need not be `== canon`, since `sz_i` is independent of that.
 
 Now needs explicitly the name of tensor `A`,
 so that when `inex = rand(2,3)[i,j]` this is not evaluated twice.
-"""
+"""=#
 function inputex(A, inex, target, flags, store, icheck, where)
 
     if @capture(inex, Aa_[outer__][inner__])
@@ -618,14 +618,14 @@ function inputex(A, inex, target, flags, store, icheck, where)
     return ex
 end
 
-"""
+#="""
      outputnew(newright, outUZ, redfun, canonsize, canon, flags, store, where)
 
 For the case of `:=`, this constructs the expression to do reduction if needed,
 and slicing/reshaping/reversing for LHS.
 
 outUZ = (redUind, negV, codeW, indW, sizeX, getY, numY, indZ, sizeZ)
-"""
+"""=#
 function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, indZ, sizeZ),
         redfun, canonsize, canon, flags, store, where)
 
@@ -716,7 +716,7 @@ function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, ind
     return ex
 end
 
-"""
+#="""
     outputinplace(newright, outUZ, redfun, canonsize, canon, flags, store, nameZ, where)
 
 For the case of `=` this figures out how to write RHS into LHS, in one of three ways:
@@ -726,7 +726,7 @@ For the case of `=` this figures out how to write RHS into LHS, in one of three 
 
 No longer attempts to write `permutedims!(Z, A, ...)`, now just `copyto!(Z, PermutedDimsArray(A, ...))`.
 Doesn't really need so many arguments...
-"""
+"""=#
 function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, indZ, sizeZ),
         redfun, canonsize, canon, flags, store, nameZ, where)
 
@@ -843,11 +843,11 @@ function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY,
     return ex
 end
 
-"""
+#="""
     anoninput(store.rightnames)
 
 Given a vector of names captured from `A_[i...]`, returns ex needed for `(A,B) -> ...`
-"""
+"""=#
 function anoninput(rightnames, where)
     for A in rightnames
         isa(A,Symbol) || throw(MacroError("can't use $A as anonymous function input", where))

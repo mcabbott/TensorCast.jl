@@ -252,12 +252,12 @@ function _mul(ex, options=nothing; icheck=false, where=where, recurse=false)
     end
 end
 
-"""
+#="""
     indA, A = firstpass(store, ex)
 
 Aim is just to get the list of indices for each piece, to figure out which ones are contracted,
 and to have canonical order (now can't be got from one side alone).
-"""
+"""=#
 function firstpass!(sdict, ex, where, canseeA=true)
 
     if @capture(ex, A_[outer__][inner__]) ||  @capture(ex, [outer__][inner__])
@@ -284,14 +284,14 @@ function firstpass!(sdict, ex, where, canseeA=true)
     flat, A
 end
 
-"""
+#="""
     matexin!(outex, A, ex, (ind1,ind2,ind3), flags, store, icheck, where)
 
 Produces the expression which will glue/permutedims etc A to form `ind1,ind2,ind3` (as `@cast`),
 and then reshape A to be either a matrix (indices `⨷ind1, ⨷ind2`)
 or for the batched case, a 3-tensor (indices `⨷ind1, ⨷ind2, ⨷ind3`).
 Pushes this into outex & returns the symbol it is assigned to.
-"""
+"""=#
 function matexin!(outex, A, ex, (ind1,ind2,ind3), flags, store, icheck, where)
 
     # same function called by @cast walker -- produces reshapes to 2nd input, was canon

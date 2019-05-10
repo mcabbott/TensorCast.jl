@@ -100,12 +100,12 @@ function _check!(exs...; where=nothing)
     return nothing
 end
 
-"""
+#="""
     check_one(A[i,j,k], (mod=Module, src=...))
 
 Does the work of `@check!`, on one index expression,
 returning `A` or `check!(A,...)` according to global flags.
-"""
+"""=#
 function check_one(ex, where=nothing)
     @capture(ex, A_[vec__]) || error("check_one can't understand $ex, expected something like A[i,j]")
     ind = Tuple(vec)

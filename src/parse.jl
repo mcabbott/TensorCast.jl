@@ -15,13 +15,10 @@ const flag_list = Any[ :!, :assert,
 # I thought this was broken for a bit, but now looks OK, add to tests?
 @pretty @cast A[i,j] := B[i][-j]
 
-# this could have reshape(right, :) but not worth a fight?
-@pretty @cast A[i\j\k] := B[i,j\k] + C[k]
-
-# namedarrays:
+# named...
 B = rand(2,3);
-@cast A[i,j,_] := B[j,i] named # works now
-@reduce D[i] := sum(j)  A[i,j] # 3×1, wtf?
+@cast A[i,j] := B[j,i] named
+@reduce D[i] := sum(j)  A[i,j] named
 
 =#
 
@@ -35,7 +32,7 @@ end
 
 SizeDict() = SizeDict(Dict{Any, Any}(), Any[], Any[], Any[], Any[])
 
-"""
+#="""
     flat, getafix, putsz, negated = parse!(sdict, A, outer, inner)
 
 Use this for `A[outer...][inner...]`.
@@ -59,7 +56,7 @@ For dimensions & annotations.
 Will look for flags because it was given something to push them into.
 You should now do this first, so that `sdict` is most likely to have these (neater) entries.
 They are added using savesize!(sdict,...) which now puts later sizes into list of checks.
-"""
+"""=#
 function parse!(sdict::SizeDict, A, outer, inner; allowranges=false, flags=nothing)
 
     flat = Any[]
@@ -167,14 +164,14 @@ push_or_append!(list, inds::Vector) = append!(list, inds)
 szwrap(i::Symbol) = Symbol(:sz_,i)
 szwrap(ijk::Vector) = :( TensorCast.star($([ Symbol(:sz_,i) for i in ijk ]...)) )
 
-"""
+#="""
     stripminus(negated, i)
 
 For any index, or vector of indices, or vector of indices containing tuples / backslash combos,
 this pushes every letter with a minus in front into negated list.
 
 It returns an index, or a tidied-up vector of indices, in which tuples etc have become vectors.
-"""
+"""=#
 stripminus!(negated::Vector, ind::Symbol) = ind  # get one Symol & you're done
 
 stripminus!(negated::Vector, ind::Int) = throw(MacroError("can't handle fixed index $ind here"))
@@ -219,11 +216,11 @@ function stripminus!(negated::Vector, ind::Expr)
     return Any[ stripminus!(negated, i) for i in ijk ]
 end
 
-"""
+#="""
     oddunique(negated)
 
 Returns a list in which anything repeated evenly many times has been removed, then `unique`.
-"""
+"""=#
 function oddunique(negated)  # -1 * -1 = +1
     set = Set{Symbol}()
     for i in negated
@@ -236,12 +233,12 @@ function oddunique(negated)  # -1 * -1 = +1
     Any[ i for i in set ]
 end
 
-"""
+#="""
     checkrepeats(flat)
 
 Throws an error if there are repeated indices.
 Also a good place to check whether flat is flat... e.g. A[i][j\\k] will arrive here
-"""
+"""=#
 function checkrepeats(flat, msg="", where=nothing)
     once = Set{Symbol}()
     twice = Set{Symbol}()
@@ -264,7 +261,7 @@ function checkrepeats(flat, msg="", where=nothing)
 end
 
 
-"""
+#="""
     sizeinfer(store, icannon, where, leaveone=true)
 
 This is the point of SizeDict.
@@ -273,7 +270,7 @@ If these sizes are known, easy!
 
 But for unknown ones, we do a second pass, looking for entries in sizedict like [:i, :j]
 which come from tuples of indices, for which we know the product of their dimensions.
-"""
+"""=#
 function sizeinfer(store::SizeDict, icanon::Vector, where=nothing, leaveone = true)
     sizes = Any[ (:) for i in icanon ]
 
@@ -334,14 +331,14 @@ star(::Colon,y) = Colon()
 star(x,::Colon) = Colon()
 star(x,y,zs...) = star(star(x,y), zs...)
 
-"""
+#="""
     needview!([:, 3, :])   # true, need view(A, :,3,:)
     needview!([:, :_, :])  # false, can use rview(A, :,1,:)
 
 Mutates the given vector, replacing symbol `:_` with `1`.
 If the vector contains only colons & underscores, then the result is suitable for use with `rview`,
 but if not, we need a real view, so it returns `true`.
-"""
+"""=#
 function needview!(getafix::Vector)
     out = false
     for i=1:length(getafix)
