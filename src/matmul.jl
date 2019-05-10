@@ -1,5 +1,5 @@
 
-export @mul
+# export @mul # not exported in tagged version
 
 #= TODO:
 

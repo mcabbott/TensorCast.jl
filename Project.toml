@@ -1,0 +1,25 @@
+name = "TensorCast"
+uuid = "02d47bb6-7ce6-556a-be16-bb1710789e2b"
+authors = ["Michael Abbott"]
+version = "0.1.4"
+
+[deps]
+LazyArrays = "5078a376-72f3-5289-bfd5-ec5146d43c02"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+RecursiveArrayTools = "731186ca-8d62-57ce-b412-fbd966d074cd"
+Requires = "ae029012-a4dd-5104-9daa-d747884805df"
+
+[compat]
+julia = "1"
+
+[extras]
+Einsum = "b7d42ee7-0b51-5a75-98ca-779d3107e4c0"
+JuliennedArrays = "5cadff95-7770-533d-a838-a1bf817ee6e0"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+Strided = "5e0ebb24-38b0-5f93-81fe-25c709ecae67"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test", "Einsum", "JuliennedArrays", "StaticArrays", "Strided"]
