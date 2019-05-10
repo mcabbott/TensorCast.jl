@@ -1,6 +1,7 @@
 using Einsum
+using TensorCast: @mul
 
-@testset "matmul" begin 
+@testset "matmul" begin
 
     ## the very basics
     bc = rand(2,3)
@@ -51,7 +52,7 @@ using Einsum
     @test A ≈ D
 
 
-    @mul    A[i,j,k,l] := cccc[i,x,y,k] * cccc2[l,j,y,x] 
+    @mul    A[i,j,k,l] := cccc[i,x,y,k] * cccc2[l,j,y,x]
     @reduce B[i,j,k,l] := sum(x,y) cccc[i,x,y,k] * cccc2[l,j,y,x]
     @einsum C[i,j,k,l] := cccc[i,x,y,k] * cccc2[l,j,y,x]
     @test A ≈ B ≈ C
@@ -61,19 +62,19 @@ using Einsum
     @test A ≈ D
 
 
-    @mul    A[i,j,k,l,m,n] := cccc[x,k,i,m] * cccc2[l,x,j,n] 
-    @reduce B[i,j,k,l,m,n] := sum(x) cccc[x,k,i,m] * cccc2[l,x,j,n] 
-    @einsum C[i,j,k,l,m,n] := cccc[x,k,i,m] * cccc2[l,x,j,n] 
+    @mul    A[i,j,k,l,m,n] := cccc[x,k,i,m] * cccc2[l,x,j,n]
+    @reduce B[i,j,k,l,m,n] := sum(x) cccc[x,k,i,m] * cccc2[l,x,j,n]
+    @einsum C[i,j,k,l,m,n] := cccc[x,k,i,m] * cccc2[l,x,j,n]
     @test A ≈ B  ≈ C
 
     D = similar(A);
     @mul    D[i,j,k,l,m,n] = cccc[x,k,i,m] * cccc2[l,x,j,n]  # in-place
-    @test A ≈ D 
+    @test A ≈ D
 
 
 end
-@testset "in & out shapes" begin 
-    
+@testset "in & out shapes" begin
+
     bc = rand(2,3)
     cd = rand(3,4)
 
@@ -93,8 +94,8 @@ end
     @test D == C
 
 end
-@testset "batch" begin 
-    
+@testset "batch" begin
+
     bbb = rand(2,2,2)
     bbb2 = randn(2,2,2)
 
@@ -112,7 +113,7 @@ end
     @test A == D == E == F
 
 
-    ## permute 
+    ## permute
     @mul A[n,k,i] := bbb[i,j,n] * bbb2[n,k,j]
     @reduce B[n,k,i] := sum(j) bbb[i,j,n] * bbb2[n,k,j]
     @einsum C[n,k,i] := bbb[i,j,n] * bbb2[n,k,j]
@@ -127,9 +128,9 @@ end
     @test A == D == E == F
 
     ## readme & help
-    X = rand(2,3,4) 
-    Y = rand(3,2,4) 
-    @mul W[β][i,j] := X[i,k,β] * Y[k,j,β] 
+    X = rand(2,3,4)
+    Y = rand(3,2,4)
+    @mul W[β][i,j] := X[i,k,β] * Y[k,j,β]
     @test W[2] ≈ X[:,:,2] * Y[:,:,2]
 
     B = rand(8)
