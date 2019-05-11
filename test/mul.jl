@@ -128,6 +128,8 @@ end
 
 
     ## these were OK:
+    M = rand(3,3,3);
+
     @reduce Q[σ, b\a, a′] := sum(σ′) M[σ,σ′,b] * M[σ′,a,a′];
     @mul Q2[σ, b\a, a′] := M[σ,σ′,b] * M[σ′,a,a′];
     @test Q ≈ Q2
@@ -135,7 +137,6 @@ end
     @reduce Q3[σ, b,a, a′] := sum(σ′) M[σ,σ′,b] * M[σ′,a,a′];
     @mul    Q4[σ, b,a, a′] := sum(σ′) M[σ,σ′,b] * M[σ′,a,a′];
     @test Q3 ≈ Q4
-
 
 end
 @testset "in & out shapes" begin
@@ -204,5 +205,24 @@ end
     rB = reshape(B,2,4)
     @einsum D[i,j] := rB[i,k] * C[j,2,k]
     @test A[1,2] ≈ D[2,:]
+
+end
+@testset "recursion" begin
+
+    A = rand(2,3); B = rand(3,4); C = rand(4,5);
+
+    @einsum V[i,l] := A[i,j] * B[j,k] * C[k,l]
+    @reduce V2[i,l] := sum(j,k) A[i,j] * B[j,k] * C[k,l]
+
+    # @reduce W[i,l] := sum(j) A[i,j] * @mul [j,l] := B[j,k] * C[k,l]
+    # this fails in test, "UndefVarError: M#608 not defined"
+    # subtle bug:
+    @pretty @reduce W[i,l] := sum(j) A[i,j] * @mul [j,l] := B[j,k] * C[k,l]
+    @test_broken false # remind myself!
+
+    # @mul W2[i,l] := sum(j) A[i,j] * @mul [j,l] := B[j,k] * C[k,l]
+    # maybe I decided not to allow this for now.
+
+    # @test V ≈ V2 ≈ W #≈ W2
 
 end

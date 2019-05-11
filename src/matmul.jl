@@ -95,7 +95,7 @@ function _mul(exone, extwo=nothing, exthree=nothing; icheck=false, where=where, 
     optind, _,_,_ = parse!(store, nothing, [], optvec; allowranges=true, flags=flags)
 
     # get list of indices from each factor
-    indZ, nameZ = firstpass!(store, left, where, :inplace in flags)
+    indZ, nameZ = firstpass!(store, left, where, :inplace in flags) #; allowrecursion=false)
     indA, nameA = firstpass!(store, mid, where)
     indB, nameB = firstpass!(store, right, where)
 
@@ -172,7 +172,7 @@ function _mul(exone, extwo=nothing, exthree=nothing; icheck=false, where=where, 
         if permU != 1:length(permU)
             push!(flags, :outperm)
             permUold = invperm(p1)[p2] # not one of my old tests triggered this!
-            permU != permUold && @warn "permutations differ in $where.str" Tuple(p1) Tuple(p2) Tuple(permU) Tuple(permUold)
+            V && permU != permUold && @warn "permutations differ in $where.str" Tuple(p1) Tuple(p2) Tuple(permU) Tuple(permUold)
         end
     end
 
@@ -260,7 +260,7 @@ function _mul(exone, extwo=nothing, exthree=nothing; icheck=false, where=where, 
         push!(outex.args, :( $nameZ =  $finalright ) )
     end
 
-    #===== finalise (identical to @cast) =====#
+    #===== finalise (almost identical to @cast) =====#
 
     if :needsize in flags
         szcanon = Any[ Symbol(:sz_,i) for i in canon ]
@@ -293,12 +293,28 @@ end
 Aim is just to get the list of indices for each piece, to figure out which ones are contracted,
 and to have canonical order (now can't be got from one side alone).
 """=#
-function firstpass!(sdict, ex, where, canseeA=true)
+function firstpass!(sdict, ex, where, canseeA=true) #; allowrecursion=true)
 
     if @capture(ex, A_[outer__][inner__]) ||  @capture(ex, [outer__][inner__])
     elseif @capture(ex, A_[outer__]{inner__}) || @capture(ex, [outer__]{inner__})
     elseif @capture(ex, A_[outer__]) || @capture(ex, [outer__])
         inner = []
+
+    #=
+    # allow @reduce/@mul inside RHS, here just believe the indices
+    elseif allowrecursion && @capture(ex, @reduce(redex__)) || @capture(ex, @mul(redex__))
+        inner = []
+        @capture(redex[1], A_[outer__] = B__) ||
+        @capture(redex[1], A_[outer__] := B__) ||
+        @capture(redex[1], A_[outer__] |= B__) ||
+        @capture(redex[1], [outer__] = B__) ||
+        @capture(redex[1], [outer__] := B__) ||
+        @capture(redex[1], [outer__] |= B__) ||
+            throw(MacroError("recursion got confused about $(redex[1])", where))
+    # But this needs you to copy lots more from "walker" to "matexin!"
+    =#
+    elseif @capture(ex, @reduce(redex__)) || @capture(ex, @mul(redex__))
+        throw(MacroError("@mul does not allow recursion, sorry", where))
     else
         throw(MacroError("don't know what to do with $ex", where))
     end

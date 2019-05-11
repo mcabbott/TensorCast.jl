@@ -6,7 +6,8 @@ const flag_list = Any[ :!, :assert,
 
 #= TODO
 
-# add tests for recursion
+# subtle bug: this checks the size of something not yet defined
+@pretty @reduce W[i,l] := sum(j) A[i,j] * (@mul [j,l] := B[j,k] * C[k,l]) assert
 
 # this gives an error -- change to sizeinfer! which updates dict, and call that?
 # or perhaps just check at :staticslice & throw an error
@@ -19,6 +20,8 @@ const flag_list = Any[ :!, :assert,
 B = rand(2,3);
 @cast A[i,j] := B[j,i] named
 @reduce D[i] := sum(j)  A[i,j] named
+
+# allow A[i'] to mean A[i\prime]?
 
 =#
 
