@@ -14,7 +14,7 @@ macro einsum_str(str::String)
 end
 
 macro reduce_str(str::String)
-    Meta.parse(reduce_string(str))
+    Meta.parse(reduce_string(str)) |> esc
 end
 
 function cast_string(str)
@@ -30,11 +30,8 @@ end
 function indexcomma(str)
     list = []
     for c in collect(str)
-        # @show c, Int(c)
         if (c=='\'') | (c=='′')
-            # @show list
             list[end] *= "′"
-            # @show list
         elseif length(list)>0 && list[end] =="\$"
             list[end] = '\$' * c
         else
@@ -52,7 +49,7 @@ end
 #=
 indexsquare("_âb′c")
 indexsquare("_a\$b1")
-indexsquare("_ijk''") # wtf?
+indexsquare("_ijk''") # failed locally
 indexsquare("_ij'k''")
 =#
 
@@ -70,6 +67,6 @@ end
 
 #=
 indexfun("= sum_i")
-indexfun("= Π_ii'") # wtf?
+indexfun("= Π_ii'") # failed locally
 =#
 
