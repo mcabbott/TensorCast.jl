@@ -18,8 +18,6 @@ B = rand(2,3);
 @cast A[i,j] := B[j,i] named
 @reduce D[i] := sum(j)  A[i,j] named
 
-# allow A[i'] to mean A[i\prime]?
-
 =#
 
 struct SizeDict
@@ -181,6 +179,9 @@ function stripminus!(negated::Vector, ind::Expr)
     if @capture(ind, -i_Symbol)
         push!(negated, i)       # add that to the negated list
         return i                # and go home.
+    elseif @capture(ind, (i_Symbol)' )
+        return Symbol(i, '′')   # normalise i' to be i′
+        # return Symbol(i, "_prime") # allow i' but keep distinct?
 
     # tuple notation
     elseif @capture(ind, -(ijk__,) )

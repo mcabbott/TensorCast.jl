@@ -13,6 +13,8 @@ include("matmul.jl") # @mul
 
 include("icheck.jl")
 
+include("string.jl")
+
 include("pretty.jl")
 
 if VERSION < v"1.1.0"

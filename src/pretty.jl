@@ -13,7 +13,19 @@ To copy and run the printed expression, you may need various functions which are
 Try something like `using TensorCast: orient, star, rview, @assert_, red_glue, sliceview, batchmul`
 """
 macro pretty(ex)
-    :( macroexpand($(__module__), $(ex,)[1], recursive=false) |> pretty |> println )
+    if @capture(ex, @cast_str str_)
+        full = "@cast " * cast_string(str)
+        println("# " * full)
+        return :(@pretty $(Meta.parse(full)) )
+
+    elseif @capture(ex, @reduce_str str_)
+        full = reduce_string(str)
+        println("# " * full)
+        return :(@pretty $(Meta.parse(full)) )
+
+    else
+        :( macroexpand($(__module__), $(ex,)[1], recursive=false) |> pretty |> println )
+    end
 end
 
 function pretty(ex::Union{Expr,Symbol})
