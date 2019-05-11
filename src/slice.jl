@@ -227,6 +227,22 @@ end
     ex
 end
 
+function rview(A::LinearAlgebra.Transpose{<:Number,<:AbstractVector}, ::Tuple{Int,Colon})
+    A.parent
+end
+function rview(A::LinearAlgebra.Adjoint{<:Real,<:AbstractVector}, ::Tuple{Int,Colon})
+    A.parent
+end
+
+"""
+    rvec(x) = [x]
+    rvec(A) = vec(A)
+
+Really-vec... extends `LinearAlgebra.vec` to work on scalars too.
+"""
+rvec(x::Number) = [x]
+rvec(A) = LinearAlgebra.vec(A)
+
 """
     PermuteDims(A::Matrix)
     PermuteDims(A::Vector)

@@ -1,7 +1,7 @@
 using Einsum
-using TensorCast: @mul
+using LinearAlgebra
 
-@testset "matmul" begin
+@testset "simple" begin
 
     ## the very basics
     bc = rand(2,3)
@@ -14,8 +14,27 @@ using TensorCast: @mul
     @mul B[b,d] = bc[b,c] * cd[c,d] # in-place
     @test B == A
 
+    ## and with vectors
+    c = randn(3)
+    @mul b[b] := bc[b,c] * c[c]
+    @test b == bc * c
 
-    ## check permutedims
+    @mul c[c] := b[b] * bc[b,c]
+    @test c == vec(b' * bc)
+
+    @mul z[] := b[b] * b[b]
+    @test z[] == dot(b,b)
+
+    b′ = similar(b)
+    @mul b′[b] = bc[b,c] * c[c] # in-place
+    @test b′ == bc * c
+
+    c′ = similar(c)
+    @mul c′[c] = b[b] * bc[b,c]
+
+end
+@testset "permutedims" begin
+
     bbb = rand(2,2,2);
     bbb2 = randn(2,2,2);
 
@@ -70,6 +89,52 @@ using TensorCast: @mul
     D = similar(A);
     @mul    D[i,j,k,l,m,n] = cccc[x,k,i,m] * cccc2[l,x,j,n]  # in-place
     @test A ≈ D
+
+
+    ## repeat with non-alphabeitcal LHS!
+    @mul    A[j,i,l,k,n,m] := cccc[x,k,i,m] * cccc2[l,x,j,n]
+    @reduce B[j,i,l,k,n,m] := sum(x) cccc[x,k,i,m] * cccc2[l,x,j,n]
+    @einsum C[j,i,l,k,n,m] := cccc[x,k,i,m] * cccc2[l,x,j,n]
+    @test A ≈ B  ≈ C
+
+    D = similar(A);
+    @mul    D[j,i,l,k,n,m] = cccc[x,k,i,m] * cccc2[l,x,j,n]  # in-place
+    @test A ≈ D
+
+
+    ## Mason Potter's example:
+    # W = rand(2,2,2,2); M = rand(2,2,2);
+    W = rand(6,7,4,5); M = rand(7,2,3);
+
+    @reduce N[σ, b\a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]
+    @mul N2[σ, b\a, b′\a′] := W[σ,σ′,b,b′] * M[σ′,a,a′]
+    @test N ≈ N2
+
+    @reduce R[σ, b,a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  lazy
+    @mul R2[σ, b,a, b′\a′] := W[σ,σ′,b,b′] * M[σ′,a,a′]
+    @test R ≈ R2
+    # invperm((4,2,1,3)) == (3, 2, 4, 1)
+
+    @reduce S[σ, b,a, b′,a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]
+    @mul S2[σ, b,a, b′,a′] := W[σ,σ′,b,b′] * M[σ′,a,a′]
+    @test S ≈ S2
+    # invperm((4,2,1,3,5)) == (3, 2, 4, 1, 5)
+
+    ## in-place version
+    N3 = similar(N); N4 = similar(N);
+    @reduce N3[σ, b\a, b′\a′] = sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  lazy
+    @mul N4[σ, b\a, b′\a′] = W[σ,σ′,b,b′] * M[σ′,a,a′]
+    @test N ≈ N3 ≈ N4
+
+
+    ## these were OK:
+    @reduce Q[σ, b\a, a′] := sum(σ′) M[σ,σ′,b] * M[σ′,a,a′];
+    @mul Q2[σ, b\a, a′] := M[σ,σ′,b] * M[σ′,a,a′];
+    @test Q ≈ Q2
+
+    @reduce Q3[σ, b,a, a′] := sum(σ′) M[σ,σ′,b] * M[σ′,a,a′];
+    @mul    Q4[σ, b,a, a′] := sum(σ′) M[σ,σ′,b] * M[σ′,a,a′];
+    @test Q3 ≈ Q4
 
 
 end

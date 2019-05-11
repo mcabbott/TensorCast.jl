@@ -1,35 +1,24 @@
 
-# export @mul # not exported in tagged version
+export @mul
 
 #= TODO:
 
-# vector times matrix:
-@mul Z[i] := rand(2)[j] * rand(2,2)[j,i]
-
-# from a typo in readme, but should work:
-X = rand(2,3,4); Y = rand(3,2,4)
-@mul W[β,i,j] := X[i,k,β] * Y[k,i,β]
-
 # add @check! version
 
-# shouldn't this be an error?
-@pretty @mul A[n][i,k] = B[i,j,n] * C[k,j,n]
-
-# Mason Potter's example:
-W = rand(2,2,2,2); M = rand(2,2,2);
-@reduce N[σ, b\a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]
-@mul N2[σ, b\a, b′\a′] := W[σ,σ′,b,b′] * M[σ′,a,a′]
-sort(vec(N)) ≈ sort(vec(N2)) # true
+# anonymous functions, and scalar output, for consistency?
 
 =#
 
 """
     @mul A[i,j] := B[i,k,k′] * C[k,k′,j]
+    @mul A[i,j] := sum(k,k′) B[i,k,k′] * C[k,k′,j]
 
 Matrix multiplication macro. This expects two tensors on the right,
 whose shared index (or indices) will be sumed over.
+You may also explicitly supply these, as for `@reduce`, as a check.
 
     @mul A[_,i][j] := B[i\\k] * C[j,2,k]
+    @mul A[_,i][j] := sum(k) B[i\\k] * C[j,2,k]
 
 Each tensor factor will be processed in the same way as for `@cast` / `@reduce`,
 allowing for slicing and reshaping, permuting indices, and fixing their values.
@@ -44,9 +33,10 @@ rather than just calling `A = B * C`.
 The in-place form `@mul A[i,j] = B[i,k] * C[k,j]` calls instead `mul!(A,B,C)`.
 
     @mul A[i,j,n] := B[i,k,n] * C[k,j,n]
+    @mul A[i,j,n] := sum(k) B[i,k,n] * C[k,j,n]
 
 Batched matrix multiplication. Right now done by slicing each tensor and mapping `*` or `mul!`
-over the slices. But it should be easy to hook up to BatchedRoutines.jl or something.
+over the slices. But it should be easy to hook up to Batched.jl or something.
 """
 macro mul(exs...)
     where = (mod=__module__, src=__source__, str=unparse("@mul", exs...))
@@ -65,20 +55,35 @@ macro mul!(exs...)
 end
 =#
 
-function _mul(ex, options=nothing; icheck=false, where=where, recurse=false)
+function _mul(exone, extwo=nothing, exthree=nothing; icheck=false, where=where, recurse=false)
     flags = Set{Symbol}()
-
-    # @warn "The macro @mul has bugs!" maxlog=1
 
     #===== parse basic expression =====#
 
-    if @capture(ex, left_ = mid_ * right_ )
+    if @capture(exone, left_ = mid_ * right_ )
         push!(flags, :inplace)
-    elseif @capture(ex, left_ := mid_ * right_ )
-    elseif @capture(ex, left_ |= mid_ * right_ )
+    elseif @capture(exone, left_ := mid_ * right_ )
+    elseif @capture(exone, left_ |= mid_ * right_ )
         push!(flags, :mustcopy) # this will only affect output slicing I think
+
+    elseif @capture(exone, left_ = sum(sind__) ) &&  @capture(extwo, mid_ * right_ )
+        push!(flags, :inplace)
+        push!(flags, :explicit)
+    elseif @capture(exone, left_ := sum(sind__) ) &&  @capture(extwo, mid_ * right_ )
+        push!(flags, :explicit)
+    elseif @capture(exone, left_ |= sum(sind__) ) &&  @capture(extwo, mid_ * right_ )
+        push!(flags, :mustcopy)
+        push!(flags, :explicit)
+
     else
         throw(MacroError("don't understand input, should be @mul A[...] := B[...] * C[...]", where))
+    end
+
+    if :explicit in flags
+        options = exthree
+    else
+        options = extwo
+        exthree == nothing || throw(MacroError("don't understand input, should be @mul A[...] := B[...] * C[...]  options", where))
     end
 
     #===== find indices to sum, batch, etc =====#
@@ -106,6 +111,10 @@ function _mul(ex, options=nothing; icheck=false, where=where, recurse=false)
     sumind = setdiff(intersect(indA, indB), indZ)
     batchind = intersect(indA, indB, indZ)
 
+    if :explicit in flags
+        sort(sumind) == sort(sind) || throw(MacroError("explicit sum over $(join(sind, ", ")) does not match implicit $(join(sumind, ", "))", where))
+    end
+
     if length(batchind) > 0
         push!(flags, :bmm)
     end
@@ -115,6 +124,8 @@ function _mul(ex, options=nothing; icheck=false, where=where, recurse=false)
 
     indAonly = setdiff(indA, sumind, batchind)
     indBonly = setdiff(indB, sumind, batchind)
+    indZonly = setdiff(indZ, indAonly, indBonly, batchind)
+    length(indZonly) == 0 || throw(MacroError("did not see index $(join(indZonly, ", ")) on the right", where))
 
     if length(indAonly) > 1 || length(indBonly) > 1 || length(batchind) > 1
         push!(flags, :midshape) # result of * will not be have canonical dimensions
@@ -146,6 +157,8 @@ function _mul(ex, options=nothing; icheck=false, where=where, recurse=false)
         pop!(flags, :nolazy) # exZ must not use permutedims
 
         exZ = matexin!(outex, nameZ, left, (indAonly, indBonly, batchind), flags, store, icheck, where)
+
+        @capture(left, _[__][__]) && throw(MacroError("can't write to sliced arrays in-place, for now", where))
     else
         # exZ will not be used for in-place mul!, but for out-of-place... can borrow readleft from @cast:
         _, outUZ, nameZ, checkZ = readleft(left, sumind, flags, store, icheck, where)
@@ -155,9 +168,11 @@ function _mul(ex, options=nothing; icheck=false, where=where, recurse=false)
 
         p1 = sortperm(indZ)
         p2 = sortperm(vcat(indAonly,indBonly,batchind))
-        permU = invperm(p1)[p2]
+        permU = p2[invperm(p1)]
         if permU != 1:length(permU)
             push!(flags, :outperm)
+            permUold = invperm(p1)[p2] # not one of my old tests triggered this!
+            permU != permUold && @warn "permutations differ in $where.str" Tuple(p1) Tuple(p2) Tuple(permU) Tuple(permUold)
         end
     end
 
@@ -167,18 +182,24 @@ function _mul(ex, options=nothing; icheck=false, where=where, recurse=false)
 
     if :inplace in flags
 
-        # if :slice in flags # doesn't work
-        #     throw(MacroError("can't write to sliced arrays in-place, for now", where))
-        # end
-
         #===== in-place output =====#
 
         if :batched in flags && :bmm in flags
             error("can't use batched yet!")
         elseif :bmm in flags
-            opex =  :( TensorCast.batchmul!($exZ, $exA, $exB))
+            if length(indAonly)==0 # vectors * something
+                opex =  :( TensorCast.batchmul!(
+                    TensorCast.orient($exZ,(*,:,:)), TensorCast.orient($exA,(*,:,:)), $exB))
+            else
+                opex =  :( TensorCast.batchmul!($exZ, $exA, $exB))
+            end
         else
-            opex = :( TensorCast.mul!($exZ, $exA, $exB))  # LinearAlgebra.mul! is available here
+            if length(indAonly)==0 # vector * something
+                opex = :( TensorCast.mul!(
+                    TensorCast.orient($exZ,(*,:)), TensorCast.orient($exA,(*,:)), $exB))
+            else
+                opex = :( TensorCast.mul!($exZ, $exA, $exB))  # LinearAlgebra.mul! is available here
+            end
         end
 
         if :strided in flags # this functions mostly to prevent a slowdown if "inputex" has used strided
@@ -195,9 +216,23 @@ function _mul(ex, options=nothing; icheck=false, where=where, recurse=false)
         if :batched in flags && :bmm in flags
             error("can't use batched yet!")
         elseif :bmm in flags
-            newright = :( TensorCast.batchmul($exA, $exB) )
+            if length(indAonly)==0 # vectors * something
+                newright = :( TensorCast.batchmul(TensorCast.orient($exA,(*,:,:)), $exB) )
+            else
+                newright = :( TensorCast.batchmul($exA, $exB) )
+            end
         else
-            newright = :( $exA * $exB )
+            if length(indAonly)==0 # vector * something
+                if :scalar in flags
+                    length(indBonly)==0 || m_error("can't make scalar output from this...")
+                    newright = :( TensorCast.orient($exA,(*,:)) * $exB )
+                else
+                    newright = :( TensorCast.rvec( TensorCast.orient($exA,(*,:)) * $exB ))
+                    # rvec handles vector * vector here, else :midshape would be cleaner
+                end
+            else
+                newright = :( $exA * $exB )
+            end
         end
 
         if :midshape in flags
@@ -265,7 +300,7 @@ function firstpass!(sdict, ex, where, canseeA=true)
     elseif @capture(ex, A_[outer__]) || @capture(ex, [outer__])
         inner = []
     else
-        throw(MacroError("don't know what to do with $left", where))
+        throw(MacroError("don't know what to do with $ex", where))
     end
 
     if canseeA
@@ -363,4 +398,5 @@ end
 
 # https://github.com/FluxML/Flux.jl/issues/544
 # https://github.com/Roger-luo/BatchedRoutines.jl
+# https://github.com/Roger-luo/Batched.jl
 
