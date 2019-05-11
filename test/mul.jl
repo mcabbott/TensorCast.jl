@@ -214,15 +214,11 @@ end
     @einsum V[i,l] := A[i,j] * B[j,k] * C[k,l]
     @reduce V2[i,l] := sum(j,k) A[i,j] * B[j,k] * C[k,l]
 
-    # @reduce W[i,l] := sum(j) A[i,j] * @mul [j,l] := B[j,k] * C[k,l]
-    # this fails in test, "UndefVarError: M#608 not defined"
-    # subtle bug:
-    @pretty @reduce W[i,l] := sum(j) A[i,j] * @mul [j,l] := B[j,k] * C[k,l]
-    @test_broken false # remind myself!
+    @reduce W[i,l] := sum(j) A[i,j] * @mul [j,l] := B[j,k] * C[k,l]
 
     # @mul W2[i,l] := sum(j) A[i,j] * @mul [j,l] := B[j,k] * C[k,l]
     # maybe I decided not to allow this for now.
 
-    # @test V ≈ V2 ≈ W #≈ W2
+    @test V ≈ V2 ≈ W #≈ W2
 
 end

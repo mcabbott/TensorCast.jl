@@ -6,9 +6,6 @@ const flag_list = Any[ :!, :assert,
 
 #= TODO
 
-# subtle bug: this checks the size of something not yet defined
-@pretty @reduce W[i,l] := sum(j) A[i,j] * (@mul [j,l] := B[j,k] * C[k,l]) assert
-
 # this gives an error -- change to sizeinfer! which updates dict, and call that?
 # or perhaps just check at :staticslice & throw an error
 @pretty @cast A[k]{i,j} := B[i,(j,k)]  k:length(C)

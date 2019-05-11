@@ -102,6 +102,13 @@ to avoid `materialize`ing the entire array before summing. In the example this i
 
 The option `strided` will place `@strided` in front of the broadcasting operation.
 You need `using Strided` for this to work.
+
+    @reduce sum(i) A[i] * log(@reduce [i] := sum(j) A[j] * exp(B[i,j]))
+    @cast W[i] := A[i] * exp(- @reduce S[i] = sum(j) exp(B[i,j]) lazy)
+
+Recursion like this is allowed, inside either `@cast` or `@reduce`.
+The array being created need not have a name, like `[i]`,
+unless writing into an existing array, like `S[i]` here.
 """
 macro reduce(exs...)
     where = (mod=__module__, src=__source__, str=unparse("@reduce", exs...)) # wtf?
@@ -426,8 +433,8 @@ function walker(outex, ex, canon, flags, store, icheck, where)
         Rsym = gensym(:R)
         Rval, Rind = _macro(redex...; reduce=true, where=where, recurse=true)
 
-        # sew the result of that into outex
-        push!(outex.args, :(local $Rsym = $Rval ) )
+        # sew the result of that into ... not outex but topex, as may need its size:
+        push!(store.topex, :(local $Rsym = $Rval ) )
 
         # construct name for resulting tensor, for outer @cast to further process
         ex =  :( $Rsym[$(Rind...)] )
@@ -436,7 +443,7 @@ function walker(outex, ex, canon, flags, store, icheck, where)
         Msym = gensym(:M)
         Mval, Mind = _mul(mulex...; where=where, recurse=true)
 
-        push!(outex.args, :(local $Msym = $Mval ) )
+        push!(store.topex, :(local $Msym = $Mval ) )
 
         ex =  :( $Msym[$(Mind...)] )
     end
