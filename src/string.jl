@@ -4,13 +4,13 @@
 export @cast_str, @reduce_str
 
 macro cast_str(str::String)
-    Meta.parse("@cast " * cast_string(str))
+    Meta.parse("@cast " * cast_string(str)) |> esc
 end
 macro tensor_str(str::String)
-    Meta.parse("@tensor " * cast_string(str))
+    Meta.parse("@tensor " * cast_string(str)) |> esc
 end
 macro einsum_str(str::String)
-    Meta.parse("@einsum " * cast_string(str))
+    Meta.parse("@einsum " * cast_string(str)) |> esc
 end
 
 macro reduce_str(str::String)
