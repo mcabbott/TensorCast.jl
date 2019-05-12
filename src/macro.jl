@@ -604,6 +604,7 @@ function inputex(A, inex, target, flags, store, icheck, where)
         else
             ex = :( PermutedDimsArray($ex, $perm) )
         end
+        dirs = sort(dirs) # avoids unnecessary orient(PermuteDims(M), (:,:,*))
     end
 
     for i in negF                                           # A[-i,j]
@@ -619,6 +620,9 @@ function inputex(A, inex, target, flags, store, icheck, where)
     if length(flatE) != length(target) && dirs != 1:length(dirs) # A[i] + B[j]
         codeH = repeat(Any[*],length(target))
         codeH[dirs] .= (:)
+        while codeH[end] == *
+            pop!(codeH)
+        end
         ex = :( TensorCast.orient($ex, $(codeH...,)) )
     end
 

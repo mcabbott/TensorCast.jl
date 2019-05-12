@@ -190,6 +190,7 @@ function _mul(exone, extwo=nothing, exthree=nothing; icheck=false, where=where, 
             if length(indAonly)==0 # vectors * something
                 opex =  :( TensorCast.batchmul!(
                     TensorCast.orient($exZ,(*,:,:)), TensorCast.orient($exA,(*,:,:)), $exB))
+                # TODO if z::Transpose then orient() may copy here, issue a warning?
             else
                 opex =  :( TensorCast.batchmul!($exZ, $exA, $exB))
             end

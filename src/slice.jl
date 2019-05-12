@@ -180,9 +180,32 @@ Throws an error if `ndims(A) != length(code)`.
     :(reshape(A, ($(list...),)))
 end
 
-# because of https://github.com/JuliaArrays/LazyArrays.jl/issues/16
+# performance: transpose faster than reshape? https://github.com/JuliaArrays/LazyArrays.jl/issues/16
 orient(A::AbstractVector{T}, ::Tuple{typeof(*),Colon}) where {T <: Number} = PermuteDims(A)
-orient(A::AbstractVector{T}, ::Tuple{typeof(*),Colon,typeof(*)}) where {T <: Number} = PermuteDims(A)
+#=
+V = rand(500);
+@time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k] lazy;
+# was 0.140318 seconds seconds, now 0.030957 seconds, factor 4
+=#
+
+# performance: avoid reshaping lazy transposes, as this is very slow in broadcasting
+orient(A::Union{PermutedDimsArray, LinearAlgebra.Transpose, LinearAlgebra.Adjoint}, code::Tuple) =
+    orient(collect(A), code)
+#=
+A = rand(10,100); B = rand(100,100); C = rand(100,10);
+@time @reduce D[a,d] := sum(b,c) A[a,b] * B[b,c] * C[c,d] lazy;
+# was 0.142307 seconds 76.296 MiB, now 0.001855 seconds 10.516 KiB, factor 75
+=#
+
+# performance: avoid that if you can just extract A.parent. TODO make @generated perhaps?
+const LazyRowVec = Union{
+    LinearAlgebra.Transpose{<:Any,<:AbstractVector},
+    LinearAlgebra.Adjoint{<:Real,<:AbstractVector} }
+orient(A::LazyRowVec, ::Tuple{typeof(*),Colon,Colon}) = orient(A.parent, (*,*,:))
+orient(A::LazyRowVec, ::Tuple{Colon,typeof(*),Colon}) = orient(A.parent, (*,*,:))
+orient(A::LazyRowVec, ::Tuple{typeof(*),typeof(*),Colon,Colon}) = orient(A.parent, (*,*,*,:))
+orient(A::LazyRowVec, ::Tuple{typeof(*),Colon,typeof(*),Colon}) = orient(A.parent, (*,*,*,:))
+orient(A::LazyRowVec, ::Tuple{Colon,typeof(*),typeof(*),Colon}) = orient(A.parent, (*,*,*,:))
 
 # tidier but not strictly necc: for @cast Z[i] = A[3] + B[i]
 orient(A::AbstractArray{<:Any, 0}, ::Tuple{typeof(*)}) = first(A)
@@ -227,12 +250,11 @@ end
     ex
 end
 
-function rview(A::LinearAlgebra.Transpose{<:Number,<:AbstractVector}, ::Tuple{Int,Colon})
-    A.parent
-end
-function rview(A::LinearAlgebra.Adjoint{<:Real,<:AbstractVector}, ::Tuple{Int,Colon})
-    A.parent
-end
+rview(A::LazyRowVec, ::Tuple{Int,Colon}) = A.parent
+
+rview(A::Union{PermutedDimsArray, LinearAlgebra.Transpose, LinearAlgebra.Adjoint}, code::Tuple) =
+    view(A, code)
+# cannot use rview(collect(A), code) as this may be on LHS, e.g. sum!(rview(),...)
 
 """
     rvec(x) = [x]
