@@ -27,16 +27,13 @@ but otherwise understands all the same things:
 @reduce W[μ,ν,_,J] := prod(i:2) V[(i,J)][μ,ν]    # products of pairs of matrices, stacked
 ```
 
-<!-- # master only for now
-  
 Finally `@mul` handles matrix multiplication of exactly two tensors:
 
 ```julia
-@mul T[i,_,j] := U[i,k,k′] * V[(k,k′),j]    # matrix multiplication, summing over (k,k′)
+@mul T[i,_,j] := U[i,k,k′] * V[(k,k′),j]    # matrix multiplication, implicit sum(k,k′)
 
-@mul W[β][i,j] := X[i,k,β] * Y[k,j,β]       # batched W[β] = X[:,:,β] * Y[:,:,β] ∀ β
+@mul W[β][i,j] := sum(k) X[i,k,β] * Y[k,j,β] # batched W[β] = X[:,:,β] * Y[:,:,β] ∀ β
 ```
--->
 
 These are intended to complement the macros from some existing packages.
 [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl) 
@@ -287,6 +284,29 @@ And `TensorCast.diagview(A)` is something like `view(A, 1:rows+1:end)`.
 
 Some new features, not well tested, and some only on master branch:
 
+### Slice mapping
+
+The macro can now perform some generalised `mapslices` operations: 
+here `f` maps rows of `X` to matrices, which are become slices of `Z`:
+```julia
+@pretty @cast W[i,j,k] := f(X[k,:])[i,j]
+# begin
+#     local kangaroo = map(f, sliceview(X, (*, :)))
+#     Z = red_glue(kangaroo, (:, :, *))
+# end
+```
+
+The function may have other arguments, but the `map` is only over the first one,
+sliced where (and only if) it contains colons:
+
+```julia
+@pretty @cast Z[i,j,k] := g(X[:,(i,k),:])[j] + h(Y[k],α,β)[j]
+# begin
+#     local kangaroo = map(turtle -> h(turtle, α, β), Y)
+#     local caribou = map(g, sliceview(X, (:, *, :)))
+#     ...
+```
+
 ### Recursion
 
 The macro now looks for `@reduce` inside other expressions, and processes this first. 
@@ -307,18 +327,21 @@ For example, this is `Σᵢ Aᵢ log(Σⱼ Aⱼ exp(Bᵢⱼ))` with `caribou[i]`
 
 ### Matrix multiplication
 
-The macro `@mul` expects exactly two tensors, nothing else.
-There is an implicit sum over indices repeated on the right: 
+The macro `@mul` expects exactly two tensors on the right; it does not understand broadcasting 
+nor recursion. The indices to sum over may be left implicit, or supplied as a sanity check:
 
 ```julia
-@mul T[i,_,j] := U[i,k,k′] * V[(k,k′),j]    # matrix multiplication, summing over (k,k′)
+@mul T[i,_,j] := sum(k,k′) U[i,k,k′] * V[(k,k′),j]
+@mul T[i,_,j] := U[i,k,k′] * V[(k,k′),j] # identical
+# T = reshape(reshape(U,...) * reshape(V,...), (sz_i, 1, sz_j))
 ```
 
-But this still has some errors (especially with `Vector * Matrix` cases). 
-`TensorCast.batchmul(B,C)` is a naiive implementation of batched matrix multiplication:
+A repeated index which also appears on the left indicates batched matrix multiplication,
+i.e. of slices here `B[:,:,n] * C[:,:,n]'` for each n, 
+for which `TensorCast.batchmul(B,C)` is a naiive implementation:
 
 ```julia
-@pretty @mul A[n][i,k] := B[i,j,n] * C[k,j,n]
+@pretty @mul A[n][i,k] := sum(j) B[i,j,n] * C[k,j,n]
 # begin
 #     local donkey = permutedims(C, (2, 1, 3))
 #     A = sliceview(batchmul(B, donkey), (:, :, *))
