@@ -38,3 +38,11 @@ Glues the output of `static_slice` back into one array, again with `code = (:,:,
         reinterpret(eltype(eltype(A)), A)
     end
 end
+
+function auto_glue(A::AbstractArray{IT,ON}, code::Tuple) where {IT<:StaticArray,ON}
+    if iscodesorted(code)
+        static_glue(A)
+    else
+        copy_glue(A, code)
+    end
+end

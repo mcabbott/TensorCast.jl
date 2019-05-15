@@ -13,25 +13,26 @@ Understands the following things:
 * `E[i,_,k]` has two nontrivial dimensions, and `size(E,2)==1`. On the right hand side
   (or when writing to an existing array) you may also write `E[i,3,k]` meaning `view(E, :,3,:)`,
   or `E[i,\$c,j]` to use a variable `c`. Fixing inner indices, like `C[k][i,_]`, is not allowed.
-* `F[i,-j,k]` means roughly `reverse(F, dims=2)`.
-* `g(x)[i,j,k]` is allowed, and `g(x)` should be evaluated only once.
-* `H[i,j]'` conjugates each element, equivalent to `H'[j,i]` which is the
+* `f(x)[i,j,k]` is allowed; `f(x)` must return a 3-tensor (and will be evaluated only once).
+* `g(H[:,k])[i,j]` is a generalised `mapslices`, with `g` mapping columns of `H`
+    to matrices, which are glued into a 3-tensor `[i,j,k]`.
+  Similarly `h(I[k])[i,j]` expects an `h` which maps scalars to matrices.
+* `J[i,-j,k]` means roughly `reverse(J, dims=2)`.
+* `K[i,j]'` conjugates each element, equivalent to `K'[j,i]` which is the
   conjugate-transpose of the matrix.
-* `J[i,i]` means `diag(J)[i]`, but only for matrices: `K[i,i,k]` is an error.
+* `M[i,i]` means `diag(M)[i]`, but only for matrices: `N[i,i,k]` is an error.
 
 The left and right hand sides must have all the same indices,
-with the sole exception of `J[i,i]`.
+with the sole exception of `M[i,i]`.
 See `@reduce` and `@mul` for related macros which can sum over things.
 
-If several tensors appear on the right hand side, then this represents a broadcasting operation,
+If a function of one or more tensors appears on the right hand side,
+then this represents a broadcasting operation,
 and the necessary re-orientations of axes are automatically inserted.
-Some attempt is made to shield scalar functions from broadcasting,
-e.g. `@cast A[i] := log(B[i]) / log(2)` will avoid `log.(2)` and evaluate `log(2)` once.
-But this is imperfect, confirm with `@pretty @cast ...` if concerned.
 
 The following actions are possible:
 * `=` writes into an existing array, `copyto!(Z, ...)`.
-* `:=` creates a new object... which may or may not be a view of the input:
+* `:=` creates a new object. This need not be named: `Z = @cast [i,j,k] := ...` is allowed.
 * `==` insists on a view of the old object (error if impossible), and `|=` insists on a copy.
 * `=>` creates an anonymous function, for which the output must be on the right.
    For example `@cast A[i] + B[j]' => Z[i,j]` gives `(A,B) -> A .+ B'`.
@@ -49,13 +50,15 @@ Options can be specified at the end (if several, separated by `,` i.e. `options:
   and `lazy` will instead make a `VectorOfArrays` container.
 * `nolazy` disables `PermutedDimsArray` and `Reverse` in favour of `permutedims` and `reverse`,
   and `Diagonal` in favour of `diagm` for `Z[i,i]` output.
+
+These options only work if you load other packages:
 * `strided` will place `@strided` in front of broadcasting operations,
   and use `@strided permutedims(A, ...)` instead of `PermutedDimsArray(A, ...)`.
-  For this you need to install and load the package: `using Strided`.
-
-Static slices `D[j,k]{i}` need `using StaticArrays`, and to create them you should give all
-slice dimensions explicitly. You may write `D[k]{i:2,j:2}` to specify `Size(2,2)` slices.
-They are made most cleanly from the first indices of the input, i.e. this `D` from `A[i,j,k]`.
+  For this you need `using Strided`.
+* Static slices `D[j,k]{i}` need `using StaticArrays`, and to create them you should
+  give all slice dimensions explicitly. You may write `D[k]{i:2,j:2}` to specify
+  `Size(2,2)` slices. They are made most cleanly from the first indices of the input,
+  i.e. this `D` from `A[i,j,k]`.
 """
 macro cast(exs...)
     where = (mod=__module__, src=__source__, str=unparse("@cast", exs...))
@@ -453,16 +456,27 @@ function walker(outex, ex, canon, flags, store, icheck, where)
 
         push!(store.rightnames, A) # used for @cast A[i,j] -> B[i\j]
 
+        if isa(A, Symbol) || @capture(A, Astruct_.field_)
+
+        # allow something like mapslices:
+        # @pretty @cast Z[i,j] := fun(X[:,i,:],42)[j] + X[j,i,3] + Y[j]^2
+        elseif @capture(A, f_(B_[i_colons__],rest__) )
+
+            kl == nothing || throw(MacroError("can't nest this deeply: $ex", where))
+
+            # i_colons = vcat(rvec(ii1), rvec(i1), Any[:(:)], rvec(i2), rvec(ii2)) # NB contains the symbol :(:) not the function (:)
+
+            A, ex = slicemap(f, B, i_colons, rest, ij, store)
+
         # if we have f(x)[i,j] then we should evaluate f just once, e.g.
         # @pretty @cast A[i]{j:5} |= rand(15)[i\j]
-        if !isa(A, Symbol)
-        # if isa(A, Symbol) || @capture(A, Astruct_.field_)
-        #     @show A
-        # else
+        else
             Atop = gensym(:A)
             push!(store.topex, :(local $Atop = $A ) )
             A = Atop
         end
+
+        V && @info "walker before inputex" A ex canon store
 
         Aval = inputex(A, ex, canon, flags, store, icheck, where)
 
@@ -489,6 +503,62 @@ function walker(outex, ex, canon, flags, store, icheck, where)
     return ex
 end
 
+#="""
+    slicemap(f, :B, [:i, :(:), :j], rest, kl, store)
+
+This processes `f(B[i,:mj],rest...)[k,l]`, such as in these:
+```
+@pretty @cast Z[i,j] := fun(X[:,i,:],42)[j] + X[j,i,3] + Y[j]^2
+@pretty @cast Z[i,j\k] := fun(X[:,i\k,:])[j] + Y[k]^2
+```
+
+* Note that `f(X[i,:], Y[i,:])` is not allowed (yet).
+
+* `g(X[i,:,_])` should work, but notices _ after map,
+and thus `g(X[i,:,3])` will evaluate g on many slices which aren't required.
+
+These could be fixed by upgrading this function -- TODO maybe?
+"""=#
+function slicemap(f, B, i_colons, rest, kl, store)
+
+    if isa(B, Symbol) || @capture(B, Bstruct_.field_)
+    else # pull out B = B(x) so that it's evaluated only once
+        Btop = gensym(:B)
+        push!(store.topex, :(local $Btop = $B ) )
+        B = Btop
+    end
+
+    # assertions, and size information for resising etc.
+    Bdims = length(i_colons)
+    str = "expected a $Bdims-tensor $B[" * join(i_colons, ", ") * "]"
+    push!(store.checks, :(TensorCast.@assert_ ndims($B)==$Bdims $str) )
+    for (dout, ind) in enumerate(i_colons)
+        if ind != :(:) && !isconstant(ind)
+            savesize!(store, ind, :( size($B, $dout) ) )
+        end
+    end
+
+    # construct map(f,eachslice(B)) expression
+    Atop = gensym(:slicemap)
+    i_code = map(i -> i==:(:) ? (:) : (*), Tuple(i_colons))
+    if count(isequal(:), i_code) > 0
+        sliceex = :( TensorCast.sliceview($B, $i_code) )
+    else
+        sliceex = B
+    end
+    if length(rest) == 0
+        push!(store.topex, :(local $Atop = map($f, $sliceex) ) )
+    else
+        Xsymb = gensym(:X)
+        push!(store.topex, :(local $Atop = map($Xsymb -> $f($Xsymb, $(rest...)), $sliceex) ) )
+    end
+
+    # construct ex for inputex later
+    ij = filter(!isequal(:(:)), i_colons)
+    ex = :( $Atop[$(ij...)][$(kl...)] )
+
+    return Atop, ex
+end
 
 #="""
     inputex(:A, :( A[i,j][k] ), target, flags, store, icheck, where)

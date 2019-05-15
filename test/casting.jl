@@ -131,3 +131,33 @@ end
     @test f3(D) == f4(D) == E
 
 end
+@testset "mapslices etc" begin
+
+    M = rand(-10:10, 3,4)
+    g(x) = x ./ sum(abs,x)
+    @cast N[i,j] := g(M[:,j])[i]
+    N2 = mapslices(g, M, dims=1)
+    @test N == N2
+
+    V = [ rand(1:99, 2) for _=1:5, _=1:1 ]
+    @cast W[i,j] := (v->v .// 2)(V[j,_])[i]
+    W2 = hcat(V...) .// 2
+    @test W == W2
+
+    fun(m::AbstractMatrix, a=0) = vec(sum(m,dims=1)) .+ a
+    X = rand(2,3,4)
+    Y = rand(4)
+    @cast Z[i,j] := fun(X[:,i,:],42)[j] + Y[j]^2
+    Z2 = dropdims(sum(X, dims=1), dims=1) .+ 42 .+ transpose(Y).^2
+    @test Z ≈ Z2
+
+    A = rand(2:2:10, 3,2,4)
+    ff(v::AbstractVector) = v .^2
+    B = rand(-1000:1000:1000, 2,1,4)
+    CM = rand(2,3)
+    C = eachcol(CM) |> collect
+    cast" Y_ijk := ff(A_j:k)_i + B_i_k + (C_j)_i"
+    Y2 = permutedims(A, (2,1,3)) .^2 .+ B .+ CM
+    @test Y ≈ Y2
+
+end

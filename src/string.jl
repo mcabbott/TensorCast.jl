@@ -14,6 +14,11 @@ begin
     X .= @. kangaroo * log(turtle)
 end
 ```
+Underscores (trivial dimensions) and colons (for mapslices) are also understood:
+```
+julia> @pretty cast" Y_ijk := f(A_j:k)_i + B_i_k + (C_k)_i"
+# @cast  Y[i,j,k] := f(A[j,:,k])[i] + B[i,_,k] + C[k][i]
+```
 Operators `:=` and `=` work as usual, as do options.
 There are similar macros `reduce"Z_i = Σ_j A_ij"` and `mul"Z_ik = Σ_j A_ij * B_jk"`.
 """
@@ -51,31 +56,42 @@ macro mul_str(str::String)
 end
 
 function cast_string(str)
-    replace(str, r"_([\w\d\$\'\′]+)" => indexsquare)
+    replace(str, r"_([\w\d\$\'\′\:\⊗]+)" => indexsquare)
 end
 
 function reduce_string(str::String)
-    str2 = replace(str, r"=\s+\w+_[\w\'\′]+" => indexfun)
-    str3 = replace(str2, r"_([\w\d\$\'\′]+)" => indexsquare)
+    str2 = replace(str, r"=\s+\w+_[\w\'\′\:\⊗]+" => indexfun)
+    str3 = replace(str2, r"_([\w\d\$\'\′\:\⊗]+)" => indexsquare)
     "@reduce " * str3
 end
 
 function mul_string(str::String)
-    str2 = replace(str, r"=\s+sum_[\w\'\′]+" => indexfun)
-    str3 = replace(str2, r"=\s+Σ_[\w\'\′]+" => indexfun)
-    str4 = replace(str3, r"_([\w\d\$\'\′]+)" => indexsquare)
-    "@reduce " * str4
+    str2 = replace(str, r"=\s+sum_[\w\'\′\:\⊗]+" => indexfun)
+    str3 = replace(str2, r"=\s+Σ_[\w\'\′\:\⊗]+" => indexfun)
+    str4 = replace(str3, r"_([\w\d\$\'\′\:\⊗]+)" => indexsquare)
+    "@mul " * str4
 end
 
 function indexcomma(str)
     list = []
     for c in collect(str)
+
+        # primes
         if (c=='\'') || (c=='′') && length(list)>0
             list[end] *= "′"
+
+        # constants
         elseif isnumber(c) && length(list)>0 && isnumber(list[end])
             list[end] *= c
-        elseif length(list)>0 && list[end] =="\$"
-            list[end] = '\$' * c
+        elseif length(list)>0 && list[end] =='\$'
+            list[end] = "\$" * c
+
+        # tensors
+        elseif length(list)>0 && c=='⊗'
+            list[end] *= "⊗"
+        elseif length(list)>0 && list[end][end]=='⊗'
+            list[end] *= c
+
         else
             push!(list, string(c))
         end

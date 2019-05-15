@@ -34,7 +34,7 @@ slicecopy(A::AbstractArray{T,N}) where {T,N} = slicecopy(A, ntuple(i-> i==N ? (*
 
 """
     glue!(B, A, code)
-    glue(A, code) = glue!(Array{T}(...), A, code)
+    copy_glue(A, code) = glue!(Array{T}(...), A, code)
 
 Copy the contents of an array of arrays into one larger array,
 un-doing `sliceview` / `slicecopy` with the same `code`.
@@ -46,8 +46,26 @@ Also called `stack` or `align` elsewhere.
 The same result, but calling either things like `hcat(A...)`
 or things like `reduce(hcat, A)`.
 The code must be sorted like `(:,:,:,*,*)`, except that `(*,:)` is allowed.
+
+    glue(A)
+    glue(A, code)
+
+If `code` is omitted, the default is like `(:,:,*,*)`
+with `ndims(first(A))` colons first, then `ndims(A)` stars.
+If the inner arrays are `StaticArray`s (and the code is sorted) then it calls `static_glue`.
+Otherwise it will call `red_glue`, unless code is unsuitable for that, in which case `copy_glue`.
 """
-glue(A::AbstractArray, code::Tuple) = copy_glue(A, code)
+function glue(A::AbstractArray{<:AbstractArray{T,IN},ON}, code::Tuple=defaultcode(IN,ON)) where {T,IN,ON}
+    if iscodesorted(code) || code == (*,:)
+        red_glue(A, code)
+    else
+        copy_glue(A, code)
+    end
+end
+
+glue(A::AbstractArray{<:Number,ON}, code::Tuple=defaultcode(0,ON)) where {ON} = A
+
+defaultcode(IN::Int, ON::Int) = ntuple(d-> d<=IN ? (:) : (*), IN+ON)
 
 @inline function red_glue(A::AbstractArray{IT,N}, code::Tuple) where {IT,N}
     gluecodecheck(A, code)
@@ -99,8 +117,13 @@ function glue!(B::AbstractArray{T,N}, A::AbstractArray{IT,ON}, code::Tuple) wher
 end
 
 function gluecodecheck(A::AbstractArray, code::Tuple)
-    countcolons(code) == ndims(first(A)) || throw(ArgumentError("wrong number of : in code"))
-    length(code) == ndims(A) + ndims(first(A)) || throw(ArgumentError("wrong code length"))
+    colons = countcolons(code)
+    inner = ndims(first(A))
+    outer = ndims(A)
+    colons == inner || throw(DimensionMismatch("wrong number of dimensions: " *
+        "ndims(first(A)) == $inner not cannot be glued with code = $(pretty(code))"))
+    length(code) - colons == outer || throw(DimensionMismatch("wrong number of dimensions: " *
+        "ndims(A) == $outer cannot be glued with code = $(pretty(code))"))
 end
 
 @generated function decolonise(i::Tuple)
