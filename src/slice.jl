@@ -182,6 +182,9 @@ end
 Reshapes `A` such that its nontrivial axes lie in the directions where `code` contains a `:`,
 by inserting axes on which `size(B, d) == 1` as needed.
 Throws an error if `ndims(A) != length(code)`.
+
+When acting on `A::Transpose`, `A::PermutedDimsArray` etc, it will `collect(A)` first,
+because reshaping these is very slow.
 """
 @generated function orient(A::AbstractArray, code::Tuple)
     list = Any[]
@@ -212,8 +215,8 @@ V = rand(500);
 =#
 
 # performance: avoid reshaping lazy transposes, as this is very slow in broadcasting
-orient(A::Union{PermutedDimsArray, LinearAlgebra.Transpose, LinearAlgebra.Adjoint}, code::Tuple) =
-    orient(collect(A), code)
+const LazyPerm = Union{PermutedDimsArray, LinearAlgebra.Transpose, LinearAlgebra.Adjoint}
+orient(A::Union{LazyPerm, SubArray{<:Any,<:Any,<:LazyPerm}}, code::Tuple) = orient(collect(A), code)
 #=
 A = rand(10,100); B = rand(100,100); C = rand(100,10);
 @time @reduce D[a,d] := sum(b,c) A[a,b] * B[b,c] * C[c,d] lazy;
@@ -242,12 +245,7 @@ Throws an error if size of `A` is not 1 in the indicated dimension.
 Will fail silently if given a `(:,3,:)` or `(:,\$c,:)`,
 for which `needview!(code) = true`, so the macro should catch such cases.
 """
-function rview(A::AbstractArray, code...)
-	# This nice error has to happen at runtime, and thus is slow
-	# all(decolonise(code) .== 1) ||
-	#     throw(ArgumentError("can't use rview(A, code...) with code = $(pretty(code)), it accepts only 1 and :"))
-	rview(A, code)
-end
+rview(A::AbstractArray, code...) = rview(A, code)
 
 @generated function rview(A::AbstractArray, code::Tuple)
     list = Any[]
