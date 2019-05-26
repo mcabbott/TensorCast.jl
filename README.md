@@ -291,8 +291,9 @@ here `f` maps rows of `X` to matrices, which are become slices of `Z`:
 ```julia
 @pretty @cast W[i,j,k] := f(X[k,:])[i,j]
 # begin
-#     local kangaroo = map(f, sliceview(X, (*, :)))
-#     Z = red_glue(kangaroo, (:, :, *))
+#     local turtle = sliceview(X, (*, :))
+#     local caribou = @__dot__(f(turtle))
+#     Z = red_glue(caribou, (:, :, *))
 # end
 ```
 
