@@ -1,5 +1,18 @@
 export @cast, @cast!, @reduce, @reduce!
 
+#= TODO
+
+* Perhaps you should pull parse! sizes, rview(), and check!() into first walker?
+
+* Can the inner-cast just trust the outer to provide sz_i etc?
+  Does it have to say whether it needs them?
+
+* Think about order of expressions, recursive cast & sizes.
+
+* Field names, like fun(A[i]).field[j], should be broadcast somehow.
+
+=#
+
 """
     @cast Z[i,j,...] := f(A[j,k,...])  options
 
@@ -8,22 +21,25 @@ Understands the following things:
 * `A[i,j,k]` is a three-tensor with these indices.
 * `B[(i,j),k]` is the same thing, reshaped to a matrix. Its first axis (the bracket) is indexed
   by `n = i + (j-1) * N` where `i ∈ 1:N`. This may also be written `B[i\\j,k]` or `B[i⊗j,k]`.
-* `C[k][i,j]` is a vector of matrices.
+* `C[k][i,j]` is a vector of matrices, either created by slicing (if on the left)
+  or implying glueing into (if on the right) a 3-tensor `A[i,j,k]`.
 * `D[j,k]{i}` is an ordinary matrix of `SVector`s, which may be reinterpreted from `A[i,j,k]`.
 * `E[i,_,k]` has two nontrivial dimensions, and `size(E,2)==1`. On the right hand side
   (or when writing to an existing array) you may also write `E[i,3,k]` meaning `view(E, :,3,:)`,
   or `E[i,\$c,j]` to use a variable `c`. Fixing inner indices, like `C[k][i,_]`, is not allowed.
 * `f(x)[i,j,k]` is allowed; `f(x)` must return a 3-tensor (and will be evaluated only once).
 * `g(H[:,k])[i,j]` is a generalised `mapslices`, with `g` mapping columns of `H`
-    to matrices, which are glued into a 3-tensor `[i,j,k]`.
-  Similarly `h(I[k])[i,j]` expects an `h` which maps scalars to matrices.
-* `J[i,-j,k]` means roughly `reverse(J, dims=2)`.
+    to matrices, which are glued into a 3-tensor `A[i,j,k]`.
+* `h(I[i], J[j])[k]` expects an `h` which maps two scalars to a vector,
+  which gets broadcasted `h.(I,J')` then glued into to a 3-tensor.
 * `K[i,j]'` conjugates each element, equivalent to `K'[j,i]` which is the
   conjugate-transpose of the matrix.
 * `M[i,i]` means `diag(M)[i]`, but only for matrices: `N[i,i,k]` is an error.
+* `P[i,i']` is normalised to `P[i,i′]` with unicode \\prime.
+* `R[i,-j,k]` means roughly `reverse(R, dims=2)`.
 
 The left and right hand sides must have all the same indices,
-with the sole exception of `M[i,i]`.
+and the only repeated index allowed is `M[i,i]`, which is not a trace.
 See `@reduce` and `@mul` for related macros which can sum over things.
 
 If a function of one or more tensors appears on the right hand side,
@@ -45,7 +61,7 @@ Options can be specified at the end (if several, separated by `,` i.e. `options:
 * `i:3` supplies the range of index `i`. Variables and functions like `j:Nj, k:length(K)`
   are allowed.
 * `assert` or `!` will turn on explicit dimension checks of the input.
-  (Providing ranges may also turn these on, but imperfectly, confirm with `@pretty @cast ...`.)
+  (Providing ranges may also turn these on.)
 * `cat` will glue slices by things like `hcat(A...)` instead of the default `reduce(hcat, A)`,
   and `lazy` will instead make a `VectorOfArrays` container.
 * `nolazy` disables `PermutedDimsArray` and `Reverse` in favour of `permutedims` and `reverse`,
@@ -239,11 +255,13 @@ function _macro(exone, extwo=nothing, exthree=nothing;
 
     outex = quote end
 
+    midright = MacroTools.prewalk(x -> colonwalker(x, [], flags, where), right)
+
     if @capture(right, AA_[ii__] ) || @capture(right, AA_{ii__} )
-        newright = walker(outex, right, canon, flags, store, icheck, where)
+        newright = walker(outex, midright, canon, flags, store, icheck, where)
     else
         newright = MacroTools.prewalk(
-            x -> walker(outex, x, canon, flags, store, icheck, where), right)
+            x -> walker(outex, x, canon, flags, store, icheck, where), midright)
         push!(flags, :broadcast)
     end
 
@@ -424,27 +442,110 @@ function readleft(left, redind, flags, store, icheck, where)
 end
 
 #="""
+    colonwalker(ex, iseen, flags, where)
+
+Called by `MacroTools.prewalk` on RHS primarily to look for things like `A[i,:,j]`,
+for which it returns `slice(A, (*,:,*))[i,j]` etc.
+But also records a list of what indices were seen, and called by `innercast()` for this purpose.
+"""=#
+function colonwalker(ex, iseen, flags, where)
+    if @capture(ex, A_[ijk__]) || @capture(ex, A_{ijk__})
+        static = @capture(ex, AA_{ijkfull__})
+
+        # first find the colons, and use to make code
+        icolon = findall(iscolon, ijk)
+        code = repeat(Any[*], length(ijk))
+        code[icolon] .= (:)
+
+        # then remove them, ijk now belongs to output of sliceview(A, code)
+        deleteat!(ijk, icolon)
+
+        # then collect flat list of indices seen for later
+        negated = []
+        iflat = reduce(vcat, stripminus!(negated, ijk); init=[])
+        push_or_append!(iseen, iflat)
+
+        # and finally make the expression
+        # length(icolon) == 0 && return ex
+
+        # any(i -> isconstant(i) && (i != :_), iflat) && throw(MacroError(
+        #     "can't use both colon and constant index together in $ex, sorry", where))
+
+        # if !static
+        #     ex = :( TensorCast.sliceview($A, $(code...,))[$(ijk...)] ) # TODO nolazy slicecopy?
+        #     return ex
+        # end
+
+        # # static
+        # iscodesorted(Tuple(code)) || throw(MacroError(
+        #     "can't static-slice unless colons are leftmost, unlike $(pretty(Tuple(code)))", where))
+        # push!(flags, :staticslice)
+        # staticsize = Any[ i.value for i in ijkfull[icolon] if i isa QuoteNode ]
+        # if length(staticsize) == length(icolon)
+        #     ex = :( TensorCast.static_slice($A, StaticArrays.Size($(staticsize...)))[$(ijk...)] )
+        # else
+        #     ex = :( TensorCast.static_slice($A, $(code...,))[$(ijk...)] )
+        #     @warn "will have to get sizes at runtime!"
+        # end
+
+        # and finally make the expression
+        if length(icolon) > 0
+            any(i -> isconstant(i) && (i != :_), iflat) && throw(MacroError(
+                "can't use both colon and constant index together in $ex, sorry", where))
+
+            if !static
+                ex = :( TensorCast.sliceview($A, $(code...,))[$(ijk...)] ) # TODO nolazy slicecopy?
+
+            else
+                iscodesorted(Tuple(code)) || throw(MacroError(
+                    "can't static-slice unless colons are leftmost, unlike $(pretty(Tuple(code)))", where))
+                push!(flags, :staticslice)
+                staticsize = Any[ i.value for i in ijkfull[icolon] if i isa QuoteNode ]
+                if length(staticsize) == length(icolon)
+                    ex = :( TensorCast.static_slice($A, StaticArrays.Size($(staticsize...)))[$(ijk...)] )
+                else
+                    ex = :( TensorCast.static_slice($A, $(code...,))[$(ijk...)] )
+                    @warn "will have to get sizes at runtime!"
+                end
+            end
+        end
+    end
+    ex
+end
+
+iscolon(s::Symbol) = s == :(:)
+iscolon(i::Int) = false
+iscolon(q::QuoteNode) = true
+iscolon(e::Expr) = false
+
+#="""
     walker(outex, x, canon, flags, store, icheck, where)
 
-Called by `MacroTools.prewalk` on RHS, finds tensors & pushes `:( sym = inputex(this) )` into
-`outex.args`, and then replaces them with `sym`.
+Called by `MacroTools.prewalk` on RHS, finds tensors & does all the processing:
+pushes `:( sym = inputex(this) )` into `outex.args`,
+and then replaces them with `sym`.
 """=#
 function walker(outex, ex, canon, flags, store, icheck, where)
 
     # allow @reduce inside RHS, by simply calling the entire macro first
     if @capture(ex, @reduce(redex__))
-        Rsym = gensym(:R)
-        Rval, Rind = _macro(redex...; reduce=true, where=where, recurse=true)
+        Rsym = gensym(:InnerReduce)
+        rstring = pretty(unparse("@reduce", redex...))
+        rwhere = (mod=where.mod, src=where.src, str=where.str * "; recurse = " * rstring)
+
+        Rval, Rind = _macro(redex...; reduce=true, where=rwhere, recurse=true)
 
         # sew the result of that into ... not outex but topex, as may need its size:
         push!(store.topex, :(local $Rsym = $Rval ) )
 
-        # construct name for resulting tensor, for outer @cast to further process
+        # construct a version of the resulting tensor, for further processing
         ex =  :( $Rsym[$(Rind...)] )
 
     elseif @capture(ex, @mul(mulex__))
-        Msym = gensym(:M)
-        Mval, Mind = _mul(mulex...; where=where, recurse=true)
+        Msym = gensym(:InnerMul)
+        mstring = pretty(unparse("@mul", mulex...))
+        mwhere = (mod=where.mod, src=where.src, str=where.str * "; recurse = " * mstring)
+        Mval, Mind = _mul(mulex...; where=mwhere, recurse=true)
 
         push!(store.topex, :(local $Msym = $Mval ) )
 
@@ -452,35 +553,32 @@ function walker(outex, ex, canon, flags, store, icheck, where)
     end
 
     # find any indexed tensor, process it, and replace it
-    if @capture(ex, A_[ij__][kl__] ) || @capture(ex, A_[ij__]{kl__} ) || @capture(ex, A_[ij__] )
+    if @capture(ex, A_[ij__][kl__] ) || @capture(ex, A_[ij__]{kl__} ) || @capture(ex, A_[kl__] )
 
-        push!(store.rightnames, A) # used for @cast A[i,j] -> B[i\j]
+        if isa(A, Symbol)
+            push!(store.rightnames, A) # used for @cast A[i,j] -> B[i\j]
+        elseif @capture(A, Astruct_.field_)
+            push!(store.rightnames, Astruct)
 
-        if isa(A, Symbol) || @capture(A, Astruct_.field_)
-
-        # allow something like mapslices:
-        # @pretty @cast Z[i,j] := fun(X[:,i,:],42)[j] + X[j,i,3] + Y[j]^2
-        elseif @capture(A, f_(B_[i_colons__],rest__) )
-
-            kl == nothing || throw(MacroError("can't nest this deeply: $ex", where))
-
-            # i_colons = vcat(rvec(ii1), rvec(i1), Any[:(:)], rvec(i2), rvec(ii2)) # NB contains the symbol :(:) not the function (:)
-
-            A, ex = slicemap(f, B, i_colons, rest, ij, store)
-
-        # if we have f(x)[i,j] then we should evaluate f just once, e.g.
-        # @pretty @cast A[i]{j:5} |= rand(15)[i\j]
         else
-            Atop = gensym(:A)
-            push!(store.topex, :(local $Atop = $A ) )
-            A = Atop
+            Ctop, Cex = innercast(A, kl, canon, flags, store, icheck, where)
+
+            if Cex == nothing # something like ex = f(x)[i,j], just pull f(x) out
+                Atop = gensym(:A)
+                push!(store.topex, :(local $Atop = $A ) )
+                A = Atop
+            else # something like f(B[i], C[j])[k], which is what innercast() deals with
+                ij == nothing || throw(MacroError("too many levels of sub-indices in [$(pretty(ij))][$(pretty(kl))]", where))
+                ex = Cex
+                A = Ctop
+            end
         end
 
-        V && @info "walker before inputex" A ex canon store
+        V && @info "walker before inputex" A ex Tuple(canon) store
 
         Aval = inputex(A, ex, canon, flags, store, icheck, where)
 
-        if isa(Aval, Symbol)
+        if isa(Aval, Symbol) # no input processing
             ex = Aval
         else
             Asym = gensym(:A)
@@ -504,60 +602,50 @@ function walker(outex, ex, canon, flags, store, icheck, where)
 end
 
 #="""
-    slicemap(f, :B, [:i, :(:), :j], rest, kl, store)
+    innercast(Aex, outer, ...)
 
-This processes `f(B[i,:mj],rest...)[k,l]`, such as in these:
-```
-@pretty @cast Z[i,j] := fun(X[:,i,:],42)[j] + X[j,i,3] + Y[j]^2
-@pretty @cast Z[i,j\k] := fun(X[:,i\k,:])[j] + Y[k]^2
-```
-
-* Note that `f(X[i,:], Y[i,:])` is not allowed (yet).
-
-* `g(X[i,:,_])` should work, but notices _ after map,
-and thus `g(X[i,:,3])` will evaluate g on many slices which aren't required.
-
-These could be fixed by upgrading this function -- TODO maybe?
+For things like `f(X[i,:], Y[:,j])[k]` this expects `Aex = f(...)` and `outer=[k]`.
+It applies `@cast Csym[i,j] := f(Xslices[i], Ysllices[j])`
+and then returns `Csym, Csym[i,j][k]` for the outer macro to glue up.
+Otherwise it returns `nothing, nothing`.
 """=#
-function slicemap(f, B, i_colons, rest, kl, store)
+function innercast(Aex, outer, canon, flags, store, icheck, where)
+    # walk Aex just to get list of indices
+    iseen = []
+    MacroTools.prewalk(x -> colonwalker(x, iseen, flags, where), Aex)
 
-    if isa(B, Symbol) || @capture(B, Bstruct_.field_)
-    else # pull out B = B(x) so that it's evaluated only once
-        Btop = gensym(:B)
-        push!(store.topex, :(local $Btop = $B ) )
-        B = Btop
-    end
+    # if you found any, then make @cast [j] := Aex
+    if length(iseen) > 0
 
-    # assertions, and size information for resising etc.
-    Bdims = length(i_colons)
-    str = "expected a $Bdims-tensor $B[" * join(i_colons, ", ") * "]"
-    push!(store.checks, :(TensorCast.@assert_ ndims($B)==$Bdims $str) )
-    for (dout, ind) in enumerate(i_colons)
-        if ind != :(:) && !isconstant(ind)
-            savesize!(store, ind, :( size($B, $dout) ) )
-        end
-    end
+        # @pretty @cast B[a,i,j,k] := fun(A[k],B[j],C[i])[a] # doesn't contain permutedims
+        inner = sort(filter(!isconstant, unique(iseen)), by = i -> findcheck(i, canon, where))
 
-    # construct map(f,eachslice(B)) expression
-    Atop = gensym(:slicemap)
-    i_code = map(i -> i==:(:) ? (:) : (*), Tuple(i_colons))
-    if count(isequal(:), i_code) > 0
-        sliceex = :( TensorCast.sliceview($B, $i_code) )
+        opt = filter(f -> f in flag_list, flags)
+        # :lazy in flags && push!(opt, :lazy)
+        # :nolazy in flags && push!(opt, :nolazy)
+        # :strided in flags && push!(opt, :strided)
+        # :assert in flags || :(!) in flags && push!(opt, :assert) # TODO remove this right?
+
+        Csym = gensym(:InnerCast)
+        castex = :( $Csym[$(inner...)] := $Aex )
+        optex = :( ($(opt...),) )
+
+        cstring = pretty(unparse("@cast", castex, optex))
+        cwhere = (mod=where.mod, src=where.src, str=where.str * "; recurse = " * cstring)
+
+        V && @info "innercast" Tuple(iseen) cstring
+
+        Cval, Cind = _macro(castex, optex; where=cwhere, recurse=true)
+        @assert Cind == inner
+        Cval = MacroTools.unblock(Cval)
+
+        push!(store.topex, Cval )
+
+        ex = :( $Csym[$(Cind...)][$(outer...)] )
+        return Csym, ex
     else
-        sliceex = B
+        return nothing, nothing
     end
-    if length(rest) == 0
-        push!(store.topex, :(local $Atop = map($f, $sliceex) ) )
-    else
-        Xsymb = gensym(:X)
-        push!(store.topex, :(local $Atop = map($Xsymb -> $f($Xsymb, $(rest...)), $sliceex) ) )
-    end
-
-    # construct ex for inputex later
-    ij = filter(!isequal(:(:)), i_colons)
-    ex = :( $Atop[$(ij...)][$(kl...)] )
-
-    return Atop, ex
 end
 
 #="""
@@ -652,7 +740,7 @@ function inputex(A, inex, target, flags, store, icheck, where)
             ex = :( TensorCast.julienne_glue($ex, $(codeD...,))  )
             push!(flags, :havecopied)
         else
-            ex = :( TensorCast.red_glue($ex, $(codeD...,))  )
+            ex = :( TensorCast.glue($ex, $(codeD...,))  )
             push!(flags, :havecopied)
         end
 

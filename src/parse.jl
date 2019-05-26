@@ -6,6 +6,14 @@ const flag_list = Any[ :!, :assert,
 
 #= TODO
 
+# this should be made to work?
+@pretty @cast D[n] := det(T[:,:,n])
+# catch any colon-ed indexing and replace with Gen = slice(T,...) & Gen[n] right?
+
+# and related, zero-dim arrays:
+B = Array{Any,0}(undef); B[] = rand(3)
+@pretty @cast A[i] := B[][i]  # works,
+
 # this gives an error -- change to sizeinfer! which updates dict, and call that?
 # or perhaps just check at :staticslice & throw an error
 @pretty @cast A[k]{i,j} := B[i,(j,k)]  k:length(C)
@@ -18,6 +26,11 @@ B = rand(2,3);
 @cast A[i,j] := B[j,i] named
 @reduce D[i] := sum(j)  A[i,j] named
 
+# double negative failure
+@pretty @cast A[i,j] := B[-(i,-j)]  i:2
+
+# Should I add some @nospecialize ? Or add deliberate precompilation?
+
 =#
 
 struct SizeDict
@@ -28,7 +41,7 @@ struct SizeDict
     rightnames::Vector{Any}
 end
 
-SizeDict() = SizeDict(Dict{Any, Any}(), Any[], Any[], Any[], Any[])
+SizeDict(dict=Dict{Any, Any}()) = SizeDict(dict, Any[], Any[], Any[], Any[])
 
 #="""
     flat, getafix, putsz, negated = parse!(sdict, A, outer, inner)
@@ -172,7 +185,9 @@ It returns an index, or a tidied-up vector of indices, in which tuples etc have 
 """=#
 stripminus!(negated::Vector, ind::Symbol) = ind  # get one Symol & you're done
 
-stripminus!(negated::Vector, ind::Int) = throw(MacroError("can't handle fixed index $ind here"))
+stripminus!(negated::Vector, ind::Int) = ind # throw(MacroError("can't handle fixed index $ind here"))
+
+stripminus!(negated::Vector, ind::Vector) = Any[ stripminus!(negated, i) for i in ind ]
 
 function stripminus!(negated::Vector, ind::Expr)
     # minus one index
