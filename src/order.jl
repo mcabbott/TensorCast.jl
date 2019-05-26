@@ -32,3 +32,22 @@ function Shuffle{D}(A::AbstractArray{T,N}) where {D,T,N}
 end
 
 Shuffle(A::AbstractArray; dims=ndims(A)) = Shuffle{dims}(A)
+
+"""
+    multidiag(A, dims)
+Like `permutedims` except that repeated dimensions mean a diagonal.
+Thus `multidiag(M, (1,1)) == diag(M)` ...
+"""
+function multidiag(A::AbstractArray{T,N}, dims::NTuple{N,Int}) where {T,N}
+    out = Array{T}(undef, [size(A,i) for i in unique(dims)]...)
+    for I in CartesianIndices(out)
+        out[I] = A[multiget(I,dims)]
+    end
+    out
+end
+
+multiget(ind::Tuple, tup::NTuple{N,Int}) where {N} = ntuple(d -> ind[tup[d]], N)
+
+multiget(ind::CartesianIndex, tup::Tuple) = CartesianIndex(multiget(ind.I, tup))
+
+# [i for i in Iterators.product(1:3,1:3)]
