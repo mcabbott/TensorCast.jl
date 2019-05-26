@@ -29,13 +29,13 @@ macro pretty(ex)
 end
 
 function pretty(ex::Union{Expr,Symbol})
-    ex = MacroTools.alias_gensyms(ex)
-    ex = MacroTools.striplines(ex) # remove line references
+    ex = MacroTools.alias_gensyms(ex) # animal names
+    ex = MacroTools.striplines(ex)    # remove line references
+    pretty(string(ex))
+end
 
-    str = string(ex)
-
-    # str = replace(str, r"(#=.+=#)\s" => "")  # remove line references
-    str = replace(str, r"\n(\s+\n)" => "\n") # and empty lines
+function pretty(str::String)
+    str = replace(str, r"\n(\s+\n)" => "\n")      # remove empty lines
 
     str = replace(str, r"\w+\.(\w+)\(" => s"\1(") # remove module names on functions
     str = replace(str, r"\w+\.(\w+)!\(" => s"\1!(")
@@ -43,10 +43,11 @@ function pretty(ex::Union{Expr,Symbol})
     str = replace(str, r"\w+\.(\w+){" => s"\1{")  # and on structs...
 
     str = replace(str, "Colon()" => ":")
+    str = replace(str, r"\$\(QuoteNode\((\d+)\)\)" => s":\1")  # not right yet!
 end
 
-pretty(tup::Tuple) = replace(string(tup), "Colon()" => ":")
+pretty(tup::Tuple) = pretty(string(tup))
 
-pretty(vec::Vector) = join(something.(vec, "nothing"), ", ")
+pretty(vec::Vector) = pretty(join(something.(vec, "nothing"), ", "))
 
 pretty(x) = string(x)
