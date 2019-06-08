@@ -21,6 +21,11 @@ macro pretty(ex)
         println("# " * full)
         return :(@pretty $(Meta.parse(full)) )
 
+    elseif @capture(ex, @matmul_str str_)
+        full = matmul_string(str)
+        println("# " * full)
+        return :(@pretty $(Meta.parse(full)) )
+
     else
         :( macroexpand($(__module__), $(ex,)[1], recursive=false) |> pretty |> println )
     end

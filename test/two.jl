@@ -105,6 +105,15 @@ end
     @cast out[l][i,j,_,k] := Z[i,j,k,l];
     @test out == imgs
 
+    uno = 1 # try again with $constant
+    @cast Z[i,j,k,l] := imgs[l][i,j,$uno,k];
+
+    @test size(Z) == (28,28,4,2)
+    @test Z[2,3,4,1] == imgs[1][2,3,1,4]
+
+    @cast out[l][i,j,1,k] := Z[i,j,k,l];
+    @test out == imgs
+
 end
 @testset "scalars & 0-arrays" begin
 
@@ -120,6 +129,13 @@ end
     V = rand(4)
     @cast TV[i] := V[i] + T[]
     @test TV == V .+ S
+
+end
+@testset "tupple broadcasting" begin
+
+    V = 1:4
+    @cast T[i,j] := (V[i], V[j]^2 + 10^3, 99)
+    @test T[3,4] == (3,1016,99)
 
 end
 @testset "arrays of functions" begin
@@ -150,4 +166,37 @@ end
     @test C isa Diagonal
 
 end
+@testset "from todo list" begin
 
+    list = [ i .* ones(2,2,1) for i=1:8 ];
+    @cast mat[x\i, y\j] := Int(list[i\j][x,y,1])  i:2
+    @cast mat2[x\i, y\j] := Int(list[i\j][x,y,1])  i:2, lazy # crazy type
+    @test mat[3,5] == 6
+    @test mat == mat2
+
+    @cast C1[i,i',k] := (1:4)[i⊗i′⊗k] + im  (i:2, i′:2)  # two tensor signs
+    @cast C2[i,i',k] := (1:4)[i⊗i'⊗k] + im  (i:2, i′:2)  # more primes
+    # @cast C3[i,i',k] := (1:4)[i⊗i'⊗k] + im  (i:2, i':2)
+    @test C1[1,2,1] == C2[1,2,1] == 3+1im
+
+    ∇λ = ones(3); topd = rand(3); logind=3; λ=rand(3); d=2
+    @cast ∇λ[c] = ∇λ[c] - λ[$d] * exp(topd[c]) / logind # all const
+    @test ∇λ[1] == 1 - λ[2] * exp(topd[1]) / 3
+
+    W = rand(3); X = [rand(3) for _=1:3, _=1:2];
+    @cast Z[i,j] := W[i] * exp(X[1,1][i] - X[2,2][j]) # all const
+    @test Z == @. W * exp(X[1,1] - X[2,2]')
+
+end
+@testset "some errors" begin
+
+    using TensorCast: MacroError, _macro, CallInfo
+
+    @test_throws MacroError _macro(:(  A[i,j,i] := B[i,j]  )) # repeated
+    @test_throws MacroError _macro(:(  A[i,j] := B[i,j,-i]  ))
+    @test_throws MacroError _macro(:(  A[k] := sum(k)  ),:(  B[k]  ), call=CallInfo(:reduce))
+
+    @test_throws MacroError _macro(:(  A[i,j] := B[k]  )) # "can't find index k on the left"
+    @test_throws MacroError _macro(:(  A[i] := sum(k)  ),:(  (B[j]+ C[j])[i]  ), call=CallInfo(:reduce))
+
+end

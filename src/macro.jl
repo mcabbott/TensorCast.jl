@@ -8,7 +8,9 @@ struct CallInfo
     src::LineNumberNode
     string::String
     flags::Set{Symbol}
-    CallInfo(mod::Module, src, str::String, flags=Set{Symbol}()) = new(mod, src, str, flags)
+    CallInfo(mod::Module=Main, src=LineNumberNode(0), str::String="", flags=Set{Symbol}()) =
+        new(mod, src, str, flags)
+    CallInfo(syms::Vararg{Symbol}) = new(Main, LineNumberNode(0), "", Set([syms...])) # for testing
 end
 
 """
@@ -159,7 +161,7 @@ end
 
 #==================== The Main Functions ====================#
 
-function _macro(exone, extwo=nothing, exthree=nothing; call::CallInfo, dict=Dict())
+function _macro(exone, extwo=nothing, exthree=nothing; call::CallInfo=CallInfo(), dict=Dict())
     store = (dict=dict, assert=[], mustassert=[], seen=[], need=[], top=[], main=[])
     # TODO use OrderedDict() for main? To allow duplicate removal
 
@@ -224,6 +226,7 @@ This mostly aims to re-work the given expression into `some(steps(A))[i,j]`,
 but also pushes `A = f(x)` into `store.top`, and sizes into `store.dict`,
 """
 function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
+    # This acts only on single indexing expressions:
     if @capture(ex, A_{ijk__})
         static=true
         push!(call.flags, :staticslice)
@@ -243,8 +246,9 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
 
     # Constant indices A[i,3], A[i,_], A[i,$c]
     if all(isconstant, ijk)
-        needview!(ijk) # replace _ with 1, if any
-        A = :( $A[$(ijk...)] )
+        needview!(ijk)                                         # replace _ with 1, if any
+        Asym = maybepush(:( $A[$(ijk...)] ), store, :allconst) # protect from later processing
+        return Asym                                            # and nothing more to do here
     elseif any(isconstant, ijk)
         ijcolon = map(i -> isconstant(i) ? i : (:), ijk)
         if needview!(ijcolon)
@@ -509,6 +513,8 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
     @capture(ex, A_[ijk__]) || return ex
 
     dims = Int[ findcheck(i, target, call, " on the left") for i in ijk ]
+    # flat, _ = indexparse(A, ijk, store, call) # fixing a bug that wasn't actually here
+    # dims = Int[ findcheck(i, target, call, " on the left") for i in flat ]
 
     # Do we need permutedims, or equvalent?
     perm = sortperm(dims)
@@ -1289,7 +1295,7 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         end
         # Now I allow fixing output indices
         if any(isconstant, parsed.inner)
-            any(i -> isconstant(i) && !(i == :_ || i == 1), parsed.inner) && throw(MacroError("can't fix output index to $i, only to 1", call))
+            any(i -> isconstant(i) && !(i == :_ || i == 1), parsed.inner) && throw(MacroError("can't fix output index to something other than 1", call))
             code = Tuple(map(i -> isconstant(i) ? (*) : (:), parsed.inner))
             Asafe = maybepush(ex, store, :outfix)
             ex = :(TensorCast.orient.($Asafe, Ref($code)) ) # @. would need a dollar

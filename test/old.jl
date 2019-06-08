@@ -105,3 +105,17 @@ end
     @test N[2,1]==42
 
 end
+@testset "other random" begin
+
+    A = rand(1:99, 3,3);
+    X = randn(4)
+    @cast B[i,j,k] := A[i,j] * X[k]
+    @test B == A .* reshape(X, 1,1,:)
+
+    G = rand(4, 4);
+    two = 2
+    @cast G2[k, l] := G[k,2] * G[l,2]
+    @cast G3[k, l] := G[k,$two] * G[l,$two]
+    @test G2 == G3 == G[:,2] .* G[:,2]'
+
+end
