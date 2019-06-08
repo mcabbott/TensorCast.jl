@@ -81,7 +81,7 @@ end
 
     # this needs size of the result of inner macro, failed at first:
     A = rand(2,3); B = rand(3,4); C = rand(4,5);
-    @reduce W[i,_,l] := sum(j) A[i,j] * (@mul [j,l] := B[j,k] * C[k,l])  assert
+    @reduce W[i,_,l] := sum(j) A[i,j] * (@matmul [j,l] := sum(k) B[j,k] * C[k,l])  assert
     @test W ≈ reshape(A * B * C, 2,1,5)
 
 end

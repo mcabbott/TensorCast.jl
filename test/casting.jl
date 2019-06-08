@@ -111,26 +111,6 @@ end
     @test A[3,1] == A[3,2] == 33
 
 end
-@testset "anonymous functions" begin
-
-    f1 = @cast A[i] + B[j]^2 => C[i,j]
-    f2 = @cast (A[i] + B[j]^2) -> C[i,j]
-
-    A = rand(3)
-    B = rand(2)
-    @cast C[i,j] := A[i] + B[j]^2
-
-    @test f1(A,B) == f2(A,B) == C
-
-    f3 = @cast D[i\j,k] -> E[i,-k,j]  i:2
-    f4 = @cast D[i\j,k] => E[i,-k,j]  i:2, nolazy
-
-    D = rand(4,3)
-    @cast E[i,k,j] := D[i\j,-k]  i:2
-
-    @test f3(D) == f4(D) == E
-
-end
 @testset "mapslices etc" begin
 
     M = rand(-10:10, 3,4)
@@ -139,10 +119,10 @@ end
     N2 = mapslices(g, M, dims=1)
     @test N == N2
 
-    V = [ rand(1:99, 2) for _=1:5, _=1:1 ]
-    @cast W[i,j] := (v->v .// 2)(V[j,_])[i]
-    W2 = hcat(V...) .// 2
-    @test W == W2
+    # V = [ rand(1:99, 2) for _=1:5, _=1:1 ]
+    # @cast W[i,j] := (v->v .// 2)(V[j,_])[i] # TODO
+    # W2 = hcat(V...) .// 2
+    # @test W == W2
 
     fun(m::AbstractMatrix, a=0) = vec(sum(m,dims=1)) .+ a
     X = rand(2,3,4)

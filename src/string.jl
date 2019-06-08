@@ -1,4 +1,4 @@
-export @cast_str, @reduce_str, @mul_str
+export @cast_str, @reduce_str, @matmul_str
 
 """
     cast" Z_ij := A_i + B_j "
@@ -51,8 +51,8 @@ macro reduce_str(str::String)
     Meta.parse(reduce_string(str)) |> esc
 end
 
-macro mul_str(str::String)
-    Meta.parse(mul_string(str)) |> esc
+macro matmul_str(str::String)
+    Meta.parse(matmul_string(str)) |> esc
 end
 
 function cast_string(str)
@@ -65,11 +65,11 @@ function reduce_string(str::String)
     "@reduce " * str3
 end
 
-function mul_string(str::String)
+function matmul_string(str::String)
     str2 = replace(str, r"=\s+sum_[\w\'\′\:\⊗]+" => indexfun)
     str3 = replace(str2, r"=\s+Σ_[\w\'\′\:\⊗]+" => indexfun)
     str4 = replace(str3, r"_([\w\d\$\'\′\:\⊗]+)" => indexsquare)
-    "@mul " * str4
+    "@matmul " * str4
 end
 
 function indexcomma(str)

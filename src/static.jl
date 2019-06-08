@@ -5,10 +5,12 @@ using .StaticArrays
 
 """
     static_slice(A, sizes)
+    static_slice(A, code)
 
 Slice array `A` into an `AbstractArray{StaticArray}`,
 with the slices always belonging to the first few indices, i.e. `code = (:,:,...,*,*)`.
-Expects `sizes = Size(size(A)[1:ncolons])` for stability.
+Prefers to get `sizes = Size(size(A)[1:ncolons])` for stability,
+but if given code instead it will do what it can.
 
 Typically produces `reshape(reinterpret(SArray...`; copy this to get `Array{SArray}`,
 or call `static_slice(A, sizes, false)` to omit the reshape.
@@ -24,11 +26,11 @@ or call `static_slice(A, sizes, false)` to omit the reshape.
     end
 end
 
-function static_slice(A::AbstractArray{T,N}, code::Tuple) where {T,N}
+function static_slice(A::AbstractArray{T,N}, code::Tuple, finalshape::Bool=true) where {T,N}
     N == length(code) ||  throw(ArgumentError("static_glue needs length($(pretty(code))) == ndims(A)"))
     iscodesorted(code) || throw(ArgumentError("static_glue needs a sorted code, not $(pretty(code))"))
     sizes = Size(ntuple(d -> size(A,d), countcolons(code))...)
-    static_slice(A, sizes)
+    static_slice(A, sizes, finalshape)
 end
 
 """
@@ -47,9 +49,6 @@ For `MArray` slices, which can't be reinterpreted, this reverts to `red_glue`.
 end
 
 function static_glue(A::AbstractArray{IT}, finalshape=true) where {IT<:MArray}
-    # ON = ndims(A)
-    # IN = ndims(IT)
-    # code = ntuple(d -> d<=IN ? (:) : (*), IN+ON)
     code = defaultcode(ndims(IT), ndims(A))
     red_glue(A, code)
 end

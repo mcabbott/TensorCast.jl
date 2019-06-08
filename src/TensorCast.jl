@@ -1,73 +1,31 @@
 
 module TensorCast
 
-using MacroTools
+export @cast, @reduce, @matmul, @pretty
 
-const V = false # verbose debugging
+using MacroTools, Requires
+using LinearAlgebra, Random
 
-include("parse.jl")
-
-include("macro.jl") # @cast and @reduce
-
-include("matmul.jl") # @mul
-
-include("icheck.jl")
-
+include("macro.jl")
+include("pretty.jl")
 include("string.jl")
 
-include("pretty.jl")
-
-if VERSION < v"1.1.0"
-    include("eachslice.jl")
-end
-
-include("slice.jl") # slice, glue, orient, etc
-
+include("slice.jl")     # slice, glue, etc
+include("view.jl")      # orient, Reverse{D} etc
 include("recursive.jl") # RecursiveArrayTools
-
-include("order.jl") # Reverse{D} etc
-
-include("lazy.jl") # LazyCast
-
-using Requires
+include("lazy.jl")      # LazyCast
 
 function __init__()
-
     @require StaticArrays = "90137ffa-7385-5640-81b9-e52037218182" begin
         include("static.jl")
     end
-
-    # @require Strided = "5e0ebb24-38b0-5f93-81fe-25c709ecae67" begin
-    #     include("strided.jl")
-    # end
-
     @require JuliennedArrays = "5cadff95-7770-533d-a838-a1bf817ee6e0" begin
         include("julienne.jl")
     end
+end
 
-    # @require LazyArrays = "5078a376-72f3-5289-bfd5-ec5146d43c02" begin
-    # end
-
-    # @require Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c" begin
-    #   include("flux.jl")
-    # end
-
-    # @require Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f" begin
-    #     include("zygote.jl")
-    # end
-
-    # @require NamedDims = "356022a1-0364-5f58-8944-0da4b18d706f" begin
-    #     include("nameddims.jl")
-    # end
-
-    @require NamedArrays = "86f7a689-2022-50b4-a561-43c23ac3c673" begin
-        include("namedarrays.jl")
-    end
-
-    # @require AxisArrays = "39de3d68-74b9-583c-8d2d-e117c070f3a9" begin
-    #     include("axis.jl")
-    # end
-
+if VERSION < v"1.1.0"
+    include("eachslice.jl")
 end
 
 end # module

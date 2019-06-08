@@ -1,8 +1,6 @@
 
-export @pretty
-
 """
-    @pretty @shape A[...] := B[...]
+    @pretty @cast A[...] := B[...]
 
 Prints an approximately equivalent expression with the macro expanded.
 Compared to `@macroexpand1`, generated symbols are replaced with animal names (from MacroTools),
@@ -10,7 +8,7 @@ comments are deleted, module names are removed from functions,
 and the final expression is fed to `println()`.
 
 To copy and run the printed expression, you may need various functions which aren't exported.
-Try something like `using TensorCast: orient, star, rview, @assert_, red_glue, sliceview, batchmul`
+Try something like `using TensorCast: orient, star, rview, @assert_, red_glue, sliceview`
 """
 macro pretty(ex)
     if @capture(ex, @cast_str str_)
@@ -51,3 +49,15 @@ pretty(tup::Tuple) = pretty(string(tup))
 pretty(vec::Vector) = pretty(join(something.(vec, "nothing"), ", "))
 
 pretty(x) = string(x)
+
+function unparse(str::String, exs...)
+    @capture(exs[1], left_ = right_ ) && return string(str, " ", left, " = ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ := right_ ) && return string(str, " ", left, " := ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ |= right_ ) && return string(str, " ", left, " |= ", right, "  ", join(exs[2:end],"  "))
+
+    @capture(exs[1], left_ += right_ ) && return string(str, " ", left, " += ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ -= right_ ) && return string(str, " ", left, " -= ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ *= right_ ) && return string(str, " ", left, " *= ", right, "  ", join(exs[2:end],"  "))
+
+    return string(exs)
+end
