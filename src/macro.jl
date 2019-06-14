@@ -13,6 +13,14 @@ struct CallInfo
     CallInfo(syms::Vararg{Symbol}) = new(Main, LineNumberNode(0), "", Set([syms...])) # for testing
 end
 
+# @with_kw struct CallInfo
+#     mod::Module = Main
+#     src::LineNumberNode = LineNumberNode(0)
+#     string::String = ""
+#     flags::Set{Symbol} = Set{Symbol}()
+#     CallInfo(mod, src, str, flags=Set{Symbol}()) = new(mod, src, str, flags)
+# end
+
 """
     @cast Z[i,j,...] := f(A[i,j,...], B[j,k,...])  options
 
@@ -155,7 +163,13 @@ You should be able to use this within the other macros,
 eventually without specifying intermediate arrays by hand.
 """
 macro matmul(exs...)
-    call = CallInfo(__module__, __source__, TensorCast.unparse("@mul", exs...), Set([:matmul]))
+    call = CallInfo(__module__, __source__, TensorCast.unparse("@matmul", exs...), Set([:matmul]))
+    _macro(exs...; call=call)
+end
+
+macro mul(exs...)
+    call = CallInfo(__module__, __source__, TensorCast.unparse("@matmul", exs...), Set([:matmul]))
+    @warn "Please replace @mul with @matmul, and ensure that it has explicit sum()" call.string maxlog=1 _id=hash(exs)
     _macro(exs...; call=call)
 end
 
@@ -632,8 +646,14 @@ end
 This saves to `store` the sizes of all input tensors, and their sub-slices if any.
 """
 function rightsizes(ex, store::NamedTuple, call::CallInfo)
-    @capture(ex, A_[outer__][inner__] | A_[outer__]{inner__} ) ||
-        @capture(ex, A_[outer__] | A_{outer__} ) || return ex
+    if @capture(ex, A_[outer__][inner__] | A_[outer__]{inner__} )
+        field = nothing
+    elseif @capture(ex, A_[outer__].field_[inner__] | A_[outer__].field_{inner__} )
+    elseif  @capture(ex, A_[outer__] | A_{outer__} )
+        field = nothing
+    else
+        return ex
+    end
 
     :recurse in call.flags && return nothing # outer version took care of this
 
@@ -642,13 +662,18 @@ function rightsizes(ex, store::NamedTuple, call::CallInfo)
         A = Symbol(A,"_val") # the exact same symbol is used by standardiser
     end
 
-    if A isa Symbol || @capture(A, AA_.ff_)
+    if A isa Symbol || @capture(A, AA_.ff_) && !containsindexing(A)
         indexparse(A, outer, store, call; save=true)
-        innerparse(A, inner, store, call; save=true)
+        if field==nothing
+            innerparse(:(first($A)), inner, store, call; save=true)
+        else
+            innerparse(:(first($A).$field), inner, store, call; save=true)
+        end
     end
 
     return nothing # destroy expression to ensure we don't match A[outer] alone later
-end
+    # NO! change this -- for fun(M[:,j],N[j]).same[i] you must not save i, but can save j later
+end # TODO
 
 #==================== Various Parsing Functions ====================#
 
@@ -665,7 +690,7 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
     # Do we make a new array? With or without collecting:
     if @capture(ex, left_ := right_ )
     elseif @capture(ex, left_ == right_ )
-        @warn "using == no longer does anything" call.string
+        @warn "using == no longer does anything" call.string maxlog=1 _id=hash(call.string)
     elseif @capture(ex, left_ |= right_ )
         push!(call.flags, :collect)
 
@@ -678,7 +703,7 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
         reduce && throw(MacroError("can't use += with @reduce", call))
     elseif @capture(ex, left_ -= right_ )
         push!(call.flags, :inplace)
-        right = :( $left - $right )
+        right = :( $left - ($right) )
         reduce && throw(MacroError("can't use -= with @reduce", call))
     elseif @capture(ex, left_ *= right_ )
         push!(call.flags, :inplace)
@@ -700,7 +725,7 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
         isnothing(Z) && (:inplace in call.flags) && throw(MacroError("can't write into a nameless tensor", call))
         Z = isnothing(Z) ? gensym(:output) : Z
         parsed = indexparse(Z, outer, store, call, save=(:inplace in call.flags))
-        innerflat = innerparse(Z, inner, store, call, save=(:inplace in call.flags))
+        innerflat = innerparse(:(first($Z)), inner, store, call, save=(:inplace in call.flags))
         canon = vcat(innerflat, parsed.flat)
         checknorepeats(canon, call, " on the left")
 
@@ -862,13 +887,15 @@ function stripminustilde!(ijk::Vector, reversed, shuffled)
 end
 
 """
-    innerparse(A, [i,j])
+    innerparse(firstA, [i,j])
 Checks that inner indices are kosher, and returns the list.
+If `save=true` then it now expects expr. `first(A)` to allow `first(A).field` too,
+otherwise it ignores first arg.
 """
-function innerparse(A, ijk, store::NamedTuple, call::CallInfo; save=false)
+function innerparse(firstA, ijk, store::NamedTuple, call::CallInfo; save=false)
     isnothing(ijk) && return []
 
-    ijk = map(tensorprimetidy, ijk) # necc? only for primes?
+    ijk = map(tensorprimetidy, ijk) # only for primes
 
     innerflat = []
     for (d,i) in enumerate(ijk)
@@ -880,11 +907,11 @@ function innerparse(A, ijk, store::NamedTuple, call::CallInfo; save=false)
             push!(innerflat, j)
             saveonesize(j, s, store) # save=true on LHS only for in-place, save this anyway
         elseif isconstant(i)
-            i == :_ && save && push!(store.mustassert, :(TensorCast.@assert_ size(first($A), $d)==1 "inner underscore") )
+            i == :_ && save && push!(store.mustassert, :(TensorCast.@assert_ size($firstA, $d)==1 "inner underscore") )
         else
             push!(innerflat, i)
         end
-        save && saveonesize(i, :(size(first($A), $d)), store)
+        save && saveonesize(i, :(size($firstA, $d)), store)
     end
 
     checknorepeats(innerflat, call)
@@ -900,13 +927,14 @@ function optionparse(opt, store::NamedTuple, call::CallInfo)
         return
     end
 
+
     if @capture(opt, i_:s_)
-        saveonesize(i, s, store)
+        saveonesize(tensorprimetidy(i), s, store)
         push!(call.flags, :assert)
     elseif opt in (:assert, :lazy, :nolazy, :cat, :strided)
         push!(call.flags, opt)
     elseif opt == :(!)
-        @warn "please replace option ! with assert"
+        @warn "please replace option ! with assert" call.string maxlog=1 _id=hash(call.string)
         push!(call.flags, :assert)
     else
         throw(MacroError("don't understand option $opt", call))
@@ -1048,7 +1076,7 @@ If `ex` is not just a symbol, then it pushes `:(Asym = ex)` into `store.main`
 and returns `Asym`.
 """
 maybepush(s::Symbol, any...) = s
-function maybepush(ex::Expr, store::NamedTuple, name::Symbol=:A)
+function maybepush(ex::Expr, store::NamedTuple, name::Symbol=:A) # TODO make this look for same?
     Asym = gensym(name)
     push!(store.main, :( local $Asym = $ex ) )
     return Asym

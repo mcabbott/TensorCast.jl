@@ -60,6 +60,16 @@
     @test 2M == D1 == D2
 
 end
+@testset "fields & sizes" begin
+
+    B = [ (scal=i, vect=[1,2,3,4]) for i=1:3 ]
+    @cast A[j,i] := B[i].vect[j]  i:3, j:4
+    @test A[4,1] == 4
+
+    @cast C[i] := B[i].scal
+    @test C == 1:3
+
+end
 @testset "int/bool indexing" begin
 
     ind = [1,2,1,2]
@@ -90,8 +100,13 @@ end
     C = 2 .* ones(3)
     D = rand(3)
 
-    @cast C[i] *= D
-    @test C == 2 .* D
+    @cast C[i] *= D[i] + 1
+    @test C == 2 .* (D .+ 1)
+
+    M = ones(3,3)
+
+    @cast M[i,i] -= D[i] + 5
+    @test diag(M) == 1 .- (D .+ 5)
 
 end
 @testset "fixing inner indices" begin
@@ -188,7 +203,7 @@ end
     @test Z == @. W * exp(X[1,1] - X[2,2]')
 
 end
-@testset "some errors" begin
+@testset "parse-time errors" begin
 
     using TensorCast: MacroError, _macro, CallInfo
 
@@ -198,5 +213,17 @@ end
 
     @test_throws MacroError _macro(:(  A[i,j] := B[k]  )) # "can't find index k on the left"
     @test_throws MacroError _macro(:(  A[i] := sum(k)  ),:(  (B[j]+ C[j])[i]  ), call=CallInfo(:reduce))
+
+end
+@testset "run-time errors" begin
+
+    B = [ (scal=i, vect=[1,2,3,4]) for i=1:3 ]
+    @test_throws DimensionMismatch @cast A[j,i] := B[i].vect[j]  i:99, j:4 # wrong size
+    @test_throws DimensionMismatch @cast A[j,i] := B[i].vect[j]  i:3, j:99
+
+    M = randn(3,4)
+    fun(x) = (sum=sum(x), same=x, one=1)
+    # @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:,j]).same[i]  i:99, j:4
+    # @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:,j]).same[i]  i:3, j:99
 
 end
