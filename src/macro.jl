@@ -612,9 +612,12 @@ end
 
 Walked over RHS to look for `@reduce ...`, and replace with result,
 pushing calculation steps into store.
+
+Also a convenient place to tidy all indices, including e.g. `fun(M[:,j],N[j]).same[i']`.
 """
 function recursemacro(ex, store::NamedTuple, call::CallInfo)
 
+    # Actually look for recursion
     if @capture(ex, @reduce(subex__) )
         subcall = CallInfo(call.mod, call.src,
             TensorCast.unparse("innder @reduce", subex...), Set([:reduce, :recurse]))
@@ -637,15 +640,28 @@ function recursemacro(ex, store::NamedTuple, call::CallInfo)
         ex = scalar ? :($name) :  :($name[$(ind...)])
     end
 
-    return ex
+    # Tidy up indices, A[i,j][k] will be hit on different rounds...
+    if @capture(ex, A_[ijk__])
+        return :( $A[$(tensorprimetidy(ijk)...)] )
+    elseif @capture(ex, A_{ijk__})
+        return :( $A{$(tensorprimetidy(ijk)...)} )
+    else
+        return ex
+    end
 end
 
 """
     rightsizes(A[i,j][k])
 
 This saves to `store` the sizes of all input tensors, and their sub-slices if any.
+* Deals with `A[i,j][k]` at once, before seeing `A[i,j]`, hence `prewalk` & destruction.
+* For `fun(x)[i,j]` it saves `sz_i` under name `Symbol(fun(x),"_val")` used later by standardise
+* But for `fun(M[:,j],N[j]).same[i]` it can't save `sz_i` as this isn't calculated yet,
+  however it should not destroy this so that `sz_j` can be got later.
 """
 function rightsizes(ex, store::NamedTuple, call::CallInfo)
+    :recurse in call.flags && return nothing # outer version took care of this
+
     if @capture(ex, A_[outer__][inner__] | A_[outer__]{inner__} )
         field = nothing
     elseif @capture(ex, A_[outer__].field_[inner__] | A_[outer__].field_{inner__} )
@@ -655,13 +671,13 @@ function rightsizes(ex, store::NamedTuple, call::CallInfo)
         return ex
     end
 
-    :recurse in call.flags && return nothing # outer version took care of this
-
+    # Special treatment for  fun(x)[i,j], goldilocks A not just symbol, but no indexing
     if A isa Symbol || @capture(A, AA_.ff_)
     elseif !containsindexing(A)
         A = Symbol(A,"_val") # the exact same symbol is used by standardiser
     end
 
+    # When we can save the sizes, then we destroy so as not to save again:
     if A isa Symbol || @capture(A, AA_.ff_) && !containsindexing(A)
         indexparse(A, outer, store, call; save=true)
         if field==nothing
@@ -669,11 +685,11 @@ function rightsizes(ex, store::NamedTuple, call::CallInfo)
         else
             innerparse(:(first($A).$field), inner, store, call; save=true)
         end
+        return nothing
     end
 
-    return nothing # destroy expression to ensure we don't match A[outer] alone later
-    # NO! change this -- for fun(M[:,j],N[j]).same[i] you must not save i, but can save j later
-end # TODO
+    return ex
+end
 
 #==================== Various Parsing Functions ====================#
 
@@ -773,7 +789,7 @@ function reduceparse(ex1, ex2, store::NamedTuple, call::CallInfo)
 
     # Then parse redlist, decoding ranges like sum(i:10,j) which specify sizes
     reduced = []
-    for item in tensorprimetidy.(redlist) # normalise θ'
+    for item in tensorprimetidy(redlist) # normalise θ'
         i = @capture(item, j_:s_) ? saveonesize(j, s, store) : item
         push!(reduced, i)
     end
@@ -814,7 +830,8 @@ Sizes are saved to `store` only with keyword `save=true`, i.e. only when called 
 function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
     flat, outsize, reversed, shuffled = [], [], [], []
 
-    ijk = map(tensorprimetidy, ijk) # un-wrap i⊗j to tuples, and normalise i' to i′
+    ijk = tensorprimetidy(ijk) # un-wrap i⊗j to tuples, and normalise i' to i′
+
     stripminustilde!(ijk, reversed, shuffled)
 
     for (d,i) in enumerate(ijk)
@@ -895,7 +912,7 @@ otherwise it ignores first arg.
 function innerparse(firstA, ijk, store::NamedTuple, call::CallInfo; save=false)
     isnothing(ijk) && return []
 
-    ijk = map(tensorprimetidy, ijk) # only for primes
+    ijk = tensorprimetidy(ijk) # only for primes really
 
     innerflat = []
     for (d,i) in enumerate(ijk)
@@ -926,7 +943,6 @@ function optionparse(opt, store::NamedTuple, call::CallInfo)
         [ optionparse(o, store, call) for o in opts ]
         return
     end
-
 
     if @capture(opt, i_:s_)
         saveonesize(tensorprimetidy(i), s, store)
@@ -1082,6 +1098,7 @@ function maybepush(ex::Expr, store::NamedTuple, name::Symbol=:A) # TODO make thi
     return Asym
 end
 
+tensorprimetidy(v::Vector) = tensorprimetidy.(v)
 function tensorprimetidy(ex)
     MacroTools.postwalk(ex) do x
 

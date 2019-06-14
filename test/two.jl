@@ -17,13 +17,13 @@
     @cast R2[j]{i:3} := M[i,j]   # size inside
     @cast R3[j]{i} := M[i,j] i:3 # size outside
     @cast R4[j] := M{:3,j}       # size on the colon
-    # @cast R5[j] := M{:,j}        # size from M
+    @cast R5[j] := M{:,j}        # size from M
 
     @test first(R1) isa SArray
     @test first(R2) isa SArray
     @test first(R3) isa SArray
     @test first(R4) isa SArray
-    # @test first(R5) isa SArray
+    @test first(R5) isa SArray
 
     γ = 3
     @cast R6[j]{i:γ} |= M[i,j] # test both |= and γ
@@ -191,8 +191,12 @@ end
 
     @cast C1[i,i',k] := (1:4)[i⊗i′⊗k] + im  (i:2, i′:2)  # two tensor signs
     @cast C2[i,i',k] := (1:4)[i⊗i'⊗k] + im  (i:2, i′:2)  # more primes
-    # @cast C3[i,i',k] := (1:4)[i⊗i'⊗k] + im  (i:2, i':2)
-    @test C1[1,2,1] == C2[1,2,1] == 3+1im
+    @cast C3[i,i',k] := (1:4)[i⊗i'⊗k] + im  (i:2, i':2)
+    @test C1[1,2,1] == C2[1,2,1] == C3[1,2,1] == 3+1im
+
+    @cast C4[i,i'⊗k] := (1:4)[i⊗i′⊗k] + im  (i:2, i':2)
+    @test size(C4) == (2,2)
+    @test C4[2,1] == 2+im
 
     ∇λ = ones(3); topd = rand(3); logind=3; λ=rand(3); d=2
     @cast ∇λ[c] = ∇λ[c] - λ[$d] * exp(topd[c]) / logind # all const
@@ -201,6 +205,17 @@ end
     W = rand(3); X = [rand(3) for _=1:3, _=1:2];
     @cast Z[i,j] := W[i] * exp(X[1,1][i] - X[2,2][j]) # all const
     @test Z == @. W * exp(X[1,1] - X[2,2]')
+
+    mat = rand(3,4)
+    outer(v::AbstractVector) = v * v'
+    @cast out[i⊗i',j] := outer(mat[:,j])[i,i′] i:3, i':3
+    @test size(out) == (9,4)
+
+    yy = rand(3,4)
+    t = 4
+    xx = zeros(9)
+    @cast xx[μ⊗ν] = yy[μ,$t] * yy[ν,$t]
+    @test xx ≈ vec(yy[:,4] * yy[:,4]')
 
 end
 @testset "parse-time errors" begin
@@ -224,6 +239,6 @@ end
     M = randn(3,4)
     fun(x) = (sum=sum(x), same=x, one=1)
     # @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:,j]).same[i]  i:99, j:4
-    # @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:,j]).same[i]  i:3, j:99
+    @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:,j]).same[i]  i:3, j:99
 
 end
