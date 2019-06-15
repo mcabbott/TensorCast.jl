@@ -75,15 +75,15 @@ Options can be specified at the end (if several, separated by `,` i.e. `options:
   and `lazy` will instead make a `VectorOfArrays` container.
 * `nolazy` disables `PermutedDimsArray` and `Reverse` in favour of `permutedims` and `reverse`,
   and `Diagonal` in favour of `diagm` for `Z[i,i]` output.
-
-These options only work if you load other packages:
 * `strided` will place `@strided` in front of broadcasting operations,
   and use `@strided permutedims(A, ...)` instead of `PermutedDimsArray(A, ...)`.
-  For this you need `using Strided`.
-* Static slices `D[j,k]{i}` need `using StaticArrays`, and to create them you should
-  give all slice dimensions explicitly. You may write `D[k]{i:2,j:2}` to specify
-  `Size(2,2)` slices. They are made most cleanly from the first indices of the input,
-  i.e. this `D` from `A[i,j,k]`.
+  For this you need `using Strided` to load that package.
+
+To create static slices `D[k]{i,j}` you should give all slice dimensions explicitly.
+You may write `D[k]{i:2,j:2}` to specify `Size(2,2)` slices.
+They are made most cleanly from the first indices of the input,
+i.e. this `D` from `A[i,j,k]`. The notation `A{:,:,k}` will only work in this order,
+and writing `A{:2,:2,k}` provides the sizes.
 """
 macro cast(exs...)
     call = CallInfo(__module__, __source__, TensorCast.unparse("@cast", exs...))

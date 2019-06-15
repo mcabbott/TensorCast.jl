@@ -1,8 +1,4 @@
 
-using .StaticArrays
-
-# import TensorCast: static_slice, static_glue # because Revise doesn't track these
-
 """
     static_slice(A, sizes)
     static_slice(A, code)
