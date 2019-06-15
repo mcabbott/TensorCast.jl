@@ -51,18 +51,21 @@ end
 
 pretty(tup::Tuple) = pretty(string(tup))
 
-pretty(vec::Vector) = pretty(join(something.(vec, "nothing"), ", "))
+pretty(vec::Vector) = pretty(join(something.(vec, "nothing"), ", ")) # for indices, [i,j,k]
+pretty(many...) = pretty(join(something.(many, "nothing"), ""))      # for unparse, no commas
 
 pretty(x) = string(x)
 
 function unparse(str::String, exs...)
-    @capture(exs[1], left_ = right_ ) && return string(str, " ", left, " = ", right, "  ", join(exs[2:end],"  "))
-    @capture(exs[1], left_ := right_ ) && return string(str, " ", left, " := ", right, "  ", join(exs[2:end],"  "))
-    @capture(exs[1], left_ |= right_ ) && return string(str, " ", left, " |= ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ = right_ ) && return pretty(str, " ", left, " = ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ := right_ ) && return pretty(str, " ", left, " := ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ |= right_ ) && return pretty(str, " ", left, " |= ", right, "  ", join(exs[2:end],"  "))
 
-    @capture(exs[1], left_ += right_ ) && return string(str, " ", left, " += ", right, "  ", join(exs[2:end],"  "))
-    @capture(exs[1], left_ -= right_ ) && return string(str, " ", left, " -= ", right, "  ", join(exs[2:end],"  "))
-    @capture(exs[1], left_ *= right_ ) && return string(str, " ", left, " *= ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ += right_ ) && return pretty(str, " ", left, " += ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ -= right_ ) && return pretty(str, " ", left, " -= ", right, "  ", join(exs[2:end],"  "))
+    @capture(exs[1], left_ *= right_ ) && return pretty(str, " ", left, " *= ", right, "  ", join(exs[2:end],"  "))
 
-    return string(exs)
+    @capture(exs[1], red_(ind__) ) && return pretty(str, " ", join(exs,"  "))
+
+    return pretty(exs)
 end

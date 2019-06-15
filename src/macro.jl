@@ -836,7 +836,13 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
 
     for (d,i) in enumerate(ijk)
 
-        iscolon(i) && continue
+        if iscolon(i)
+            if i isa QuoteNode
+                str = "fixed size in $A[" * join(ijk, ", ") * "]" # DimensionMismatch("fixed size in M[i, \$(QuoteNode(5))]: size(M, 2) == 5") TODO print more nicely
+                push!(store.mustassert, :( TensorCast.@assert_ size($A,$d)==$(i.value) $str) )
+            end
+            continue
+        end
 
         if isconstant(i)
             push!(outsize, 1)
@@ -1387,14 +1393,21 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
 
     # We can re-use exactly the same "standardise" function as for RHS terms:
     pop!(call.flags, :nolazy, :ok) # ensure we use diagview(), Reverse{}, etc, not a copy
-    newleft = standardise(parsed.left, store, call)
-    @capture(newleft, zed_[ijk__]) || error("something went wrong! $(parsed.left) -> $newleft")
 
-    if !(zed isa Symbol) # then standardise did something!
-        push!(call.flags, :showfinal)
-        Zsym = gensym(:reverse)
-        push!(out, :( local $Zsym = $zed ) )
-        zed = Zsym
+    if @capture(parsed.left, zed_[]) # special case Z[] = ... else allconst pulls it out
+        zed isa Symbol || @capture(zed, ZZ_.field_) || error("wtf")
+        str = "expected a 0-tensor $zed[]"
+        push!(store.mustassert, :( TensorCast.@assert_ ndims($zed)==0 $str) )
+    else
+        newleft = standardise(parsed.left, store, call)
+        @capture(newleft, zed_[ijk__]) || throw(MacroError("failed to parse LHS correctly, $(parsed.left) -> $newleft"))
+
+        if !(zed isa Symbol) # then standardise did something!
+            push!(call.flags, :showfinal)
+            Zsym = gensym(:reverse)
+            push!(out, :( local $Zsym = $zed ) )
+            zed = Zsym
+        end
     end
 
     # Now write into that, either sum!(Z,...) or mul!(Z,A,B) or Z .= ..., no copyto!(Z,...)

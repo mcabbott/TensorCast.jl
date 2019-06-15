@@ -29,7 +29,7 @@
     @cast R6[j]{i:γ} |= M[i,j] # test both |= and γ
     @cast R7[j] |= M{:γ,j} assert
 
-    # @test R5 isa Base.ReinterpretArray
+    @test R5 isa Base.ReinterpretArray
     @test R6 isa Array
     @test R7 isa Array
 
@@ -144,6 +144,10 @@ end
     V = rand(4)
     @cast TV[i] := V[i] + T[]
     @test TV == V .+ S
+
+    U =  similar(T)
+    @reduce U[] = sum(i,j) B[j,i]/2 # inplace
+    @test U[] == sum(B)/2
 
 end
 @testset "tupple broadcasting" begin
