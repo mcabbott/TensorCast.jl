@@ -8,18 +8,9 @@ struct CallInfo
     src::LineNumberNode
     string::String
     flags::Set{Symbol}
-    CallInfo(mod::Module=Main, src=LineNumberNode(0), str::String="", flags=Set{Symbol}()) =
-        new(mod, src, str, flags)
-    CallInfo(syms::Vararg{Symbol}) = new(Main, LineNumberNode(0), "", Set([syms...])) # for testing
+    CallInfo(mod::Module, src, str, flags=Set{Symbol}()) = new(mod, src, str, flags)
+    CallInfo(syms::Symbol...) = new(Main, LineNumberNode(0), "", Set([syms...]))
 end
-
-# @with_kw struct CallInfo
-#     mod::Module = Main
-#     src::LineNumberNode = LineNumberNode(0)
-#     string::String = ""
-#     flags::Set{Symbol} = Set{Symbol}()
-#     CallInfo(mod, src, str, flags=Set{Symbol}()) = new(mod, src, str, flags)
-# end
 
 """
     @cast Z[i,j,...] := f(A[i,j,...], B[j,k,...])  options
@@ -283,10 +274,8 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
         else
             sizeorcode = maybestaticsizes(ijk, code)
             A = :( TensorCast.static_slice($A, $sizeorcode) )
-            maybestaticmarker(store, call)
         end
         ijk = filter(!iscolon, ijk)
-        # LHS && error("can't slice LHS indices with :")
     elseif static
         error("shouldn't use curly brackets here")
     end
@@ -394,8 +383,6 @@ function standardglue(ex, target, store::NamedTuple, call::CallInfo)
     if needcast
         outer = unique(reduce(vcat, listindices(A)))
         outer = sort(outer, by = i -> findcheck(i, target, call)) # , " in target list"
-        # checknorepeats(vcat(inner, outer), call, " in gluing " * string(:([$(outer...)])) * string(:([$(inner...)])))
-
         Bex = targetcast(A, outer, store, call)
         B = maybepush(Bex, store, :innercast)
     end
@@ -416,7 +403,7 @@ function standardglue(ex, target, store::NamedTuple, call::CallInfo)
         else
             ex = :( $Bsym = @__dot__ TensorCast.rview($B, $(ijcolon...)) )
         end
-        push!(store.main, ex) # why am I doing this after broadcast?? it's needed before
+        push!(store.main, ex)
         B = Bsym
         inner = filter(!isconstant, inner)
     end
@@ -432,7 +419,6 @@ function standardglue(ex, target, store::NamedTuple, call::CallInfo)
 
     if static
         AB = :( TensorCast.static_glue($B) )
-        maybestaticmarker(store, call)
         pop!(call.flags, :collected, :ok)
     elseif :glue in call.flags
         # allow maximum freedom? TODO
@@ -527,8 +513,6 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
     @capture(ex, A_[ijk__]) || return ex
 
     dims = Int[ findcheck(i, target, call, " on the left") for i in ijk ]
-    # flat, _ = indexparse(A, ijk, store, call) # fixing a bug that wasn't actually here
-    # dims = Int[ findcheck(i, target, call, " on the left") for i in flat ]
 
     # Do we need permutedims, or equvalent?
     perm = sortperm(dims)
@@ -1081,18 +1065,6 @@ function maybestaticsizes(ijk::Vector, code::Tuple, store::NamedTuple)
 end
 
 """
-    maybestaticmarker
-The first time you call this, it adds `StaticArrays` to the list of steps,
-just to produce `UndefVarError` if this package is not loaded.
-"""
-function maybestaticmarker(store, call)
-    if !(:staticmarker in call.flags)
-        push!(store.main, :(StaticArrays) )
-        push!(call.flags, :staticmarker)
-    end
-end
-
-"""
     A = maybepush(ex, store, :name)
 If `ex` is not just a symbol, then it pushes `:(Asym = ex)` into `store.main`
 and returns `Asym`.
@@ -1104,7 +1076,7 @@ function maybepush(ex::Expr, store::NamedTuple, name::Symbol=:A) # TODO make thi
     return Asym
 end
 
-tensorprimetidy(v::Vector) = tensorprimetidy.(v)
+tensorprimetidy(v::Vector) = Any[ tensorprimetidy(x) for x in v ]
 function tensorprimetidy(ex)
     MacroTools.postwalk(ex) do x
 
@@ -1276,8 +1248,6 @@ struct MacroError <: Exception
     MacroError(msg, call=nothing) = new(msg, call)
 end
 
-# Base.throw(::Type{MacroError}, msg::String, call::CallInfo) = throw(MacroError(msg, call)) # no can do
-
 wherecalled(call::CallInfo) = "@ " * string(call.mod) * " " * string(call.src.file) * ":" * string(call.src.line)
 
 function Base.showerror(io::IO, err::MacroError)
@@ -1337,7 +1307,6 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         if parsed.static
             sizeorcode = maybestaticsizes(canon, code, store)
             ex = :( TensorCast.static_slice($ex, $sizeorcode) )
-            maybestaticmarker(store, call)
         elseif :collect in call.flags
             ex = :( TensorCast.slicecopy($ex, $code) )
             push!(call.flags, :collected)
