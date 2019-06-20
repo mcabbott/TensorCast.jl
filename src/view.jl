@@ -1,6 +1,6 @@
 
 """
-    diagview(M) = view(A, diagind(A))
+    diagview(M) = view(M, diagind(M))
 
 Like `diag(M)` but makes a view.
 """
@@ -58,7 +58,7 @@ A = rand(10,100); B = rand(100,100); C = rand(100,10);
 # performance: avoid that if you can just extract A.parent. TODO make @generated perhaps?
 const LazyRowVec = Union{
     LinearAlgebra.Transpose{<:Any,<:AbstractVector},
-    LinearAlgebra.Adjoint{<:Real,<:AbstractVector} }
+    LinearAlgebra.Adjoint{<:Real,<:AbstractVector} } # NB only Adjoint{Real}
 orient(A::LazyRowVec, ::Tuple{typeof(*),Colon,Colon}) = orient(A.parent, (*,*,:))
 orient(A::LazyRowVec, ::Tuple{Colon,typeof(*),Colon}) = orient(A.parent, (*,*,:))
 orient(A::LazyRowVec, ::Tuple{typeof(*),typeof(*),Colon,Colon}) = orient(A.parent, (*,*,*,:))
@@ -118,6 +118,17 @@ rvec(x::Number) = [x]
 rvec(A) = LinearAlgebra.vec(A)
 
 """
+    zeroarray(x)
+
+Like `[x]` but with one less dimension.
+"""
+function zeroarray(x::T) where T
+    out = Array{T,0}(undef)
+    out[] = x
+    out
+end
+
+"""
     apply(f,x...) = f(x...)
 
 For broadcasting a list of functions.
@@ -151,15 +162,25 @@ struct Reverse{D} end
 
 """
     Reverse{d}(A)
-Lazy version of `reverse(A, dims=d)`.
+
+Lazy version of `reverse(A; dims=d)`. Also constructed by `Reverse(A; dims=d)`.
 """
 function Reverse{D}(A::AbstractArray{T,N}) where {D,T,N}
+    if D isa Tuple
+        length(D)==0 && return A
+        return Reverse{Base.tail(D)}(Reverse{first(D)}(A))
+    end
     1 ≤ D ≤ N || throw(ArgumentError("dimension $D is not 1 ≤ $D ≤ $N"))
     tup = ntuple(i -> i==D ? reverse(axes(A,D)) : Colon(), N)
     view(A, tup...)
 end
 
-Reverse(A::AbstractArray; dims=ndims(A)) = Reverse{dims}(A)
+Reverse(A::AbstractArray; dims=ndims(A)) = _Reverse(A, dims...)
+
+_Reverse(A::AbstractArray) = A
+_Reverse(A::AbstractArray, d::Int, dims::Int...) = _Reverse(Reverse{d}(A), dims...)
+
+Reverse!(A::AbstractArray; dims=ndims(A)) = A .= _Reverse(A, dims...)
 
 # The reverse() function in Base is twice as quick as copying this view,
 # somewhere I had a real type in order to exploit this?
@@ -170,13 +191,56 @@ struct Shuffle{D} end
 
 """
     Shuffle{d}(A)
+
 For a vector this is a lazy version of `shuffle(A)`,
 for a tensor this shuffles along one axis only.
 """
 function Shuffle{D}(A::AbstractArray{T,N}) where {D,T,N}
+    D isa Tuple && return _Shuffle(A, D)
     1 ≤ D ≤ N || throw(ArgumentError("dimension $D is not 1 ≤ $D ≤ $N"))
     tup = ntuple(i -> i==D ? shuffle(axes(A,D)) : Colon(), N)
     view(A, tup...)
 end
 
-Shuffle(A::AbstractArray; dims=ndims(A)) = Shuffle{dims}(A)
+Shuffle(A::AbstractArray; dims=ndims(A)) = _Shuffle(A, Tuple(dims))
+
+_Shuffle(A::AbstractArray, dims::Tuple{}) = A
+_Shuffle(A::AbstractArray, dims::Tuple) = _Shuffle(Shuffle{first(dims)}(A), Base.tail(dims))
+
+Shuffle!(A::AbstractArray; dims=ndims(A)) = A .= _Shuffle(A, dims)
+
+# _Shuffle & _Reverse are varying attempts, none seem make constant propagation work
+
+struct Circshift{D,S} end
+
+"""
+    Circshift{d,s}(A)
+
+Lazy version of `circshift(A, (0,0,0,s,0,0))` in the `d`-th dimension.
+"""
+function Circshift{D,S}(A::AbstractArray{T,N}) where {D,S, T,N}
+    1 ≤ D ≤ N || throw(ArgumentError("dimension $D is not 1 ≤ $D ≤ $N"))
+    tup = ntuple(i -> i==D ? circshift(axes(A,D), S) : Colon(), N)
+    view(A, tup...)
+end
+
+Circshift(A::AbstractArray, s::Int; dims::Int=ndims(A)) = Circshift{dims,s}(A)
+
+# A real type with shift baked into getindex might be better?
+
+struct Clip{D,A,Z} end
+
+"""
+    Clip{d,α,ω}(A)
+Shortens the range of the `d`-th index at start & end; `Clip{d,0,0}(A)` does nothing.
+"""
+function Clip{D,a,z}(A::AbstractArray{T,N}) where {D,a,z, T,N}
+    1 ≤ D ≤ N || throw(ArgumentError("dimension $D is not 1 ≤ $D ≤ $N"))
+    tup = ntuple(i -> i==D ? axes(A,D)[1+a,end-z] : Colon(), N)
+    view(A, tup...)
+end
+
+Clip(A::AbstractArray, a::Int=0, z::Int=0; dims::Int=ndims(A)) = Circshift{dims,a,z}(A)
+
+# @cast A[i] := A[i+1] - A[i]/B[i-1]  clip   # global, should I re-write somehow?
+# @cast A[i] := A[i+1] - A[i]  cyclic        # easy, per-term

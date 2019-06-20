@@ -43,7 +43,7 @@ end
 
     D = similar(A);
     @matmul D[i,j] = sum(k,k2) bbb[i,k,k2] * bbb2[j,k,k2] # in-place
-    @test A == D
+    @test A ≈ D
 
     @matmul A[i,j] := sum(k,k2) bbb[k2,i,k] * bbb2[j,k,k2]
     @reduce B[i,j] := sum(k,k2) bbb[k2,i,k] * bbb2[j,k,k2]
@@ -52,7 +52,7 @@ end
 
     D = similar(A);
     @matmul D[i,j] = sum(k,k2) bbb[k2,i,k] * bbb2[j,k,k2] # in-place
-    @test A == D
+    @test A ≈ D
 
 
     cccc = rand(3,3,3,3);
@@ -73,7 +73,7 @@ end
     @einsum C[i,j,k,l] := cccc[i,x,y,k] * cccc2[l,j,y,x]
     @test A ≈ B ≈ C
 
-    # D = similar(A);
+    # D = similar(A); # MethodError: no method matching mul!(::Array{Float64,4}, ::Base.ReshapedArray{Float64,2,PermutedDimsArray
     # @matmul D[i,j,k,l] = sum(x,y) cccc[i,x,y,k] * cccc2[l,j,y,x]   # in-place
     # @test A ≈ D
 
@@ -83,7 +83,7 @@ end
     @einsum C[i,j,k,l,m,n] := cccc[x,k,i,m] * cccc2[l,x,j,n]
     @test A ≈ B  ≈ C
 
-    # D = similar(A);
+    # D = similar(A); # MethodError: no method matching mul!(::Array{Float64,6}, ::Base.ReshapedArray{Float64,2,PermutedDimsArray
     # @matmul D[i,j,k,l,m,n] = sum(x) cccc[x,k,i,m] * cccc2[l,x,j,n]  # in-place
     # @test A ≈ D
 
@@ -94,47 +94,47 @@ end
     @einsum C[j,i,l,k,n,m] := cccc[x,k,i,m] * cccc2[l,x,j,n]
     @test A ≈ B  ≈ C
 
-    # D = similar(A);
-    # @matmul    D[j,i,l,k,n,m] = cccc[x,k,i,m] * cccc2[l,x,j,n]  # in-place
+    # D = similar(A); # MethodError: no method matching mul!(::Array{Float64,6}, ::Base.ReshapedArray{Float64,2,PermutedDimsArray{
+    # @matmul D[j,i,l,k,n,m] = sum(x) cccc[x,k,i,m] * cccc2[l,x,j,n]  # in-place
     # @test A ≈ D
 
-#=
+
     ## Mason Potter's example:
     # W = rand(2,2,2,2); M = rand(2,2,2);
     W = rand(6,7,4,5); M = rand(7,2,3);
 
-    @reduce N[σ, b\a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]
-    @matmul N2[σ, b\a, b′\a′] := W[σ,σ′,b,b′] * M[σ′,a,a′]
+    @reduce N[σ, b\a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
+    @matmul N2[σ, b\a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
     @test N ≈ N2
 
-    @reduce R[σ, b,a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  lazy
-    @matmul R2[σ, b,a, b′\a′] := W[σ,σ′,b,b′] * M[σ′,a,a′]
+    @reduce R[σ, b,a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  lazy;
+    @matmul R2[σ, b,a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
     @test R ≈ R2
     # invperm((4,2,1,3)) == (3, 2, 4, 1)
 
-    @reduce S[σ, b,a, b′,a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]
-    @matmul S2[σ, b,a, b′,a′] := W[σ,σ′,b,b′] * M[σ′,a,a′]
+    @reduce S[σ, b,a, b′,a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
+    @matmul S2[σ, b,a, b′,a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
     @test S ≈ S2
     # invperm((4,2,1,3,5)) == (3, 2, 4, 1, 5)
 
-    ## in-place version
-    N3 = similar(N); N4 = similar(N);
-    @reduce N3[σ, b\a, b′\a′] = sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  lazy
-    @matmul N4[σ, b\a, b′\a′] = W[σ,σ′,b,b′] * M[σ′,a,a′]
-    @test N ≈ N3 ≈ N4
+    # ## in-place version
+    # N3 = similar(N); N4 = similar(N);
+    # @reduce N3[σ, b\a, b′\a′] = sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  lazy;
+    # @matmul N4[σ, b\a, b′\a′] = sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
+    # @test N ≈ N3 ≈ N4
 
 
     ## these were OK:
     M = rand(3,3,3);
 
     @reduce Q[σ, b\a, a′] := sum(σ′) M[σ,σ′,b] * M[σ′,a,a′];
-    @matmul Q2[σ, b\a, a′] := M[σ,σ′,b] * M[σ′,a,a′];
+    @matmul Q2[σ, b\a, a′] := sum(σ′) M[σ,σ′,b] * M[σ′,a,a′];
     @test Q ≈ Q2
 
     @reduce Q3[σ, b,a, a′] := sum(σ′) M[σ,σ′,b] * M[σ′,a,a′];
     @matmul    Q4[σ, b,a, a′] := sum(σ′) M[σ,σ′,b] * M[σ′,a,a′];
     @test Q3 ≈ Q4
-=#
+
 end
 @testset "in & out shapes" begin
 

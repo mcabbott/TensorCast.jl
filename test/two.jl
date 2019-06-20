@@ -261,7 +261,8 @@ end
 
     M = randn(3,4)
     fun(x) = (sum=sum(x), same=x, one=1)
-    # @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:,j]).same[i]  i:99, j:4
     @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:,j]).same[i]  i:3, j:99
+    @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:99,j]).same[i]  j:4
+    # @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:,j]).same[i]  i:99, j:4 # TODO make this check canonical length?
 
 end

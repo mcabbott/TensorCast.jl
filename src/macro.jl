@@ -121,7 +121,8 @@ The intermediate array need not have a name, like `[i]`,
 unless writing into an existing array, like `S[i]` here.
 """
 macro reduce(exs...)
-    call = CallInfo(__module__, __source__, TensorCast.unparse("@reduce", exs...), Set([:reduce]))
+    call = CallInfo(__module__, __source__, TensorCast.unparse("@reduce", exs...),
+        Set([:reduce]))
     _macro(exs...; call=call)
 end
 
@@ -154,12 +155,14 @@ You should be able to use this within the other macros,
 eventually without specifying intermediate arrays by hand.
 """
 macro matmul(exs...)
-    call = CallInfo(__module__, __source__, TensorCast.unparse("@matmul", exs...), Set([:matmul]))
+    call = CallInfo(__module__, __source__, TensorCast.unparse("@matmul", exs...),
+        Set([:matmul, :nolazy]))
     _macro(exs...; call=call)
 end
 
 macro mul(exs...)
-    call = CallInfo(__module__, __source__, TensorCast.unparse("@matmul", exs...), Set([:matmul]))
+    call = CallInfo(__module__, __source__, TensorCast.unparse("@matmul", exs...),
+        Set([:matmul, :nolazy]))
     @warn "please replace @mul with @matmul, and ensure that it has explicit sum()" call.string maxlog=1 _id=hash(exs)
     _macro(exs...; call=call)
 end
@@ -560,11 +563,11 @@ function matmultarget(ex, target, parsed, store::NamedTuple, call::CallInfo)
     iB = guesstarget(B)
 
     isum = sort(intersect(iA, iB, parsed.reduced),
-        by = i -> findfirst(isequal(i), parsed.reduced))
+        by = i -> findfirst(isequal(i), target)) # or target? parsed.reduced
     iAnosum = setdiff(iA, isum)
     iBnosum = setdiff(iB, isum)
 
-    Aex = targetcast(A, vcat(iAnosum, isum), store, call)
+    Aex = targetcast(A, vcat(iAnosum, isum), store, call) # TODO this adds lazy permutedims
     Bex = targetcast(B, vcat(isum, iBnosum), store, call)
 
     Aex = matrixshape(Aex, iAnosum, isum, store, call)
@@ -1112,7 +1115,7 @@ isindexing(ex::Expr) = @capture(x, A_[ijk__])
 
 isCorI(i) = isconstant(i) || isindexing(ii)
 
-isrange(ex::Expr) = @capture(ex, alpha_:omega_)
+isrange(ex::Expr) = @capture(ex, alpha_:omega_) # this may be a terrible idea
 isrange(i) = false
 
 isCorR(i) = isconstant(i) || isrange(i) # ranges are treated a bit like constants!
@@ -1208,30 +1211,54 @@ end
     matrixshape(A, [i,j], []) -> reshape(A, sz_i * sz_j)    # something * vector
 """
 function matrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call::CallInfo)
+    # Deal with simple matrix, and with empty right of V in M*V
     length(left) == 1 && length(right) <= 1 && return ex
-    length(left) == 0 && length(right) == 1 && return :( TensorCast.PermuteDims($ex) )
-
+    # and empty right because it's M * vec(T)
     isempty(right) && return :( reshape($ex, :) )
-    right_sz = szwrap(right)
 
-    left_sz = length(left)==0 ? 1 : szwrap(left)
+    # Deal with empty left of V in V'*M, or perhaps V=vec(T) first
+    if isempty(left)
+        if length(right) == 1
+            return :( TensorCast.PermuteDims($ex) )
+        else
+            return :( TensorCast.PermuteDims(reshape($ex, :)) )
+        end
+    end
 
+    # Otherwise we are going to need to reshape
+    left_sz = szwrap(left)
+    right_sz = szwrap(right) # this is the product!
     append!(store.need, left)
     append!(store.need, right)
-
     return :( reshape($ex, ($left_sz,$right_sz)) )
 end
 
 function unmatrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call::CallInfo)
-    length(left) == 1 && length(right) == 1 && return ex
-    # length(left) == 1 && length(right) == 0 && return :( $ex.parent ) # maybe!
+    # Easy cases M*M and M*V
+    length(left) == 1 && length(right) <= 1 && return ex
 
-    sizes = :( ($(vcat(szwrap.(left), szwrap.(right))...),) )
+    # For V' * V, did we want a scalar or not? What we will get is unknown to the macro:
+    if length(left) == 0 && length(right) == 0
+        if :scalar in call.flags
+            return :( first($ex) )
+            # If you had arrays of arrays, then PermuteDims would have permutedims-ed, and * would make an array, so this is still OK.
+        else
+            return :( TensorCast.zeroarray($ex) ) # or rvec good enough?
+        end
+    end
 
+    # For V'*M, you may get a Transpose row-vector, for which this is .parent:
+    if length(left) == 0
+        ex = :( TensorCast.rview($ex, 1,:) )
+        length(right) == 1 && return ex # literally V'*M done,
+        # but for V'*T we should reshape this .parent
+    end
+
+    # For anything more complicated, we will need to reshape:
+    sizes = vcat(map(szwrap, left), map(szwrap, right))
     append!(store.need, left)
     append!(store.need, right)
-
-    return :( reshape($ex, $sizes) )
+    return :( reshape($ex, ($(sizes...),)) )
 end
 
 #==================== Nice Errors ====================#
@@ -1395,7 +1422,7 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         push!(out, :( $redfun!($zed, $ex) ) )
     elseif :matmul in call.flags
         ex isa Tuple || error("wtf?")
-        push!(out, :( $mul!($zed, $(ex[1]), $(ex[2])) ) )
+        push!(out, :( TensorCast.mul!($zed, $(ex[1]), $(ex[2])) ) )
     else
         push!(out, :( $zed .= $ex ) )
     end
