@@ -6,7 +6,7 @@
 	@reduce C[c] := sum(b) bc[b,c]
 	@test C == vec(sum(bc, dims=1))
 
-	@reduce B[b] := prod(c:3) bc[b,c] !
+	@reduce B[b] := prod(c:3) bc[b,c] assert
 	@test B == vec(prod(bc, dims=2))
 
 	using Statistics

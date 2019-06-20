@@ -88,11 +88,20 @@ end
     @cast B2[i,j] := M[i,bool[j]]
     @test B1 == B2
 
+end
+@testset "indexing with a range" begin
+
+    M = rand(1:99, 3,4)
+
     # ranges are treated first like constants, then like colons:
     @cast C1[i,j] := identity(M[i, 1:2])[j]
     R1 = 1:2
     @cast C2[i,j] := M[i, R1[j]] # explicit inner indexing
     @test C1 == C2 == M[:, 1:2]
+
+    β = 2
+    @cast C3[i,j] := identity(M[i, 1:β])[j]
+    @test C3 == C1
 
 end
 @testset "in-place += and *=" begin

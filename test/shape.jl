@@ -41,7 +41,7 @@ end
     oo[1] = 99
     @test bcde[1] != 99 # copy not a view
 
-    @cast oo[d,e,b,c] = bcde[b,c,d,e] ! ;
+    @cast oo[d,e,b,c] = bcde[b,c,d,e]  assert;
     oo[1] = 99
     @test bcde[1] != 99 # still not a view
 
@@ -61,7 +61,7 @@ end
     bcd = rand(2,3,4);
     bcde = rand(2,3,4,5);
 
-    @cast Bcd[b][c,d] |= bcd[b,c,d] !
+    @cast Bcd[b][c,d] |= bcd[b,c,d]  assert
     @test size(Bcd) == (2,)
     @test size(first(Bcd)) == (3,4)
     @test Bcd[2][3,1] == bcd[2,3,1]
@@ -69,17 +69,17 @@ end
     Bcd[2][3,1] = 99
     @test bcd[2,3,1] != 99 # copy not a view
 
-    @cast Cbd[c][b,d] := bcd[b,c,d] !
+    @cast Cbd[c][b,d] := bcd[b,c,d]  assert
     @test size(Cbd) == (3,)
     @test size(first(Cbd)) == (2,4)
     @test Cbd[3][2,1] == bcd[2,3,1]
 
-    @cast BCde[b,c][d,e] := bcde[b,c,d,e] !
+    @cast BCde[b,c][d,e] := bcde[b,c,d,e]  assert
     @test size(BCde) == (2,3)
     # @test size(first(BCde)) == (4,5)
     @test size(BCde[1,1]) == (4,5) # new julienne
 
-    @cast DBec[d,b][e,c] := bcde[b,c,d,e] !
+    @cast DBec[d,b][e,c] := bcde[b,c,d,e]  assert
     @test size(DBec) == (4,2)
     # @test size(first(DBec)) == (5,3)
     @test size(DBec[1,1]) == (5,3) # new julienne
@@ -97,7 +97,7 @@ end
 
     M = rand(Int, 2,3)
     S1 = reinterpret(SVector{2,Int}, vec(M)) # as in readme
-    @cast S2[k]{i} == M[i,k]  i:2
+    @cast S2[k]{i} := M[i,k]  i:2
     M[end]=42
     @test S1[3][2]==42 # is a view
     @test S2[3][2]==42
@@ -118,13 +118,13 @@ end
     @test size(first(DBec)) == (5,3)
     @test first(DBec) isa StaticArray
 
-    @cast DEbc[d,e]{b,c} == bcde[b,c,d,e] b:2, c:3
+    @cast DEbc[d,e]{b,c} := bcde[b,c,d,e] b:2, c:3
     @test size(DEbc) == (4,5)
     @test size(first(DEbc)) == (2,3)
     @test first(DEbc) isa StaticArray
 
     A = rand(3,3,4)
-    @cast B[k]{i,j} == A[i,j,k]  i:3, j:3
+    @cast B[k]{i,j} := A[i,j,k]  i:3, j:3
     @cast C[(j,k),i] := B[k][i,j]
     @test C[1,2] == B[1][2,1] ==  A[2,1,1]
 
@@ -134,7 +134,7 @@ end
     bcd = rand(2,3,4)
     Bcd = [ rand(3,4) for b=1:2 ]
 
-    @cast bcd[b,c,d] = Bcd[b][c,d] !
+    @cast bcd[b,c,d] = Bcd[b][c,d]  assert
     @test size(bcd) == (2,3,4)
     @test Bcd[2][3,1] == bcd[2,3,1]
 
@@ -151,7 +151,7 @@ end
 
     BCde = [ rand(4,5) for d=1:2, e=1:3 ]
 
-    @cast bcde[b,c,d,e] = BCde[b,c][d,e] ! ;
+    @cast bcde[b,c,d,e] = BCde[b,c][d,e]  assert;
     @test size(bcde) == (2,3,4,5)
 
 end
@@ -217,8 +217,8 @@ end
     @test size(bc) == (2,3)
     @test bc[1,2] == Bc[1][2]
 
-    @cast f[(c,b)] = Bc[b][c] ! # in-place
-    @cast bc[b,c] = f[(c,b)] !  # in-place
+    @cast f[(c,b)] = Bc[b][c]  assert  # in-place
+    @cast bc[b,c] = f[(c,b)]   assert  # in-place
     @test bc[1,2] == Bc[1][2]
 
     Cdaeb = [rand(4,1,5,2) for i=1:3]; # sizes match abcde now
@@ -282,7 +282,7 @@ end
 
     @cast A[i,j,k] = B[i,(j,k)] i:1
 
-    @cast V[(i,j,k)] := B[i,(k,j)]  k:3, ! # was an error for recursive colon reasons
+    @cast V[(i,j,k)] := B[i,(k,j)]  k:3, assert # was an error for recursive colon reasons
 
 
     A = @cast [jk,i] := B[i,jk] # without left-hand name
@@ -337,7 +337,7 @@ end
 
     ## runtime
 
-    @test_throws DimensionMismatch @cast oo[i,j] := bc[i,j] i:3,!
-    @test_throws DimensionMismatch @cast cb[i,j] = bc[i,j] !
+    @test_throws DimensionMismatch @cast oo[i,j] := bc[i,j] i:3, assert
+    @test_throws DimensionMismatch @cast cb[i,j] = bc[i,j]  assert
 
 end
