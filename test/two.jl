@@ -88,6 +88,12 @@ end
     @cast B2[i,j] := M[i,bool[j]]
     @test B1 == B2
 
+    # ranges are treated first like constants, then like colons:
+    @cast C1[i,j] := identity(M[i, 1:2])[j]
+    R1 = 1:2
+    @cast C2[i,j] := M[i, R1[j]] # explicit inner indexing
+    @test C1 == C2 == M[:, 1:2]
+
 end
 @testset "in-place += and *=" begin
 
@@ -220,6 +226,10 @@ end
     xx = zeros(9)
     @cast xx[μ⊗ν] = yy[μ,$t] * yy[ν,$t]
     @test xx ≈ vec(yy[:,4] * yy[:,4]')
+
+    A = [collect((1:4) .+ 10i) for i=1:5]
+    @cast B[i,j] := getindex(A[i], (2:3)[j])
+    @test B == getindex.(A, (2:3)')
 
 end
 @testset "parse-time errors" begin

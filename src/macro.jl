@@ -160,7 +160,7 @@ end
 
 macro mul(exs...)
     call = CallInfo(__module__, __source__, TensorCast.unparse("@matmul", exs...), Set([:matmul]))
-    @warn "Please replace @mul with @matmul, and ensure that it has explicit sum()" call.string maxlog=1 _id=hash(exs)
+    @warn "please replace @mul with @matmul, and ensure that it has explicit sum()" call.string maxlog=1 _id=hash(exs)
     _macro(exs...; call=call)
 end
 
@@ -249,22 +249,23 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
         A = Asym
     end
 
-    # Constant indices A[i,3], A[i,_], A[i,$c]
-    if all(isconstant, ijk)
+    # Constant indices A[i,3], A[i,_], A[i,$c], and also A[i,3:5]
+    if all(isCorR, ijk)
         needview!(ijk)                                         # replace _ with 1, if any
         Asym = maybepush(:( $A[$(ijk...)] ), store, :allconst) # protect from later processing
         return Asym                                            # and nothing more to do here
-    elseif any(isconstant, ijk)
-        ijcolon = map(i -> isconstant(i) ? i : (:), ijk)
+    elseif any(isCorR, ijk)
+        ijcolon = map(i -> isCorR(i) ? i : (:), ijk)
         if needview!(ijcolon)
             A = :( view($A, $(ijcolon...)) ) # TODO nolazy?
         else
             A = :( TensorCast.rview($A, $(ijcolon...)) )
         end
-        ijk = filter(!isconstant, ijk)
+        ijk = filter(!isconstant, ijk)              # remove actual constants from list,
+        ijk = map(i -> isrange(i) ? :(:) : i, ijk)  # but for A[i,3:5] replace with : symbol, for slicing
     end
 
-    # Slicing operations A[i,:,j]
+    # Slicing operations A[i,:,j], and A[i,3:5] after the above treatment
     if any(iscolon, ijk)
         code = Tuple(map(i -> iscolon(i) ? (:) : (*), ijk))
         if !static && (:collect in call.flags)
@@ -487,11 +488,10 @@ This is walked over the expression to prepare for `@__dot__` etc, by `targetcast
 function readycast(ex, target, store::NamedTuple, call::CallInfo)
 
     # Scalar functions can be protected entirely from broadcasting:
+    # TODO this means A[i,j] + rand()/10 doesn't work, /(...,10) is a function!
     if @capture(ex, fun_(arg__) | fun_(arg__).field_ ) && !containsindexing(fun) &&
             length(arg)>0 && !any(containsindexing, arg) # pull out log(2) but not randn()
-        fsymb = gensym(:scalarfun)
-        push!(store.main, :(local $fsymb = $ex) )
-        return fsymb
+        return maybepush(ex, store, :scalarfun)
     end
 
     # Some things ought to apply elementwise: conjugation,
@@ -536,6 +536,7 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
         code = Tuple(Any[ d in dims ? (:) : (*) for d=1:maximum(dims) ])
         A = :( TensorCast.orient($A, $code) )
     end
+    # Those two steps are what might be replaced with TransmuteDims
 
     # Does A need protecting from @__dot__?
     A = maybepush(A, store, :nobroadcast)
@@ -820,7 +821,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
 
     for (d,i) in enumerate(ijk)
 
-        if iscolon(i)
+        if iscolon(i) || isrange(i)
             if i isa QuoteNode
                 str = "fixed size in $A[" * join(ijk, ", ") * "]" # DimensionMismatch("fixed size in M[i, \$(QuoteNode(5))]: size(M, 2) == 5") TODO print more nicely
                 push!(store.mustassert, :( TensorCast.@assert_ size($A,$d)==$(i.value) $str) )
@@ -907,6 +908,7 @@ function innerparse(firstA, ijk, store::NamedTuple, call::CallInfo; save=false)
     innerflat = []
     for (d,i) in enumerate(ijk)
         iscolon(i) && throw(MacroError("can't have a colon in inner index!", call))
+        isrange(i) && throw(MacroError("can't have a range in inner index!", call)) # but you could add this
         istensor(i) && throw(MacroError("can't tensor product inner indices", call))
         @capture(i, -j_) || @capture(i, ~j_) && throw(MacroError("can't reverse or shuffle along inner indices", call))
 
@@ -1110,6 +1112,11 @@ isindexing(ex::Expr) = @capture(x, A_[ijk__])
 
 isCorI(i) = isconstant(i) || isindexing(ii)
 
+isrange(ex::Expr) = @capture(ex, alpha_:omega_)
+isrange(i) = false
+
+isCorR(i) = isconstant(i) || isrange(i) # ranges are treated a bit like constants!
+
 istensor(n::Int) = false
 istensor(s::Symbol) = false
 function istensor(ex::Expr)
@@ -1185,6 +1192,8 @@ function needview!(ij::Vector)
             nothing
         elseif ij[k] isa Expr && ij[k].head == :($)
             ij[k] = ij[k].args[1]
+            out = true
+        elseif ij[k] isa Expr && @capture(ij[k], alpha_:omega_) # i.e. isrange(ij[k])
             out = true
         else
             error("this should never happen! needview! got ", ij[k])
@@ -1289,6 +1298,7 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
     isempty(parsed.reversed) || throw(MacroError("can't reverse along indices on LHS right now", call))
     isempty(parsed.shuffled) || throw(MacroError("can't shuffle along on LHS right now", call))
     any(iscolon, parsed.outer) && throw(MacroError("can't have colons on the LHS right now", call))
+    any(isrange, parsed.outer) && throw(MacroError("can't have ranges on the LHS right now", call))
 
     # Is there a reduction?
     if :reduce in call.flags
