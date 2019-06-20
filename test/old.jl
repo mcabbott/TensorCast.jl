@@ -48,7 +48,7 @@ end
     @cast A[i,j,k] = B[(i,k),j]   # write into an existing tensor A
 
     B = rand(3,4,5);
-    @cast A[(i,j,k)] == B[i,j,k]  # reshaped view A = vec(B)
+    @cast A[(i,j,k)] := B[i,j,k]  # reshaped view A = vec(B)
 
 
     B = [rand(3) for i=1:4];
@@ -60,7 +60,7 @@ end
     @cast A[i,j,k] = B[i,k][j]    # write into A
 
     B = rand(2,3);
-    @cast A[i][j] == B[j,i]       # create views A = collect(eachcol(B))
+    @cast A[i][j] := B[j,i]       # create views A = collect(eachcol(B))
 
 
     B = [rand(3) for i=1:4];
@@ -82,11 +82,11 @@ end
 
     @pretty @cast A[(i,j)] = B[i,j]
 
-    @pretty @cast A[k][i,j] == B[i,(j,k)]  k:length(C)
+    @pretty @cast A[k][i,j] := B[i,(j,k)]  k:length(C)
 
 
     M = rand(3,4)
-    @cast S[i][j] == M[i,j]       # S = julienne(M, (*,:)) creates views, S[i] == M[i,:]
+    @cast S[i][j] := M[i,j]       # S = julienne(M, (*,:)) creates views, S[i] == M[i,:]
     @cast Z[i,j] := S[i][j]       # Z = align(S, (*,:)) makes a copy
     @test size(Z) == (3,4)
 
@@ -99,7 +99,7 @@ end
     M = rand(1:99, 2,3)
 
     @cast S[k]{i} == M[i,k]  i:2  # S = reinterpret(SVector{2,Int}, vec(M)) needs the 2
-    @cast N[k,i] == S[k]{i}       # such slices can be reinterpreted back again
+    @cast N[k,i] := S[k]{i}       # such slices can be reinterpreted back again
 
     M[1,2]=42; N[2,1]==42          # all views of the original matrix
     @test N[2,1]==42

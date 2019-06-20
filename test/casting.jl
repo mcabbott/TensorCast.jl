@@ -101,8 +101,8 @@ end
 
     # R4 = rand(1:10, 4)
     # @cast W[i] := R4[i\i]^2 # diag(reshape(R4, (sz_i, sz_i))) with sz_i = (:)
-    # @test W[1] == R4[1]^2
-    # @test W[2] == R4[4]^2
+    # @test W[1] := R4[1]^2
+    # @test W[2] := R4[4]^2
 
     M = [repeat([10i+j],2) for i=1:3, j=1:3]
     @cast A[i,k] := M[i,i][k]

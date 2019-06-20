@@ -16,12 +16,12 @@ usingstatic =   isdefined(TensorCast, :StaticArray)
     β = 2
     @cast f[(c,b)] := bc[b,c] b:β, c:3 # @assert uses β
     @test size(f) == (6,)
-    @cast cb2[c,b] == f[(c,b)] b:β # can't not use this
+    @cast cb2[c,b] := f[(c,b)] b:β # can't not use this
     @test size(cb2) == (3,2)
     @test all(cb2 .== transpose(bc))
 
     oo = [1,1]
-    @cast cb3[c,b] == f[(c,b)] b:sum(oo) # with an expression
+    @cast cb3[c,b] := f[(c,b)] b:sum(oo) # with an expression
     @test size(cb3) == (3,2)
 
     β = 2
@@ -84,15 +84,13 @@ end
     # @test size(first(DBec)) == (5,3)
     @test size(DBec[1,1]) == (5,3) # new julienne
 
-    @cast DEbc[d,e][b,c] == bcde[b,c,d,e] # this order can be a view
+    @cast DEbc[d,e][b,c] := bcde[b,c,d,e] # this order can be a view
     @test size(DEbc) == (4,5)
     # @test size(first(DEbc)) == (2,3)
     @test size(DEbc[1,1]) == (2,3)
 
     DEbc[3,4][1,2] = 99
     @test bcde[1,2,3,4] == 99 # view not a copy
-
-    # @test_throws LoadError @cast BCde[b,c][d,e] == bcde[b,c,d,e] # doesn't work
 
 end
 @testset "static-slice" begin
@@ -161,7 +159,7 @@ end
 
     B = [ SVector{3}(rand(3)) for i=1:2]
 
-    @cast A[j,i] == B[i]{j} i:2, j:3 # view is impossible without Static slices
+    @cast A[j,i] := B[i]{j} i:2, j:3 # view is impossible without Static slices
     @test size(A) == (3,2)
     @test !isa(A, Array)
 
@@ -193,7 +191,7 @@ end
     bcde = rand(2,3,4,5)
     bcde2 = similar(bcde)
 
-    @cast v[(b,zc,d)] == bcd[b,zc,d]
+    @cast v[(b,zc,d)] := bcd[b,zc,d]
     @cast w[d,(zc,b)] := v[(b,zc,d)] b:2, zc:3 # add z sometimes to mess with alphabetisation
     @cast dbc[d,b,c] := w[d,(c,b)] c:3
 
@@ -293,14 +291,14 @@ end
     A = @cast [k,j,i] := B[i,(j,k)] k:3 # without left-hand name
     @test size(A) == (3,2,1)
 
-    C = @cast [k][i,j] == B[i,(j,k)]  k:3 # without left-hand name
+    C = @cast [k][i,j] := B[i,(j,k)]  k:3 # without left-hand name
     C = @cast [k][i,j] := B[i,(j,k)]  j:2, k:3
 
     @test size(C) == (3,)
     @test size(first(C)) == (1,2)
 
 
-    @cast A[k][i,j] == B[i,(j,k)]  k:length(C) # with an expression
+    @cast A[k][i,j] := B[i,(j,k)]  k:length(C) # with an expression
 
     @test size(A) == (3,)
 
