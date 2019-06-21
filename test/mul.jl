@@ -1,7 +1,6 @@
 
 @testset "simple" begin
 
-    ## the very basics
     bc = rand(2,3)
     cd = rand(3,4)
 
@@ -12,7 +11,7 @@
     @matmul B[b,d] = sum(c) bc[b,c] * cd[c,d] # in-place
     @test B == A
 
-    ## and with vectors
+    ## matrix-vector
     c = randn(3)
     @matmul b[b] := sum(c) bc[b,c] * c[c]
     @test b == bc * c
@@ -20,15 +19,22 @@
     @matmul c[c] := sum(b) b[b] * bc[b,c]
     @test c == vec(b' * bc)
 
-    # @matmul z[] := sum(b) b[b] * b[b]
-    # @test z[] == dot(b,b)
-
     b′ = similar(b)
     @matmul b′[b] = sum(c) bc[b,c] * c[c] # in-place
     @test b′ == bc * c
 
-    # c′ = similar(c)
-    # @matmul c′[c] = sum(b) b[b] * bc[b,c]
+    c′ = similar(c)
+    @matmul c′[c] = sum(b) b[b] * bc[b,c]
+    @test c′ == c
+
+    ## vector-vector
+    @matmul z[] := sum(b) b[b] * b[b]
+    @test z[] == dot(b,b)
+    @test z isa Array{Float64,0}
+
+    z′ = similar(z)
+    @matmul z′[] = sum(b) b[b] * b[b]
+    @test z′ == z
 
 end
 @testset "permutedims" begin
@@ -65,7 +71,7 @@ end
 
     D = similar(A);
     @matmul D[i,j] = sum(x,y,z) cccc[x,y,j,z] * cccc2[z,i,y,x]  # in-place
-    @test_broken A ≈ D
+    @test A ≈ D
 
 
     @matmul A[i,j,k,l] := sum(x,y) cccc[i,x,y,k] * cccc2[l,j,y,x]
@@ -73,9 +79,9 @@ end
     @einsum C[i,j,k,l] := cccc[i,x,y,k] * cccc2[l,j,y,x]
     @test A ≈ B ≈ C
 
-    # D = similar(A); # MethodError: no method matching mul!(::Array{Float64,4}, ::Base.ReshapedArray{Float64,2,PermutedDimsArray
-    # @matmul D[i,j,k,l] = sum(x,y) cccc[i,x,y,k] * cccc2[l,j,y,x]   # in-place
-    # @test A ≈ D
+    D = similar(A);
+    @matmul D[i,j,k,l] = sum(x,y) cccc[i,x,y,k] * cccc2[l,j,y,x]   # in-place
+    @test A ≈ D
 
 
     @matmul A[i,j,k,l,m,n] := sum(x) cccc[x,k,i,m] * cccc2[l,x,j,n]
@@ -83,9 +89,9 @@ end
     @einsum C[i,j,k,l,m,n] := cccc[x,k,i,m] * cccc2[l,x,j,n]
     @test A ≈ B  ≈ C
 
-    # D = similar(A); # MethodError: no method matching mul!(::Array{Float64,6}, ::Base.ReshapedArray{Float64,2,PermutedDimsArray
-    # @matmul D[i,j,k,l,m,n] = sum(x) cccc[x,k,i,m] * cccc2[l,x,j,n]  # in-place
-    # @test A ≈ D
+    D = similar(A);
+    @matmul D[i,j,k,l,m,n] = sum(x) cccc[x,k,i,m] * cccc2[l,x,j,n]  # in-place
+    @test A ≈ D
 
 
     ## repeat with non-alphabeitcal LHS!
@@ -94,9 +100,9 @@ end
     @einsum C[j,i,l,k,n,m] := cccc[x,k,i,m] * cccc2[l,x,j,n]
     @test A ≈ B  ≈ C
 
-    # D = similar(A); # MethodError: no method matching mul!(::Array{Float64,6}, ::Base.ReshapedArray{Float64,2,PermutedDimsArray{
-    # @matmul D[j,i,l,k,n,m] = sum(x) cccc[x,k,i,m] * cccc2[l,x,j,n]  # in-place
-    # @test A ≈ D
+    D = similar(A);
+    @matmul D[j,i,l,k,n,m] = sum(x) cccc[x,k,i,m] * cccc2[l,x,j,n]  # in-place
+    @test A ≈ D
 
 
     ## Mason Potter's example:
@@ -118,10 +124,10 @@ end
     # invperm((4,2,1,3,5)) == (3, 2, 4, 1, 5)
 
     # ## in-place version
-    # N3 = similar(N); N4 = similar(N);
-    # @reduce N3[σ, b\a, b′\a′] = sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  lazy;
-    # @matmul N4[σ, b\a, b′\a′] = sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
-    # @test N ≈ N3 ≈ N4
+    N3 = similar(N); N4 = similar(N);
+    @reduce N3[σ, b\a, b′\a′] = sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  lazy;
+    @matmul N4[σ, b\a, b′\a′] = sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
+    @test N ≈ N3 ≈ N4
 
 
     ## these were OK:

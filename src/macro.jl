@@ -567,15 +567,18 @@ function matmultarget(ex, target, parsed, store::NamedTuple, call::CallInfo)
     iAnosum = setdiff(iA, isum)
     iBnosum = setdiff(iB, isum)
 
-    Aex = targetcast(A, vcat(iAnosum, isum), store, call) # TODO this adds lazy permutedims
+    Aex = targetcast(A, vcat(iAnosum, isum), store, call)
     Bex = targetcast(B, vcat(isum, iBnosum), store, call)
 
     Aex = matrixshape(Aex, iAnosum, isum, store, call)
     Bex = matrixshape(Bex, isum, iBnosum, store, call)
 
+    Aex = maybepush(Aex, store, :mulA)
+    Bex = maybepush(Bex, store, :mulB)
+
     # But don't actually * if you are going to mul!(Z,A,B) instead later:
     if (:inplace in call.flags) && length(C)==0
-        return (Aex, Bex)
+        return (Aex, Bex, iAnosum, iBnosum)
     end
 
     ABex = unmatrixshape(:( $Aex * $Bex ), iAnosum, iBnosum, store, call)
@@ -1402,6 +1405,7 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
 
     if @capture(parsed.left, zed_[]) # special case Z[] = ... else allconst pulls it out
         zed isa Symbol || @capture(zed, ZZ_.field_) || error("wtf")
+        newleft = parsed.left
         str = "expected a 0-tensor $zed[]"
         push!(store.mustassert, :( TensorCast.@assert_ ndims($zed)==0 $str) )
     else
@@ -1422,7 +1426,12 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         push!(out, :( $redfun!($zed, $ex) ) )
     elseif :matmul in call.flags
         ex isa Tuple || error("wtf?")
-        push!(out, :( TensorCast.mul!($zed, $(ex[1]), $(ex[2])) ) )
+
+        zmul = targetcast(newleft, vcat(ex[3], ex[4]), store, call)
+        zmul = matrixshape(zmul, ex[3], ex[4], store, call)
+        zmul isa Symbol || push!(call.flags, :showfinal)
+        # zed = maybepush(zed, out, :mul!)
+        push!(out, :( TensorCast.mul!($zmul, $(ex[1]), $(ex[2])) ) )
     else
         push!(out, :( $zed .= $ex ) )
     end

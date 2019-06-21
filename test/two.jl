@@ -192,6 +192,17 @@ end
     @test A[end] == π / ℯ
 
 end
+@testset "A * B * C" begin
+
+    A = rand(2,2)
+    B = rand(2,2)
+    C = rand(2,2)
+
+    @matmul Z[i,l] := sum(j,k) A[i,j] * B[j,k] * C[k,l]
+    @test_broken Z == A * B * C
+    @test vec(Z) == vec(A * B * C)
+
+end
 @testset "string macros" begin
 
     A = rand(2,10); B = rand(10,10);

@@ -129,6 +129,14 @@ function zeroarray(x::T) where T
 end
 
 """
+    mul!(Z,A,B)
+
+Exactly `LinearAlgebra.mul!` except that it can write into a zero-array.
+"""
+mul!(Z,A,B) = LinearAlgebra.mul!(Z,A,B)
+mul!(Z::AbstractArray{T,0}, A,B) where {T} = copyto!(Z, A * B)
+
+"""
     apply(f,x...) = f(x...)
 
 For broadcasting a list of functions.
@@ -137,6 +145,7 @@ apply(f,x...) = f(x...)
 
 """
     star(x,y,...)
+
 Like `*` but intended for multiplying sizes, and understands that `:` is a wildcard.
 """
 star(x,y) = *(x,y)
@@ -232,6 +241,7 @@ struct Clip{D,A,Z} end
 
 """
     Clip{d,α,ω}(A)
+
 Shortens the range of the `d`-th index at start & end; `Clip{d,0,0}(A)` does nothing.
 """
 function Clip{D,a,z}(A::AbstractArray{T,N}) where {D,a,z, T,N}
