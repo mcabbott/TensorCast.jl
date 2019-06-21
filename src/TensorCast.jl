@@ -18,4 +18,6 @@ include("static.jl")    # StaticArrays
 
 @static VERSION < v"1.1.0" && include("eachslice.jl")
 
+include("warm.jl")
+
 end # module
