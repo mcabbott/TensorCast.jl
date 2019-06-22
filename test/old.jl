@@ -98,7 +98,7 @@ end
     using StaticArrays
     M = rand(1:99, 2,3)
 
-    @cast S[k]{i} == M[i,k]  i:2  # S = reinterpret(SVector{2,Int}, vec(M)) needs the 2
+    @cast S[k]{i} := M[i,k]  i:2  # S = reinterpret(SVector{2,Int}, vec(M)) needs the 2
     @cast N[k,i] := S[k]{i}       # such slices can be reinterpreted back again
 
     M[1,2]=42; N[2,1]==42          # all views of the original matrix

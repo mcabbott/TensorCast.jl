@@ -977,7 +977,6 @@ end
 
 function findsizes(store::NamedTuple, call::CallInfo)
     out = []
-    append!(out, store.mustassert)
     if :assert in call.flags
         append!(out, store.assert)
         empty!(store.assert)
@@ -987,6 +986,7 @@ function findsizes(store::NamedTuple, call::CallInfo)
         sz_list = map(szwrap, store.need)
         push!(out, :( local ($(sz_list...),) = ($(sizes...),) ) )
     end
+    append!(out, store.mustassert) # NB do this after calling sizeinfer()
     out
 end
 
