@@ -149,12 +149,17 @@ end
 
     B = rand(2,3)
     @reduce S := sum(i,j) sqrt(B[j,i])
+    S′ = @reduce sum(i,j) sqrt(B[j,i])
     @test S isa Number
-    @test S == sum(sqrt, B)
+    @test S == S′ == sum(sqrt, B)
 
     @reduce T[] := sum(i,j) sqrt(B[j,i])
-    @test T isa Array
+    @test T isa Array{Float64,0}
     @test T[] == sum(sqrt, B)
+
+    @reduce T1[_] := sum(i,j) sqrt(B[j,i])
+    @test T1 isa Array{Float64,1}
+    @test T1[1] == sum(sqrt, B)
 
     V = rand(4)
     @cast TV[i] := V[i] + T[]

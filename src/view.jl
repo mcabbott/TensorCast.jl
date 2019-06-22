@@ -19,8 +19,8 @@ When acting on `A::Transpose`, `A::PermutedDimsArray` etc, it will `collect(A)` 
 because reshaping these is very slow.
 """
 @generated function orient(A::AbstractArray, code::Tuple)
-    list = Any[]
-    pretty = Any[] # just for error
+    list = []
+    pretty = [] # just for error
     d = 1
     for s in code.parameters
         if s == Colon
@@ -65,9 +65,6 @@ orient(A::LazyRowVec, ::Tuple{typeof(*),typeof(*),Colon,Colon}) = orient(A.paren
 orient(A::LazyRowVec, ::Tuple{typeof(*),Colon,typeof(*),Colon}) = orient(A.parent, (*,*,*,:))
 orient(A::LazyRowVec, ::Tuple{Colon,typeof(*),typeof(*),Colon}) = orient(A.parent, (*,*,*,:))
 
-# tidier but not strictly necc: for @cast Z[i] = A[3] + B[i]
-orient(A::AbstractArray{<:Any, 0}, ::Tuple{typeof(*)}) = first(A)
-
 """
     rview(A, :,1,:) ≈ (@assert size(A,2)==1; view(A, :,1,:))
 
@@ -80,8 +77,8 @@ for which `needview!(code) = true`, so the macro should catch such cases.
 rview(A::AbstractArray, code...) = rview(A, code)
 
 @generated function rview(A::AbstractArray, code::Tuple)
-    list = Any[]
-    pretty = Any[] # just for error
+    list = []
+    pretty = [] # just for error
     ex = quote end
     d = 1
     for s in code.parameters

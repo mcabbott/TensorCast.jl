@@ -149,10 +149,8 @@ Once this is done, the right hand side must be of the form `(tensor) * (tensor) 
 which becomes `mul!(ZZ, (DD * EE), FF)`.
 
     @reduce V[i] := sum(k) W[k] * exp(@matmul [i,k] := sum(j) A[i,j] * B[j,k])
-    @reduce V[i] := sum(k) W[k] * exp(@matmul sum(j) A[i,j] * B[j,k]) # soon!
 
-You should be able to use this within the other macros,
-eventually without specifying intermediate arrays by hand.
+You should be able to use this within the other macros, as shown.
 """
 macro matmul(exs...)
     call = CallInfo(__module__, __source__, TensorCast.unparse("@matmul", exs...),
@@ -745,6 +743,7 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
 
     elseif left isa Symbol # only for @reduce A := sum(i) ...
         (:reduce in call.flags) || throw(MacroError("@cast really needs an indexing expression on left!", call))
+        (:inplace in call.flags) && throw(MacroError("scalar output needs @reduce Z := ...", call))
         Z = left
         push!(call.flags, :scalar)
         parsed = indexparse(Z, [], store, call) # just to get the right namedtuple
