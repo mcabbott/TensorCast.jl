@@ -88,6 +88,9 @@ end
     @cast B2[i,j] := M[i,bool[j]]
     @test B1 == B2
 
+    V1 = M[CartesianIndex.(ind, ind)]
+    # @cast V2[i] := M[ind[i],ind[i]]
+
 end
 @testset "indexing with a range" begin
 
@@ -175,6 +178,9 @@ end
     V = 1:4
     @cast T[i,j] := (V[i], V[j]^2 + 10^3, 99)
     @test T[3,4] == (3,1016,99)
+
+    @cast N[i,j] := (a = V[i], b = V[j]^2 + 10^3, c = 99)
+    @test N[3,4] == (a=3, b=1016, c=99)
 
 end
 @testset "arrays of functions" begin
@@ -267,6 +273,8 @@ end
 
     @test_throws MacroError _macro(:(  A[i,j] := B[k]  )) # "can't find index k on the left"
     @test_throws MacroError _macro(:(  A[i] := sum(k)  ),:(  (B[j]+ C[j])[i]  ), call=CallInfo(:reduce))
+
+    @test_throws MacroError _macro(:(  A[i] := (B[i], c=3)  ))
 
 end
 @testset "run-time errors" begin

@@ -229,7 +229,7 @@ end
     standardise(A[(i,j)]) -> reshape(A, sz_i, sz_j)[i,j]
 
 This mostly aims to re-work the given expression into `some(steps(A))[i,j]`,
-but also pushes `A = f(x)` into `store.top`, and sizes into `store.dict`,
+but also pushes `A = f(x)` into `store.top`.
 """
 function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     # This acts only on single indexing expressions:
@@ -282,22 +282,33 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
         error("shouldn't use curly brackets here")
     end
 
-    # Nested indices A[i,j,B[k,l,m],n] -- experimental!
-    # TODO: do with the constants,  @pretty @cast C[i,j] := M[1,N[i,j]] # makes view(view(M, 1, :), N)
+    # Nested indices A[i,j,B[k,l,m],n] or worse A[i,B[j,k],C[i,j]]
     if any(i -> @capture(i, B_[klm__]), ijk)
-        newijk = []
-        beecolon = []
+        newijk, beecolon = [], [] # for simple case
+        # listB, listijk = [], []
         for i in ijk
             if @capture(i, B_[klm__])
                 append!(newijk, klm)
                 push!(beecolon, B)
+                # push!(listijk, klm)
+                # push!(listB, B)
             else
                 push!(newijk, i)
                 push!(beecolon, (:))
             end
         end
-        ijk = newijk
-        A = :( view($A, $(beecolon...)) )
+        if allunique(newijk) # then we are in simple case
+            ijk = newijk
+            A = :( view($A, $(beecolon...)) )
+        else
+            error("can't handle this indexing yet, sorry")
+            # LHS && error("can't do this indexing on LHS sorry")
+            # A = maybepush(A, store, :preget)
+            # target = guesstarget(??)
+            # Bs = [ targetcast(B, target, store, call) for B in listB ]
+            # Aex = getindex.(Ref(A), i)
+            # A = maybepush(Aex, store, :getindex)
+        end
     end
 
     # Diagonal extraction A[i,i]
@@ -502,9 +513,19 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
         return :( getproperty($A[$(ijk...)], $(QuoteNode(field))) )
     @capture(ex, fun_(arg__).field_ ) && any(containsindexing, arg) &&
         return :( getproperty($fun($(arg...)), $(QuoteNode(field))) )
-    # tuple creation... fails for namedtuple, TODO? NamedTupleTools...
+    # tuple creation... now including namedtuples
     @capture(ex, (args__,) ) && any(containsindexing, args) &&
-        return :( tuple($(args...)) )
+        if any(a -> @capture(a, sym_ = val_), args)
+            syms, vals = [], []
+            map(args) do a
+                @capture(a, sym_ = val_ ) || throw(MacroError("invalid named tuple element $a", call))
+                push!(syms, QuoteNode(sym))
+                push!(vals, val)
+            end
+            return :( NamedTuple{($(syms...),)}(tuple($(vals...))) )
+        else
+            return :( tuple($(args...)) )
+        end
     # and arrays of functions, using apply:
     @capture(ex, funs_[ijk__](args__) ) &&
         return :( TensorCast.apply($funs[$(ijk...)], $(args...) ) )
@@ -716,8 +737,11 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
         reduce && throw(MacroError("can't use *= with @reduce", call))
 
     # @reduce might not have a LHS, otherwise some errors:
-    elseif @capture(ex, left_ => right_ )
+    elseif @capture(ex, right_ => left_ )
         throw(MacroError("anonymous functions using => currently not supported", call))
+        # @capture(right, AA_[ii__] | AA_[ii__].ff_ | AA_{ii__} ) ||
+        #     throw(MacroError("anonymous functions => only accept simpler input A[...] => ...", call))
+        # push!(call.flags, :anonfunc) # TODO make the output understand this
     elseif reduce
         return (Any[], nothing)
     else
@@ -770,7 +794,6 @@ function reduceparse(ex1, ex2, store::NamedTuple, call::CallInfo)
     leftcanon, parsed = castparse(ex1, store, call; reduce=true)
     if parsed==nothing
         @capture(ex1, redfun_(redlist__))
-        # TODO allow @reduce sum(i) A[i,j]
         push!(call.flags, :scalar)
         parsed = (indexparse(nothing, [])..., name=gensym(:noleft), outer=[], inner=[], static=false)
     else
