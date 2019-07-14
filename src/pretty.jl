@@ -46,7 +46,8 @@ function pretty(str::String)
     str = replace(str, r"\w+\.(\w+){" => s"\1{")  # and on structs...
 
     str = replace(str, "Colon()" => ":")
-    str = replace(str, r"\$\(QuoteNode\((\d+)\)\)" => s":\1")  # not right yet!
+    str = replace(str, r"\$\(QuoteNode\((\d+)\)\)" => s":\1")
+    str = replace(str, r"for (\w+) = " => s"for \1 in ")
 end
 
 pretty(tup::Tuple) = pretty(string(tup))
