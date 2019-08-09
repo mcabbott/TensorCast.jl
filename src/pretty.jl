@@ -34,6 +34,9 @@ end
 function pretty(ex::Union{Expr,Symbol})
     ex = MacroTools.alias_gensyms(ex) # animal names
     ex = MacroTools.striplines(ex)    # remove line references
+    ex = MacroTools.postwalk(ex) do x # remove esc()
+        (x isa Expr && x.head == :escape && length(x.args) == 1) ? x.args[1] : x
+    end
     pretty(string(ex))
 end
 
