@@ -180,4 +180,16 @@ end
     :( ($(list...),) )
 end
 
+using ZygoteRules # TODO add tests?
+
+# Rules moved from SliceView.jl
+
+@adjoint sliceview(A::AbstractArray, code::Tuple) =
+    sliceview(A, code), Δ -> (glue(Δ, code), nothing)
+
+@adjoint red_glue(A::AbstractArray, code::Tuple) =
+    red_glue(A, code), Δ -> (sliceview(Δ, code), nothing)
+
+@adjoint copy_glue(A::AbstractArray, code::Tuple) =
+    copy_glue(A, code), Δ -> (sliceview(Δ, code), nothing)
 
