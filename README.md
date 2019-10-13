@@ -2,7 +2,7 @@
 # TensorCast.jl
 
 [![Build Status](https://travis-ci.org/mcabbott/TensorCast.jl.svg?branch=master)](https://travis-ci.org/mcabbott/TensorCast.jl)
-[![Documentation](https://camo.githubusercontent.com/f7b92a177c912c1cc007fc9b40f17ff3ee3bb414/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f646f63732d737461626c652d626c75652e737667)](https://pkg.julialang.org/docs/TensorCast/lkx9a/0.1.4/)
+[![Documentation](https://camo.githubusercontent.com/f7b92a177c912c1cc007fc9b40f17ff3ee3bb414/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f646f63732d737461626c652d626c75652e737667)](https://pkg.julialang.org/docs/TensorCast/lkx9a/0.1.5/)
 
 This package lets you write expressions involving many-dimensional arrays in index notation,
 by defining a few macros. The first is `@cast`, which deals both with "casting" into new shapes 
