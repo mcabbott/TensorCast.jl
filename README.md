@@ -60,7 +60,7 @@ The original `@einsum` simply writes the necessary set of nested loops.
 Instead `@tensor` works out a sequence of contraction and trace operations, 
 calling optimised BLAS routines where possible. 
 (And [ArrayMeta.jl](https://github.com/shashi/ArrayMeta.jl) aimed to do a wide variety of operations efficiently, 
-but seems to be abandonned.)
+but seems to be abandoned.)
 
 The  macros from this package aim instead to produce simple Julia commands: 
 often just a string of `reshape` and `permutedims` and `eachslice` and so on,
