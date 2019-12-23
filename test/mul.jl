@@ -5,36 +5,36 @@
     cd = rand(3,4)
 
     @matmul A[b,d] := sum(c) bc[b,c] * cd[c,d]
-    @test A == bc * cd
+    @test A ≈ bc * cd
 
     B = similar(A)
     @matmul B[b,d] = sum(c) bc[b,c] * cd[c,d] # in-place
-    @test B == A
+    @test B ≈ A
 
     ## matrix-vector
     c = randn(3)
     @matmul b[b] := sum(c) bc[b,c] * c[c]
-    @test b == bc * c
+    @test b ≈ bc * c
 
     @matmul c[c] := sum(b) b[b] * bc[b,c]
-    @test c == vec(b' * bc)
+    @test c ≈ vec(b' * bc)
 
     b′ = similar(b)
     @matmul b′[b] = sum(c) bc[b,c] * c[c] # in-place
-    @test b′ == bc * c
+    @test b′ ≈ bc * c
 
     c′ = similar(c)
     @matmul c′[c] = sum(b) b[b] * bc[b,c]
-    @test c′ == c
+    @test c′ ≈ c
 
     ## vector-vector
     @matmul z[] := sum(b) b[b] * b[b]
-    @test z[] == dot(b,b)
+    @test z[] ≈ dot(b,b)
     @test z isa Array{Float64,0}
 
     z′ = similar(z)
     @matmul z′[] = sum(b) b[b] * b[b]
-    @test z′ == z
+    @test z′ ≈ z
 
 end
 @testset "permutedims" begin
