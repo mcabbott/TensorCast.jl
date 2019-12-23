@@ -15,6 +15,12 @@ ZygoteRules = "700de1a5-db45-46bc-99cf-38207098b444"
 
 [compat]
 julia = "1"
+Compat = "2.2, 3"
+LazyArrays = "0.12, 0.13, 0.14"
+MacroTools = "0.5"
+RecursiveArrayTools = "1"
+StaticArrays = "0.10, 0.11, 0.12"
+ZygoteRules = "0.1, 0.2"
 
 [extras]
 Einsum = "b7d42ee7-0b51-5a75-98ca-779d3107e4c0"
