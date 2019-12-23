@@ -16,6 +16,7 @@ include("recursive.jl") # RecursiveArrayTools
 include("lazy.jl")      # LazyCast
 include("static.jl")    # StaticArrays
 
-include("warm.jl")
+# include("warm.jl")
+include("snoop.jl")
 
 end # module
