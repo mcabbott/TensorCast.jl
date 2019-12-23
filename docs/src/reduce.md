@@ -8,7 +8,7 @@ julia> M = collect(reshape(1:12, 3,4));
 
 This is the basic syntax to sum over one index:
 
-```jldoctest mylabel; filter = r"begin .+ end"
+```jldoctest mylabel; filter = r"begin\n.*\nend"
 julia> @reduce S[i] := sum(j) M[i,j] + 1000
 3-element Array{Int64,1}:
  4022

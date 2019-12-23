@@ -291,7 +291,7 @@ true
 Besides arrays of numbers (and arrays of arrays) you can also broadcast an array of functions,
 which is done by calling `apply(f,xs...) = f(xs...)`: 
 
-```jldoctest mylabel; filter = r"begin .+ end"
+```jldoctest mylabel; filter = r"begin\n.*\n.*\nend"
 julia> funs = [identity, sqrt];
 
 julia> @cast applied[i,j] := funs[i](V[j])
