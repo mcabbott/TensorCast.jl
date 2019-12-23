@@ -17,8 +17,8 @@ makedocs(
     ),
 )
 
-# deploydocs(
-#     repo = "github.com/mcabbott/TensorCast.jl"
-# )
+deploydocs(
+    repo = "github.com/mcabbott/TensorCast.jl"
+)
 
 # julia --color=yes make.jl

@@ -13,6 +13,6 @@ The pages are:
 4. Docstrings, for all details.
 
 These refer to v0.2, which is currently `#master`, 
-see the [readme](https://github.com/mcabbott/TensorCast.jl) for a list of what's changed.
+see the [readme](https://github.com/mcabbott/TensorCast.jl#whats-new) for a list of what's changed.
 
 What will show up on [pkg.julialang.org](https://pkg.julialang.org/docs/TensorCast/) once this works? Not sure.
