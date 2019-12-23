@@ -65,9 +65,9 @@ but also allows arbitrary (element-wise) functions:
 There is some overlap of operations which can be done with several of these packages, 
 but they produce very different code for actually doing what you request. 
 The original `@einsum` simply writes the necessary set of nested loops, 
-while `@tensor` and `@ein`work out a sequence of basic operations (like contraction and traces).
+while `@tensor` and `@ein` work out a sequence of basic operations (like contraction and traces).
 
-The  macros from this package aim instead to produce simple Julia array commands: 
+The macros from this package aim instead to produce simple Julia array commands: 
 often just a string of `reshape` and `permutedims` and `eachslice` and so on,
 plus a native [broadcasting expression](https://julialang.org/blog/2017/01/moredots) if needed, 
 and `sum` /  `sum!`, or `*` / `mul!`. 
@@ -99,10 +99,11 @@ You need [Julia](https://julialang.org/downloads/) 1.0 or later:
 The registered version is 0.1.5, for which you want the 
 [stable](https://pkg.julialang.org/docs/) docs above. 
 Version 0.2.0 from  `] add TensorCast#two` is a re-write with some new features, 
-described below, with [new docs](https://mcabbott.github.io/TensorCast.jl/dev). 
+described below. <!--, with [new docs](https://mcabbott.github.io/TensorCast.jl/dev). 
 
 There are also some notebooks: [docs/einops.ipynb](docs/einops.ipynb) explaining with images,
 and [docs/speed.ipynb](docs/speed.ipynb) explaining what's fast and what's slow.
+-->
 
 ## What's new
 
@@ -137,7 +138,10 @@ Added:
   The fact that such slices have (say) `Size(3)` can be provided by writing `A{:3, j}`. 
   This allows static-mapslices operations: `@cast C[i,j] |= fun(A{:3,j}){i}`. 
 
-* Lazy broadcasting `@cast A[i] := f(B[i]) lazy` will return the [BroadcastArray](??).
+* Lazy broadcasting `@cast A[i] := f(B[i]) lazy` will return the [BroadcastArray](https://github.com/JuliaArrays/LazyArrays.jl#broadcasting).
+
+* Zygote gradient definitions for slicing/glueing from [SliceMap.jl](https://github.com/mcabbott/SliceMap.jl)
+  have moved here. Thus mapslices-like operations `@cast A[i,j] := f(B[:,j])[i]` should be differentiable.
 
 Removed:
 
