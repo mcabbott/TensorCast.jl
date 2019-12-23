@@ -2,7 +2,7 @@
 # TensorCast.jl
 
 [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://pkg.julialang.org/docs/TensorCast/)
-<!--[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://mcabbott.github.io/TensorCast.jl/dev)-->
+[![Latest Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://mcabbott.github.io/TensorCast.jl/dev)
 [![Build Status](https://travis-ci.org/mcabbott/TensorCast.jl.svg?branch=master)](https://travis-ci.org/mcabbott/TensorCast.jl)
 
 This package lets you write expressions involving many-dimensional arrays in index notation, 
@@ -99,7 +99,9 @@ You need [Julia](https://julialang.org/downloads/) 1.0 or later:
 The registered version is 0.1.5, for which you want the 
 [stable](https://pkg.julialang.org/docs/) docs above. 
 Version 0.2.0 from  `] add TensorCast#two` is a re-write with some new features, 
-described below. <!--, with [new docs](https://mcabbott.github.io/TensorCast.jl/dev). 
+described below. 
+<!--
+, with [new docs](https://mcabbott.github.io/TensorCast.jl/dev). 
 
 There are also some notebooks: [docs/einops.ipynb](docs/einops.ipynb) explaining with images,
 and [docs/speed.ipynb](docs/speed.ipynb) explaining what's fast and what's slow.
