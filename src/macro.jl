@@ -528,8 +528,7 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
         end
     # and arrays of functions, using apply:
     @capture(ex, funs_[ijk__](args__) ) &&
-        return :( TensorCast.apply($funs[$(ijk...)], $(args...) ) )
-
+        return :( TensorCast.apply($funs[$(ijk...)], $(args...) ) ) # Core._apply?
 
     # Apart from those, readycast acts only on lone tensors:
     @capture(ex, A_[ijk__]) || return ex
@@ -812,15 +811,13 @@ function reduceparse(ex1, ex2, store::NamedTuple, call::CallInfo)
     if :inplace in call.flags
         canon = vcat(leftcanon, reduced)
     else
-        # But for Z = sum(A, dims=...) can try to avoid permutedims,
+        # But for Z = sum(A, dims=...) can try to avoid permutedims, not sure it matters.
         guess = guesstarget(ex2) # TODO make guess smarter, use leftcanon as a target
         # @show guess reduced
         [ deleteat!(guess, findcheck(i, guess, call, " on the right")) for i in reduced ]
         if leftcanon == guess
             canon = guesstarget(ex2)
         else
-            guess = guesstarget(ex2)
-            @info "guess failed" repr(guess) repr(leftcanon) repr(reduced)
             canon = vcat(leftcanon, reduced)
         end
     end
