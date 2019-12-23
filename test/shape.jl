@@ -16,12 +16,12 @@ usingstatic =   isdefined(TensorCast, :StaticArray)
     β = 2
     @cast f[(c,b)] := bc[b,c] b:β, c:3 # @assert uses β
     @test size(f) == (6,)
-    @cast cb2[c,b] == f[(c,b)] b:β # can't not use this
+    @cast cb2[c,b] := f[(c,b)] b:β # can't not use this
     @test size(cb2) == (3,2)
     @test all(cb2 .== transpose(bc))
 
     oo = [1,1]
-    @cast cb3[c,b] == f[(c,b)] b:sum(oo) # with an expression
+    @cast cb3[c,b] := f[(c,b)] b:sum(oo) # with an expression
     @test size(cb3) == (3,2)
 
     β = 2
@@ -41,7 +41,7 @@ end
     oo[1] = 99
     @test bcde[1] != 99 # copy not a view
 
-    @cast oo[d,e,b,c] = bcde[b,c,d,e] ! ;
+    @cast oo[d,e,b,c] = bcde[b,c,d,e]  assert;
     oo[1] = 99
     @test bcde[1] != 99 # still not a view
 
@@ -61,7 +61,7 @@ end
     bcd = rand(2,3,4);
     bcde = rand(2,3,4,5);
 
-    @cast Bcd[b][c,d] |= bcd[b,c,d] !
+    @cast Bcd[b][c,d] |= bcd[b,c,d]  assert
     @test size(Bcd) == (2,)
     @test size(first(Bcd)) == (3,4)
     @test Bcd[2][3,1] == bcd[2,3,1]
@@ -69,22 +69,22 @@ end
     Bcd[2][3,1] = 99
     @test bcd[2,3,1] != 99 # copy not a view
 
-    @cast Cbd[c][b,d] := bcd[b,c,d] !
+    @cast Cbd[c][b,d] := bcd[b,c,d]  assert
     @test size(Cbd) == (3,)
     @test size(first(Cbd)) == (2,4)
     @test Cbd[3][2,1] == bcd[2,3,1]
 
-    @cast BCde[b,c][d,e] := bcde[b,c,d,e] !
+    @cast BCde[b,c][d,e] := bcde[b,c,d,e]  assert
     @test size(BCde) == (2,3)
     # @test size(first(BCde)) == (4,5)
     @test size(BCde[1,1]) == (4,5) # new julienne
 
-    @cast DBec[d,b][e,c] := bcde[b,c,d,e] !
+    @cast DBec[d,b][e,c] := bcde[b,c,d,e]  assert
     @test size(DBec) == (4,2)
     # @test size(first(DBec)) == (5,3)
     @test size(DBec[1,1]) == (5,3) # new julienne
 
-    @cast DEbc[d,e][b,c] == bcde[b,c,d,e] # this order can be a view
+    @cast DEbc[d,e][b,c] := bcde[b,c,d,e] # this order can be a view
     @test size(DEbc) == (4,5)
     # @test size(first(DEbc)) == (2,3)
     @test size(DEbc[1,1]) == (2,3)
@@ -92,43 +92,41 @@ end
     DEbc[3,4][1,2] = 99
     @test bcde[1,2,3,4] == 99 # view not a copy
 
-    # @test_throws LoadError @cast BCde[b,c][d,e] == bcde[b,c,d,e] # doesn't work
-
 end
 @testset "static-slice" begin
 
-        M = rand(Int, 2,3)
-        S1 = reinterpret(SVector{2,Int}, vec(M)) # as in readme
-        @cast S2[k]{i} == M[i,k]  i:2
-        M[end]=42
-        @test S1[3][2]==42 # is a view
-        @test S2[3][2]==42
-        @test first(S1) isa StaticArray
-        @test first(S2) isa StaticArray
-        @test size(first(S1)) == (2,)
-        @test size(first(S2)) == (2,)
+    M = rand(Int, 2,3)
+    S1 = reinterpret(SVector{2,Int}, vec(M)) # as in readme
+    @cast S2[k]{i} := M[i,k]  i:2
+    M[end]=42
+    @test S1[3][2]==42 # is a view
+    @test S2[3][2]==42
+    @test first(S1) isa StaticArray
+    @test first(S2) isa StaticArray
+    @test size(first(S1)) == (2,)
+    @test size(first(S2)) == (2,)
 
-        @cast S3[k]{i} := M[k,i]  i:3 # this has a permutedims
-        @test first(S3) isa StaticArray
-        @test size(first(S3)) == (3,)
+    @cast S3[k]{i} := M[k,i]  i:3 # this has a permutedims
+    @test first(S3) isa StaticArray
+    @test size(first(S3)) == (3,)
 
-        bcd = rand(2,3,4);
-        bcde = rand(2,3,4,5);
+    bcd = rand(2,3,4);
+    bcde = rand(2,3,4,5);
 
-        @cast DBec[d,b]{e,c} := bcde[b,c,d,e] e:5, c:3
-        @test size(DBec) == (4,2)
-        @test size(first(DBec)) == (5,3)
-        @test first(DBec) isa StaticArray
+    @cast DBec[d,b]{e,c} := bcde[b,c,d,e] e:5, c:3
+    @test size(DBec) == (4,2)
+    @test size(first(DBec)) == (5,3)
+    @test first(DBec) isa StaticArray
 
-        @cast DEbc[d,e]{b,c} == bcde[b,c,d,e] b:2, c:3
-        @test size(DEbc) == (4,5)
-        @test size(first(DEbc)) == (2,3)
-        @test first(DEbc) isa StaticArray
+    @cast DEbc[d,e]{b,c} := bcde[b,c,d,e] b:2, c:3
+    @test size(DEbc) == (4,5)
+    @test size(first(DEbc)) == (2,3)
+    @test first(DEbc) isa StaticArray
 
-        A = rand(3,3,4)
-        @cast B[k]{i,j} == A[i,j,k]  i:3, j:3
-        @cast C[(j,k),i] := B[k][i,j]
-        @test C[1,2] == B[1][2,1] ==  A[2,1,1]
+    A = rand(3,3,4)
+    @cast B[k]{i,j} := A[i,j,k]  i:3, j:3
+    @cast C[(j,k),i] := B[k][i,j]
+    @test C[1,2] == B[1][2,1] ==  A[2,1,1]
 
 end
 @testset "glue" begin
@@ -136,7 +134,7 @@ end
     bcd = rand(2,3,4)
     Bcd = [ rand(3,4) for b=1:2 ]
 
-    @cast bcd[b,c,d] = Bcd[b][c,d] !
+    @cast bcd[b,c,d] = Bcd[b][c,d]  assert
     @test size(bcd) == (2,3,4)
     @test Bcd[2][3,1] == bcd[2,3,1]
 
@@ -153,38 +151,38 @@ end
 
     BCde = [ rand(4,5) for d=1:2, e=1:3 ]
 
-    @cast bcde[b,c,d,e] = BCde[b,c][d,e] ! ;
+    @cast bcde[b,c,d,e] = BCde[b,c][d,e]  assert;
     @test size(bcde) == (2,3,4,5)
 
 end
 @testset "static-glue" begin
 
-        B = [ SVector{3}(rand(3)) for i=1:2]
+    B = [ SVector{3}(rand(3)) for i=1:2]
 
-        @cast A[j,i] == B[i]{j} i:2, j:3 # view is impossible without Static slices
-        @test size(A) == (3,2)
-        @test !isa(A, Array)
+    @cast A[j,i] := B[i]{j} i:2, j:3 # view is impossible without Static slices
+    @test size(A) == (3,2)
+    @test !isa(A, Array)
 
-        A[1,2] = 33
-        @test B[2][1] == 33 # mutating B illegally?
+    A[1,2] = 33
+    @test B[2][1] == 33 # mutating B illegally?
 
-        @cast A[i,j] := B[i]{j} j:3
-        @test size(A) == (2,3)
-        @test !isa(A, StaticArray)
+    @cast A[i,j] := B[i]{j} j:3
+    @test size(A) == (2,3)
+    @test !isa(A, StaticArray)
 
-        @test A[2,1] == 33
+    @test A[2,1] == 33
 
-        C = [ SMatrix{2,3}(rand(2,3)) for i=1:4, j=1:5 ];
+    C = [ SMatrix{2,3}(rand(2,3)) for i=1:4, j=1:5 ];
 
-        @cast A[l,k,j,i] := C[i,j]{k,l} k:2, l:3
-        @test A[1,2,3,4] == C[4,3][2,1]
-        @test size(A) == (3,2,5,4)
+    @cast A[l,k,j,i] := C[i,j]{k,l} k:2, l:3
+    @test A[1,2,3,4] == C[4,3][2,1]
+    @test size(A) == (3,2,5,4)
 
-        @cast A[l,k,j,i] = C[i,j]{k,l} k:2, l:3 # now in-place
-        @test A[1,2,3,4] == C[4,3][2,1]
+    @cast A[l,k,j,i] = C[i,j]{k,l} k:2, l:3 # now in-place
+    @test A[1,2,3,4] == C[4,3][2,1]
 
-        @cast A[l,k,j,i] = C[i,j]{k,l} # now without static glue
-        @test A[1,2,3,4] == C[4,3][2,1]
+    @cast A[l,k,j,i] = C[i,j]{k,l} # now without static glue
+    @test A[1,2,3,4] == C[4,3][2,1]
 
 end
 @testset "reshape" begin
@@ -193,7 +191,7 @@ end
     bcde = rand(2,3,4,5)
     bcde2 = similar(bcde)
 
-    @cast v[(b,zc,d)] == bcd[b,zc,d]
+    @cast v[(b,zc,d)] := bcd[b,zc,d]
     @cast w[d,(zc,b)] := v[(b,zc,d)] b:2, zc:3 # add z sometimes to mess with alphabetisation
     @cast dbc[d,b,c] := w[d,(c,b)] c:3
 
@@ -219,8 +217,8 @@ end
     @test size(bc) == (2,3)
     @test bc[1,2] == Bc[1][2]
 
-    @cast f[(c,b)] = Bc[b][c] ! # in-place
-    @cast bc[b,c] = f[(c,b)] !  # in-place
+    @cast f[(c,b)] = Bc[b][c]  assert  # in-place
+    @cast bc[b,c] = f[(c,b)]   assert  # in-place
     @test bc[1,2] == Bc[1][2]
 
     Cdaeb = [rand(4,1,5,2) for i=1:3]; # sizes match abcde now
@@ -239,32 +237,28 @@ end
 
     bc = rand(2,3)
 
-    @cast A[i,-j] := bc[i,j]
     @cast B[i,j] := bc[i,-j]
-    @cast C[i,-j] := bc[i,-j]
     D = reverse(bc, dims=2)
-    @test A == B == D
-    @test C == bc
+    @test B == D
 
     ccbb = rand(0:99, 3,3,2,2)
-    @cast A[-b,c,d,e] := ccbb[b,c,-d,e]
+    @cast A[b,c,d,e] := ccbb[b,c,-d,e]
     B = similar(A);
-    @cast B[b,c,d,e] = ccbb[-b,c,-d,e]
-    C = reverse(reverse(ccbb, dims=1), dims=3)
+    @cast B[b,c,d,e] = ccbb[b,c,-d,e]
+    C = reverse(ccbb, dims=3)
     @test A == B == C
 
     ccbb = rand(0:99, 3,3,2,2)
     @cast A[c,e,b,d] := ccbb[-b,c,d,e] + 100
-    @cast B[c,e,-b,d] := ccbb[b,c,d,e] + 100
-    @test A == B
+    @cast B[c,e,b,d] := ccbb[b,c,d,e] + 100
+    @test A == reverse(B, dims=3)
     C = similar(A); D = similar(A);
     @cast C[c,e,b,d] = ccbb[-b,c,d,e] + 100
-    # @cast D[c,e,-b,d] = ccbb[b,c,d,e] + 100 # can't reverse axes of in-place output
-    @test A == B == C # == D
+    @test A == C
 
     @cast A[c,e,b,_] := ccbb[-b,c,2,e] + 100
-    @cast B[c,e,-b,_] := ccbb[b,c,2,e] + 100
-    @test A == B
+    @cast B[c,e,b,_] := ccbb[b,c,2,e] + 100
+    @test A == reverse(B, dims=3)
 
 end
 @testset "fixed indices" begin
@@ -288,7 +282,7 @@ end
 
     @cast A[i,j,k] = B[i,(j,k)] i:1
 
-    @cast V[(i,j,k)] := B[i,(k,j)]  k:3, ! # was an error for recursive colon reasons
+    @cast V[(i,j,k)] := B[i,(k,j)]  k:3, assert # was an error for recursive colon reasons
 
 
     A = @cast [jk,i] := B[i,jk] # without left-hand name
@@ -297,14 +291,14 @@ end
     A = @cast [k,j,i] := B[i,(j,k)] k:3 # without left-hand name
     @test size(A) == (3,2,1)
 
-    C = @cast [k][i,j] == B[i,(j,k)]  k:3 # without left-hand name
+    C = @cast [k][i,j] := B[i,(j,k)]  k:3 # without left-hand name
     C = @cast [k][i,j] := B[i,(j,k)]  j:2, k:3
 
     @test size(C) == (3,)
     @test size(first(C)) == (1,2)
 
 
-    @cast A[k][i,j] == B[i,(j,k)]  k:length(C) # with an expression
+    @cast A[k][i,j] := B[i,(j,k)]  k:length(C) # with an expression
 
     @test size(A) == (3,)
 
@@ -343,7 +337,7 @@ end
 
     ## runtime
 
-    @test_throws DimensionMismatch @cast oo[i,j] := bc[i,j] i:3,!
-    @test_throws DimensionMismatch @cast cb[i,j] = bc[i,j] !
+    @test_throws DimensionMismatch @cast oo[i,j] := bc[i,j] i:3, assert
+    @test_throws DimensionMismatch @cast cb[i,j] = bc[i,j]  assert
 
 end

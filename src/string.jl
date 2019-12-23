@@ -1,15 +1,15 @@
-export @cast_str, @reduce_str, @mul_str
+export @cast_str, @reduce_str, @matmul_str
 
 """
     cast" Z_ij := A_i + B_j "
 
 String macro version of `@cast`, which translates things like `"A_ijk" == A[i,j,k]`.
-Indices should be single letters, except for primes and constants, for example:
+Indices should be single letters, except for primes, for example:
 ```
-julia> @pretty cast" X_αβ' = A_α33β' * log(B_β'\$k)"
-# @cast  X[α,β′] = A[α,33,β′] * log(B[β′,\$k])
+julia> @pretty cast" X_αβ' = A_α3β' * log(B_β'\$k)"
+# @cast  X[α,β′] = A[α,3,β′] * log(B[β′,\$k])
 begin
-    local kangaroo = view(A, :, 33, :)
+    local kangaroo = view(A, :, 3, :)
     local turtle = transpose(view(B, :, k))
     X .= @. kangaroo * log(turtle)
 end
@@ -20,7 +20,7 @@ julia> @pretty cast" Y_ijk := f(A_j:k)_i + B_i_k + (C_k)_i"
 # @cast  Y[i,j,k] := f(A[j,:,k])[i] + B[i,_,k] + C[k][i]
 ```
 Operators `:=` and `=` work as usual, as do options.
-There are similar macros `reduce"Z_i = Σ_j A_ij"` and `mul"Z_ik = Σ_j A_ij * B_jk"`.
+There are similar macros `reduce"Z_i = Σ_j A_ij"` and `matmul"Z_ik = Σ_j A_ij * B_jk"`.
 """
 macro cast_str(str::String)
     Meta.parse("@cast " * cast_string(str)) |> esc
@@ -51,8 +51,8 @@ macro reduce_str(str::String)
     Meta.parse(reduce_string(str)) |> esc
 end
 
-macro mul_str(str::String)
-    Meta.parse(mul_string(str)) |> esc
+macro matmul_str(str::String)
+    Meta.parse(matmul_string(str)) |> esc
 end
 
 function cast_string(str)
@@ -65,11 +65,20 @@ function reduce_string(str::String)
     "@reduce " * str3
 end
 
-function mul_string(str::String)
+"""
+    matmul" Z_i := Σ_j A_ij + B_j "
+
+String macro version of `@matmul`, accepts `Σ_j` or `sum_j`.
+```
+julia> @pretty matmul" Z_ij := Σ_k A_ik + B_kj "
+# @matmul  Z[i,j] := sum(k) A[i,k] + B[k,j]
+```
+"""
+function matmul_string(str::String)
     str2 = replace(str, r"=\s+sum_[\w\'\′\:\⊗]+" => indexfun)
     str3 = replace(str2, r"=\s+Σ_[\w\'\′\:\⊗]+" => indexfun)
     str4 = replace(str3, r"_([\w\d\$\'\′\:\⊗]+)" => indexsquare)
-    "@mul " * str4
+    "@matmul " * str4
 end
 
 function indexcomma(str)
@@ -81,8 +90,6 @@ function indexcomma(str)
             list[end] *= "′"
 
         # constants
-        elseif isnumber(c) && length(list)>0 && isnumber(list[end])
-            list[end] *= c
         elseif length(list)>0 && list[end] =='\$'
             list[end] = "\$" * c
 
@@ -107,13 +114,6 @@ function indexsquare(str)
     "[" * indexcomma(str[2:end]) * "]"
 end
 
-#=
-indexsquare("_âb′c")
-indexsquare("_a\$b1")
-indexsquare("_ijk''") # failed locally
-indexsquare("_ij'k''")
-=#
-
 function indexfun(str)
     @assert str[1] == '='
 
@@ -125,9 +125,4 @@ function indexfun(str)
 
     "= " * fun * "(" * indexcomma(ind) * ")"
 end
-
-#=
-indexfun("= sum_i")
-indexfun("= Π_ii'") # failed locally
-=#
 

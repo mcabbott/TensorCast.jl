@@ -101,34 +101,14 @@ end
 
     # R4 = rand(1:10, 4)
     # @cast W[i] := R4[i\i]^2 # diag(reshape(R4, (sz_i, sz_i))) with sz_i = (:)
-    # @test W[1] == R4[1]^2
-    # @test W[2] == R4[4]^2
+    # @test W[1] := R4[1]^2
+    # @test W[2] := R4[4]^2
 
     M = [repeat([10i+j],2) for i=1:3, j=1:3]
     @cast A[i,k] := M[i,i][k]
 
     @test A[1,1] == A[1,2] == 11
     @test A[3,1] == A[3,2] == 33
-
-end
-@testset "anonymous functions" begin
-
-    f1 = @cast A[i] + B[j]^2 => C[i,j]
-    f2 = @cast (A[i] + B[j]^2) -> C[i,j]
-
-    A = rand(3)
-    B = rand(2)
-    @cast C[i,j] := A[i] + B[j]^2
-
-    @test f1(A,B) == f2(A,B) == C
-
-    f3 = @cast D[i\j,k] -> E[i,-k,j]  i:2
-    f4 = @cast D[i\j,k] => E[i,-k,j]  i:2, nolazy
-
-    D = rand(4,3)
-    @cast E[i,k,j] := D[i\j,-k]  i:2
-
-    @test f3(D) == f4(D) == E
 
 end
 @testset "mapslices etc" begin
@@ -139,10 +119,10 @@ end
     N2 = mapslices(g, M, dims=1)
     @test N == N2
 
-    V = [ rand(1:99, 2) for _=1:5, _=1:1 ]
-    @cast W[i,j] := (v->v .// 2)(V[j,_])[i]
-    W2 = hcat(V...) .// 2
-    @test W == W2
+    # V = [ rand(1:99, 2) for _=1:5, _=1:1 ]
+    # @cast W[i,j] := (v->v .// 2)(V[j,_])[i] # TODO
+    # W2 = hcat(V...) .// 2
+    # @test W == W2
 
     fun(m::AbstractMatrix, a=0) = vec(sum(m,dims=1)) .+ a
     X = rand(2,3,4)

@@ -1,29 +1,46 @@
-export @cast, @cast!, @reduce, @reduce!
+
+#==================== The Macros ====================#
+
+export @cast, @reduce, @matmul
+
+struct CallInfo
+    mod::Module
+    src::LineNumberNode
+    string::String
+    flags::Set{Symbol}
+    CallInfo(mod::Module, src, str, flags=Set{Symbol}()) = new(mod, src, str, flags)
+    CallInfo(syms::Symbol...) = new(Main, LineNumberNode(0), "", Set([syms...]))
+end
 
 """
-    @cast Z[i,j,...] := f(A[j,k,...])  options
+    @cast Z[i,j,...] := f(A[i,j,...], B[j,k,...])  options
 
 Macro for broadcasting, reshaping, and slicing of arrays in index notation.
 Understands the following things:
 * `A[i,j,k]` is a three-tensor with these indices.
 * `B[(i,j),k]` is the same thing, reshaped to a matrix. Its first axis (the bracket) is indexed
   by `n = i + (j-1) * N` where `i ∈ 1:N`. This may also be written `B[i\\j,k]` or `B[i⊗j,k]`.
-* `C[k][i,j]` is a vector of matrices.
+* `C[k][i,j]` is a vector of matrices, either created by slicing (if on the left)
+  or implying glueing into (if on the right) a 3-tensor `A[i,j,k]`.
 * `D[j,k]{i}` is an ordinary matrix of `SVector`s, which may be reinterpreted from `A[i,j,k]`.
 * `E[i,_,k]` has two nontrivial dimensions, and `size(E,2)==1`. On the right hand side
   (or when writing to an existing array) you may also write `E[i,3,k]` meaning `view(E, :,3,:)`,
-  or `E[i,\$c,j]` to use a variable `c`. Fixing inner indices, like `C[k][i,_]`, is not allowed.
+  or `E[i,\$c,j]` to use a variable `c`.
 * `f(x)[i,j,k]` is allowed; `f(x)` must return a 3-tensor (and will be evaluated only once).
 * `g(H[:,k])[i,j]` is a generalised `mapslices`, with `g` mapping columns of `H`
-    to matrices, which are glued into a 3-tensor `[i,j,k]`.
-  Similarly `h(I[k])[i,j]` expects an `h` which maps scalars to matrices.
-* `J[i,-j,k]` means roughly `reverse(J, dims=2)`.
+    to matrices, which are glued into a 3-tensor `A[i,j,k]`.
+* `h(I[i], J[j])[k]` expects an `h` which maps two scalars to a vector,
+  which gets broadcasted `h.(I,J')` then glued into to a 3-tensor.
 * `K[i,j]'` conjugates each element, equivalent to `K'[j,i]` which is the
   conjugate-transpose of the matrix.
 * `M[i,i]` means `diag(M)[i]`, but only for matrices: `N[i,i,k]` is an error.
+* `P[i,i']` is normalised to `P[i,i′]` with unicode \\prime.
+* `R[i,-j,k]` means roughly `reverse(R, dims=2)`, and `Q[i,-j,k]` similar with `shuffle`.
+* `S[i,T[j,k]]` is the 3-tensor `S[:,T]` created by indexing a matrix `S` with `T`,
+  where these integers are `all(1 .<= T .<= size(S,2))`.
 
 The left and right hand sides must have all the same indices,
-with the sole exception of `M[i,i]`.
+and the only repeated index allowed is `M[i,i]`, which is a diagonal not a trace.
 See `@reduce` and `@mul` for related macros which can sum over things.
 
 If a function of one or more tensors appears on the right hand side,
@@ -31,11 +48,10 @@ then this represents a broadcasting operation,
 and the necessary re-orientations of axes are automatically inserted.
 
 The following actions are possible:
-* `=` writes into an existing array, `copyto!(Z, ...)`.
-* `:=` creates a new object. This need not be named: `Z = @cast [i,j,k] := ...` is allowed.
-* `==` insists on a view of the old object (error if impossible), and `|=` insists on a copy.
-* `=>` creates an anonymous function, for which the output must be on the right.
-   For example `@cast A[i] + B[j]' => Z[i,j]` gives `(A,B) -> A .+ B'`.
+* `=` writes into an existing array, overwriting its contents,
+  while `+=` adds (precisely `Z .= Z .+ ...`) and `*=` multiplies.
+* `:=` creates a new array. This need not be named: `Z = @cast [i,j,k] := ...` is allowed.
+* `|=` insists that this is a copy, not a view.
 
 Re-ordering of indices `Z[k,j,i]` is done lazily with `PermutedDimsArray(A, ...)`.
 Reversing of an axis `F[i,-j,k]` is also done lazily, by `Reverse{2}(F)` which makes a `view`.
@@ -44,35 +60,25 @@ Using `|=` (or broadcasting) will produce a simple `Array`.
 Options can be specified at the end (if several, separated by `,` i.e. `options::Tuple`)
 * `i:3` supplies the range of index `i`. Variables and functions like `j:Nj, k:length(K)`
   are allowed.
-* `assert` or `!` will turn on explicit dimension checks of the input.
-  (Providing ranges may also turn these on, but imperfectly, confirm with `@pretty @cast ...`.)
+* `assert` will turn on explicit dimension checks of the input.
+  (Providing any ranges will also turn these on.)
 * `cat` will glue slices by things like `hcat(A...)` instead of the default `reduce(hcat, A)`,
   and `lazy` will instead make a `VectorOfArrays` container.
 * `nolazy` disables `PermutedDimsArray` and `Reverse` in favour of `permutedims` and `reverse`,
   and `Diagonal` in favour of `diagm` for `Z[i,i]` output.
-
-These options only work if you load other packages:
 * `strided` will place `@strided` in front of broadcasting operations,
   and use `@strided permutedims(A, ...)` instead of `PermutedDimsArray(A, ...)`.
-  For this you need `using Strided`.
-* Static slices `D[j,k]{i}` need `using StaticArrays`, and to create them you should
-  give all slice dimensions explicitly. You may write `D[k]{i:2,j:2}` to specify
-  `Size(2,2)` slices. They are made most cleanly from the first indices of the input,
-  i.e. this `D` from `A[i,j,k]`.
+  For this you need `using Strided` to load that package.
+
+To create static slices `D[k]{i,j}` you should give all slice dimensions explicitly.
+You may write `D[k]{i:2,j:2}` to specify `Size(2,2)` slices.
+They are made most cleanly from the first indices of the input,
+i.e. this `D` from `A[i,j,k]`. The notation `A{:,:,k}` will only work in this order,
+and writing `A{:2,:2,k}` provides the sizes.
 """
 macro cast(exs...)
-    where = (mod=__module__, src=__source__, str=unparse("@cast", exs...))
-    _macro(exs...; reduce=false, where=where)
-end
-
-"""
-    @cast! Z[i...] := A[j...] opt
-
-Variant of `@cast` which effectively runs `@check!()` on each tensor.
-"""
-macro cast!(exs...)
-    where = (mod=__module__, src=__source__, str=unparse("@cast!", exs...))
-    _macro(exs...; reduce=false, where=where, icheck=true)
+    call = CallInfo(__module__, __source__, TensorCast.unparse("@cast", exs...))
+    _macro(exs...; call=call)
 end
 
 """
@@ -83,11 +89,12 @@ end
 Tensor reduction macro:
 * The reduction function can be anything which works like `sum(B, dims=(1,3))`,
   for instance `prod` and `maximum` and `Statistics.mean`.
-* In-place operations `Z[j] = sum(...` will construct the banged version of the given function's name,
-  which must work like `sum!(Z, A)`.
+* In-place operations `Z[j] = sum(...` will construct the banged version of the given
+  function's name, which must work like `sum!(Z, A)`.
 * The tensors can be anything that `@cast` understands, including gluing of slices `B[i,k][j]`
   and reshaping `B[i\\j,k]`. See `? @cast` for the complete list.
-* If there are several tensors (or scalars) on the right, then this is a broadcasting operation.
+* If there is a function of one or more tensors on the right,
+  then this is a broadcasting operation.
 * Index ranges may be given afterwards (as for `@cast`) or inside the reduction `sum(i:3, k:4)`.
 * All indices appearing on the right must appear either within `sum(...)` etc, or on the left.
 
@@ -110,858 +117,1349 @@ You need `using Strided` for this to work.
     @cast W[i] := A[i] * exp(- @reduce S[i] = sum(j) exp(B[i,j]) lazy)
 
 Recursion like this is allowed, inside either `@cast` or `@reduce`.
-The array being created need not have a name, like `[i]`,
+The intermediate array need not have a name, like `[i]`,
 unless writing into an existing array, like `S[i]` here.
 """
 macro reduce(exs...)
-    where = (mod=__module__, src=__source__, str=unparse("@reduce", exs...)) # wtf?
-    _macro(exs...; reduce=true, where=where)
+    call = CallInfo(__module__, __source__, TensorCast.unparse("@reduce", exs...),
+        Set([:reduce]))
+    _macro(exs...; call=call)
 end
 
 """
-    @reduce! Z[j] := sum(i,k) A[i,j,k]
+    @matmul M[a,c] := sum(b)  A[a,b] * B[b,c]
 
-Variant of `@reduce` which effectively runs `@check!()` on each tensor.
+Matrix multiplication macro. Uses the same syntax as `@reduce`, but instead of broadcasting
+the expression on the right out to a 3-tensor before summing it along one dimension,
+this calls `*` or `mul!`, which is usually much faster.
+But it only works on expressions of suitable form.
+
+With more than two tensors on the right, it proceeds left to right, and each summed index
+must appear on two tensors, probably neighbours.
+
+Note that unlike `@einsum` and `@tensor`, you must explicitly specify
+what indices to sum over. Both this macro and `@reduce` could in principal infer this,
+and perhaps I will add that later... but then I find myself commenting `# sum_μ` anyway.
+
+    @matmul Z[a⊗b,z] = sum(i,j,k)  D[i,a][j] * E[i⊗j,_,k,b] * F[z,3,k]
+
+Each tensor will be pre-processed exactly as for `@cast` / `@reduce`,
+here glueing slices of `D` together, reshaping `E`, and taking a view of `F`.
+Once this is done, the right hand side must be of the form `(tensor) * (tensor) * ...`,
+which becomes `mul!(ZZ, (DD * EE), FF)`.
+
+    @reduce V[i] := sum(k) W[k] * exp(@matmul [i,k] := sum(j) A[i,j] * B[j,k])
+
+You should be able to use this within the other macros, as shown.
 """
-macro reduce!(exs...)
-    where = (mod=__module__, src=__source__, str=unparse("@reduce!", exs...))
-    _macro(exs...; reduce=true, where=where, icheck=true)
+macro matmul(exs...)
+    call = CallInfo(__module__, __source__, TensorCast.unparse("@matmul", exs...),
+        Set([:matmul, :nolazy]))
+    _macro(exs...; call=call)
 end
 
-#=
+macro mul(exs...)
+    call = CallInfo(__module__, __source__, TensorCast.unparse("@matmul", exs...),
+        Set([:matmul, :nolazy]))
+    @warn "please replace @mul with @matmul, and ensure that it has explicit sum()" call.string maxlog=1 _id=hash(exs)
+    _macro(exs...; call=call)
+end
 
-This much is now per RHS term. None need exist outside the function:
+#==================== The Main Functions ====================#
 
-nameA, indA, indAsub
-sizeA      -- known & used for fixing ranges
-getB, numB -- for view(A, get), and number of fixed indices
-sizeC      -- after reshaping outer indices, in terms of sz_i
-codeD      -- for gluing
-indEflat   -- after gluing
-negF       -- done before permutedims
-shiftG     -- ditto, but not yet written
-permH      --
-codeI      -- to orient, if lacking some indices.
+function _macro(exone, extwo=nothing, exthree=nothing; call::CallInfo=CallInfo(), dict=Dict())
+    store = (dict=dict, assert=[], mustassert=[], seen=[], need=[], top=[], main=[])
+    # TODO use OrderedDict() for main? To allow duplicate removal
 
-Of these things from LHS, only really store + canon need to be passed to RHS function inputex()
-via walker(). But many need to be passed from readleft() to output, packaged into:
-outUZ = (redUind, negV, codeW, sizeX, getY, numY, indZ, sizeZ, nameZ)
-
-flags      -- todo, to-done, and options
-store      -- information from parse! with sizes etc.
-canon      -- canonical list of indices
-canonsize  -- filled with size(A,2) etc, from store, at most one (:)
-
-redUind    -- if reducing, this is done before slicing
-negV       -- directions to reverse, done here.
-codeW      -- for slicing. sizeWstatic is Size() of the slice.
-sizeX      -- after slicing, container size, in sz_i
-getY, numY -- for view(Z, get) in-place, and number fixed
-sizeZ      -- for final reshape, in sz_i
-nameZ, indZ, indZsub, indZred -- given LHS
-
-=#
-
-function _macro(exone, extwo=nothing, exthree=nothing;
-    reduce=false, icheck=false, where=nothing, recurse=false)
-
-    flags = Set{Symbol}()
-
-    if reduce
-        #===== parse @reduce input =====#
-
-        if @capture(exone, left_ := redfun_(redind__) )     # Z[i] := sum(j) A[i] * B[j]
-            right = extwo
-            options = exthree
-            push!(flags, :reduce)
-            V && @info "partial reduce" left right redfun Tuple(redind) options
-        elseif @capture(exone, left_ = redfun_(redind__) )
-            right = extwo
-            options = exthree
-            push!(flags, :reduce)
-            push!(flags, :inplace)
-        elseif @capture(exone, left_ |= redfun_(redind__) )
-            right = extwo
-            options = exthree
-            push!(flags, :reduce)
-            push!(flags, :mustcopy)
-
-        elseif @capture(exone, redfun_(redind__) )          # sum(i,j) A[i] * B[j]
-            right = extwo
-            options = exthree
-            push!(flags, :reduce)
-            push!(flags, :scalar)
-            V && @info "full reduce" right redfun Tuple(redind)
-
-        else
-            throw(MacroError("don't know what to do with $exone", where))
-        end
-
+    if (:reduce in call.flags) || (:matmul in call.flags)
+        # First the options:
+        optionparse(exthree, store, call)
+        # Then the LHS, to get canonical list of indices:
+        canon, parsed = reduceparse(exone, extwo, store, call)
     else
-        #===== parse @cast input =====#
-
-        if @capture(exone, left_ := right_ )                # Z[i,j] := A[i] * B[j]
-        elseif @capture(exone, left_ = right_ )
-            push!(flags, :inplace)
-        elseif @capture(exone, left_ |= right_ )
-            push!(flags, :mustcopy)
-        elseif @capture(exone, left_ == right_ )
-            push!(flags, :mustview)
-                                                            # A[i,j] -> Z[j][i]
-        elseif @capture(exone, right_ -> left_ ) ||  @capture(exone, right_ => left_ )
-            push!(flags, :anonfunc)
-        else
-            throw(MacroError("@cast doesn't know what to do with $exone", where))
-        end
-        V && @info "no reduction" left right
-        options = extwo
-        redind = []
-        redfun = identity
-        exthree == nothing || throw(MacroError("@cast doesn't know what to do with $exthree", where))
-
+        # Much the same for @cast:
+        isnothing(exthree) || throw(MacroError("@cast doesn't take three expressions: $exthree", call))
+        optionparse(extwo, store, call)
+        canon, parsed = castparse(exone, store, call)
     end
 
-    #===== parse LHS to get canonical list =====#
+    # First pass over RHS just to read sizes, prewalk sees A[i][j] before A[i]
+    MacroTools.prewalk(x -> rightsizes(x, store, call), parsed.right)
 
-    store = SizeDict()
-    canon, outUZ, nameZ, checkZ = readleft(left, redind, flags, store, icheck, where)
+    # To look for recursion, we need another prewalk:
+    right2 = MacroTools.prewalk(x -> recursemacro(x, store, call), parsed.right)
 
-    # parse options both to look for keywords and sizes
-    @capture(options, (optvec__,)) || (optvec = Any[options])
-    optind, _,_,_ = parse!(store, nothing, [], optvec; allowranges=true, flags=flags)
+    # Third pass to standardise & then glue, postwalk sees A[i] before A[i][j]
+    right3 = MacroTools.postwalk(x -> standardglue(x, canon, store, call), right2)
 
-    if count(i -> i != nothing, setdiff(optind, canon)) > 0
-        str = join(something.(setdiff(optind, canon), "nothing"), ", ")
-        m_error("attempting to ignore unrecognised options: $str", where)
+    if !(:matmul in call.flags)
+        # Then finally broadcasting if necc (or just permutedims etc. if not):
+        right4 = targetcast(right3, canon, store, call)
+    else
+        # or, for matmul, can I change just this? outputinplace is also going to need changing.
+        right4 = matmultarget(right3, canon, parsed, store, call)
     end
 
-    #===== parse and process RHS =====#
+    checkallseen(canon, store, call) # this must be run before inplaceoutput()
 
+    # Return to LHS, build up what it requested:
+    if :inplace in call.flags
+        rightlist = inplaceoutput(right4, canon, parsed, store, call)
+    else
+        right5 = newoutput(right4, canon, parsed, store, call)
+        rightlist = [:( $(parsed.name) = $right5 )]
+    end
+
+    # Sew all these pieces into output:
     outex = quote end
+    append!(outex.args, store.top)
+    append!(outex.args, findsizes(store, call)) # this must be run after newoutput() etc.
+    append!(outex.args, store.main)
+    append!(outex.args, rightlist)
 
-    if @capture(right, AA_[ii__] ) || @capture(right, AA_{ii__} )
-        newright = walker(outex, right, canon, flags, store, icheck, where)
+    if :recurse in call.flags
+        return (name=parsed.name, ind=parsed.outer, scalar=(:scalar in call.flags), steps=outex.args)
     else
-        newright = MacroTools.prewalk(
-            x -> walker(outex, x, canon, flags, store, icheck, where), right)
-        push!(flags, :broadcast)
+        return esc(outex) # could use MacroTools.unblock()?
+    end
+end
+
+"""
+    standardise(f(x)[i,3]) -> view(A,:,3)[i]
+    standardise(A[(i,j)]) -> reshape(A, sz_i, sz_j)[i,j]
+
+This mostly aims to re-work the given expression into `some(steps(A))[i,j]`,
+but also pushes `A = f(x)` into `store.top`.
+"""
+function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
+    # This acts only on single indexing expressions:
+    if @capture(ex, A_{ijk__})
+        static=true
+        push!(call.flags, :staticslice)
+    elseif @capture(ex, A_[ijk__])
+        static=false
+    else
+        return ex
     end
 
-    notseen = setdiff(canon, unique(store.seen))
-    isempty(notseen) || throw(MacroError("did not see index $(join(notseen, ", ")) on the right", where))
-
-    #===== almost done =====#
-
-    packagecheck(flags, where) # disabled for issue #2
-
-    canonsize = sizeinfer(store, canon, where, true)
-
-    V && @info "before in/out choice" store flags Tuple(canonsize)
-
-    if :inplace in flags
-
-        #===== in-place output  =====#
-
-        if checkZ != nothing
-            push!(outex.args, checkZ)
-        end
-
-        inout = outputinplace(newright, outUZ, redfun, canonsize, canon, flags, store, nameZ, where)
-        push!(outex.args, inout)
-
-        if :finalres in flags
-            push!(outex.args, nameZ)
-        end
-
+    # Ensure that f(x)[i,j] will evaluate once, including in size(A)
+    if A isa Symbol || @capture(A, AA_.ff_) # caller has ensured !containsindexing(A)
     else
-        #===== out-of-place output  =====#
+        Asym = Symbol(A,"_val") # exact same symbol is used by rightsizes()
+        push!(store.top,  :( local $Asym = $A ) )
+        A = Asym
+    end
 
-        if :broadcast in flags
-            if (:reduce in flags) && (:lazy in flags)
-                newright = :( Base.@__dot__ TensorCast.lazy($newright) ) # really LazyArrays.lazy
-            elseif :strided in flags
-                dotted = Broadcast.__dot__(newright) # @strided does not work on @.
-                newright = :( Strided.@strided $dotted )
+    # Constant indices A[i,3], A[i,_], A[i,$c], and also A[i,3:5]
+    if all(isCorR, ijk)
+        needview!(ijk)                                         # replace _ with 1, if any
+        Asym = maybepush(:( $A[$(ijk...)] ), store, :allconst) # protect from later processing
+        return Asym                                            # and nothing more to do here
+    elseif any(isCorR, ijk)
+        ijcolon = map(i -> isCorR(i) ? i : (:), ijk)
+        if needview!(ijcolon)
+            A = :( view($A, $(ijcolon...)) ) # TODO nolazy?
+        else
+            A = :( TensorCast.rview($A, $(ijcolon...)) )
+        end
+        ijk = filter(!isconstant, ijk)              # remove actual constants from list,
+        ijk = map(i -> isrange(i) ? :(:) : i, ijk)  # but for A[i,3:5] replace with : symbol, for slicing
+    end
+
+    # Slicing operations A[i,:,j], and A[i,3:5] after the above treatment
+    if any(iscolon, ijk)
+        code = Tuple(map(i -> iscolon(i) ? (:) : (*), ijk))
+        if !static && (:collect in call.flags)
+            A = :( TensorCast.slicecopy($A, $code) )
+        elseif !static
+            A = :( TensorCast.sliceview($A, $code) )
+        else
+            sizeorcode = maybestaticsizes(ijk, code)
+            A = :( TensorCast.static_slice($A, $sizeorcode) )
+        end
+        ijk = filter(!iscolon, ijk)
+    elseif static
+        error("shouldn't use curly brackets here")
+    end
+
+    # Nested indices A[i,j,B[k,l,m],n] or worse A[i,B[j,k],C[i,j]]
+    if any(i -> @capture(i, B_[klm__]), ijk)
+        newijk, beecolon = [], [] # for simple case
+        # listB, listijk = [], []
+        for i in ijk
+            if @capture(i, B_[klm__])
+                append!(newijk, klm)
+                push!(beecolon, B)
+                # push!(listijk, klm)
+                # push!(listB, B)
             else
-                newright = :( Base.@__dot__ $newright ) # prettier in @pretty
+                push!(newijk, i)
+                push!(beecolon, (:))
             end
         end
-
-        finalright = outputnew(newright, outUZ, redfun, canonsize, canon, flags, store, where)
-        push!(outex.args, :( $nameZ =  $finalright ) )
-
-        if checkZ != nothing
-            push!(outex.args, checkZ)
-            push!(outex.args, nameZ)
+        if allunique(newijk) # then we are in simple case
+            ijk = newijk
+            A = :( view($A, $(beecolon...)) )
+        else
+            error("can't handle this indexing yet, sorry")
+            # LHS && error("can't do this indexing on LHS sorry")
+            # A = maybepush(A, store, :preget)
+            # target = guesstarget(??)
+            # Bs = [ targetcast(B, target, store, call) for B in listB ]
+            # Aex = getindex.(Ref(A), i)
+            # A = maybepush(Aex, store, :getindex)
         end
     end
 
-    #===== finalise =====#
-
-    if :needsize in flags
-        szcanon = Any[ Symbol(:sz_,i) for i in canon ]
-        pushfirst!(outex.args, :( local ($(szcanon...),) = ($(canonsize...),) ) )
+    # Diagonal extraction A[i,i]
+    if length(ijk)==2 && ijk[1]==ijk[2]
+        if (:nolazy in call.flags) && !LHS # don't do this for in-place output
+            A = :( TensorCast.diag($A) ) # LinearAlgebra really
+        else
+            A = :( TensorCast.diagview($A) )
+        end
+        pop!(ijk)
     end
 
-    if :assert in flags || :(!) in flags || check_options.size
-        for ch in store.checks
-            pushfirst!(outex.args, ch)
+    # Parse the remaining indices; saving of their sizes was done elsewhere:
+    flat, _, reversed, shuffled = indexparse(A, ijk)
+    append!(store.seen, flat)
+
+    # Combined indices A[i,(j,k)]
+    if any(istensor, ijk)
+        flatsize = map(szwrap, flat)
+        A = :( reshape($A, ($(flatsize...),)) )
+        append!(store.need, flat)
+    end
+
+    # Reversed A[-i,j] and shuffled A[i,~j]
+    for i in reversed
+        di = findfirst(isequal(i), flat)
+        if (:nolazy in call.flags) && !LHS
+            A = :( reverse($A, dims=$di) )
+        else
+            A = :( TensorCast.Reverse{$di}($A) )
         end
     end
 
-    for tex in store.topex
-        pushfirst!(outex.args, tex)
+    if length(shuffled) > 0
+        if (:nolazy in call.flags) && !LHS
+            if length(flat) == 1
+                A = :( TensorCast.shuffle(A) )
+            else # sadly shuffle(A, dims=...) doesn't exist!
+                code = Tuple(Any[ i in shuffled ? (*) : (:) for i in flat ])
+                A = :( TensorCast.red_glue(TensorCast.shuffle(
+                    TensorCast.slicecopy($A, $code)),$code) )
+            end
+        else
+            for i in shuffled
+                di = findfirst(isequal(i), flat)
+                A = :( TensorCast.Shuffle{$di}($A) )
+            end
+        end
     end
 
-    if recurse==true # only for @reduce inside something
-        indZ = outUZ[end-1]
-        return outex, indZ
-    end
+    # Construct final expression
+    return :( $A[$(flat...)] )
+end
 
-    if :anonfunc in flags
-        leftex = anoninput(store.rightnames, where)
-        outex = :( $leftex -> $outex )
-        outex.args[2] = MacroTools.unblock(outex.args[2])
-        return esc(outex)
+"""
+    standardglue(expr) -> func(old)[i,j,k]
+
+This gets walked over the RHS and:
+* standardises any simple expression `f(x)[i⊗j,3,k]` by calling `standardise()`,
+* finds anything which needs glueing either directly `A[j,k][i]`,
+  or after broadcasting `(A[j]+B[k])[i]` using `targetcast()` first.
+
+target dims not correctly handled yet -- what do I want? TODO
+Simple glue / stand. does not permutedims, but broadcasting may have to... avoid twice?
+"""
+function standardglue(ex, target, store::NamedTuple, call::CallInfo)
+
+    # The sole target here is indexing expressions:
+    if @capture(ex, A_[inner__])
+        static=false
+    elseif @capture(ex, A_{inner__})
+        static=true
     else
-        outex = MacroTools.unblock(outex) # removes begin end if it can
-        return esc(outex)
+        return ex
+    end
+
+    # Do we have something simeple like M[i,j], no worse than f(x)[i,:,j⊗k,3]?
+    if !containsindexing(A)
+        return standardise(ex, store, call)
+    end
+
+    # Otherwise there are two options, (brodcasting...)[k] or simple B[i,j][k]
+    needcast = !@capture(A, B_[outer__])
+
+    if needcast
+        outer = unique(reduce(vcat, listindices(A)))
+        outer = sort(outer, by = i -> findcheck(i, target, call)) # , " in target list"
+        Bex = targetcast(A, outer, store, call)
+        B = maybepush(Bex, store, :innercast)
+    end
+
+    # Before gluing, deal with any constant inner indices
+    Bsym = gensym(:innerfix)
+    if all(isconstant, inner)
+        B = maybepush(B, store, :preget) # protect any previous operations from @.
+        needview!(inner) # replace _ with 1, if any
+        push!(store.main, :( $Bsym =  @__dot__ getindex($B, $(inner...)) ) )
+        return  :( $Bsym[$(outer...)] ) # actually, no glueing at all to do!
+
+    elseif any(isconstant, inner)
+        B = maybepush(B, store, :preconst)
+        ijcolon = map(i -> isconstant(i) ? i : (:), inner)
+        if needview!(ijcolon)
+            ex = :( $Bsym =  @__dot__ view($B, $(ijcolon...)) ) # TODO nolazy here
+        else
+            ex = :( $Bsym = @__dot__ TensorCast.rview($B, $(ijcolon...)) )
+        end
+        push!(store.main, ex)
+        B = Bsym
+        inner = filter(!isconstant, inner)
+    end
+
+    # And some quick error checks; standsrdise() already put inner into store.seen
+    append!(store.seen, inner)
+    checknorepeats(vcat(inner, outer), call,
+        " in gluing " * string(:([$(outer...)])) * string(:([$(inner...)])))
+
+    # Now we glue, always in A[k,l][i,j] -> B[i,j,k,l] order to start with:
+    ijk = vcat(inner, outer)
+    code = Tuple(Any[ i in inner ? (:) : (*) for i in ijk ])
+
+    if static
+        AB = :( TensorCast.static_glue($B) )
+        pop!(call.flags, :collected, :ok)
+    elseif :glue in call.flags
+        # allow maximum freedom? TODO
+        code, ijk = gluereorder(code, ijk, target)
+
+        AB = :( TensorCast.copy_glue($B, $code) )
+    elseif :cat in call.flags
+        AB = :( TensorCast.cat_glue($B, $code) )
+        push!(call.flags, :collected)
+    elseif :lazy in call.flags
+        AB = :( TensorCast.lazy_glue($B, $code) )
+        pop!(call.flags, :collected, :ok)
+    else
+        # allow a little freedom?
+        if code == (*,:) && ijk == reverse(target)
+            code = (:,*)
+            ijk = target
+        end
+
+        AB = :( TensorCast.red_glue($B, $code) )
+        push!(call.flags, :collected)
+    end
+
+    return :( $AB[$(ijk...)] )
+end
+
+"""
+    targetcast(A[i] + B[j], [i,j]) -> @__dot__(A + B')
+    targetcast(A[j,i], [i,j]) -> transpose(A)
+
+This beings the expression to have target indices,
+by permutedims and if necessary broadcasting, always using `readycast()`.
+"""
+function targetcast(ex, target, store::NamedTuple, call::CallInfo)
+
+    # If just one naked expression, then we won't broadcast:
+    if @capture(ex, A_[ijk__])
+        containsindexing(A) && error("that should have been dealt with")
+        return readycast(ex, target, store, call)
+    end
+
+    # But for anything more complicated, we do:
+    ex = MacroTools.prewalk(x -> readycast(x, target, store, call), ex)
+    if :lazy in call.flags
+        ex = :( TensorCast.lazy($ex) )
+        pop!(call.flags, :collected, :ok)
+    else
+        push!(call.flags, :collected)
+    end
+    if :strided in call.flags
+        ex = Broadcast.__dot__(ex) # @strided does not work on @.
+        ex = :( Strided.@strided $ex )
+    else
+        ex = :( @__dot__($ex) )
+    end
+    return ex
+
+end
+
+"""
+    readycast(A[j,i], [i,j,k]) -> transpose(A)
+    readycast(A[k], [i,j,k]) -> orient(A, (*,*,:))
+
+This is walked over the expression to prepare for `@__dot__` etc, by `targetcast()`.
+"""
+function readycast(ex, target, store::NamedTuple, call::CallInfo)
+
+    # Scalar functions can be protected entirely from broadcasting:
+    # TODO this means A[i,j] + rand()/10 doesn't work, /(...,10) is a function!
+    if @capture(ex, fun_(arg__) | fun_(arg__).field_ ) && !containsindexing(fun) &&
+            length(arg)>0 && !any(containsindexing, arg) # pull out log(2) but not randn()
+        return maybepush(ex, store, :scalarfun)
+    end
+
+    # Some things ought to apply elementwise: conjugation,
+    @capture(ex, A_[ijk__]') && return :( Base.adjoint($A[$(ijk...)]) )
+    # .fields... only one deep for now,
+    @capture(ex, A_[ijk__].field_ ) &&
+        return :( getproperty($A[$(ijk...)], $(QuoteNode(field))) )
+    @capture(ex, fun_(arg__).field_ ) && any(containsindexing, arg) &&
+        return :( getproperty($fun($(arg...)), $(QuoteNode(field))) )
+    # tuple creation... now including namedtuples
+    @capture(ex, (args__,) ) && any(containsindexing, args) &&
+        if any(a -> @capture(a, sym_ = val_), args)
+            syms, vals = [], []
+            map(args) do a
+                @capture(a, sym_ = val_ ) || throw(MacroError("invalid named tuple element $a", call))
+                push!(syms, QuoteNode(sym))
+                push!(vals, val)
+            end
+            return :( NamedTuple{($(syms...),)}(tuple($(vals...))) )
+        else
+            return :( tuple($(args...)) )
+        end
+    # and arrays of functions, using apply:
+    @capture(ex, funs_[ijk__](args__) ) &&
+        return :( TensorCast.apply($funs[$(ijk...)], $(args...) ) ) # Core._apply?
+
+    # Apart from those, readycast acts only on lone tensors:
+    @capture(ex, A_[ijk__]) || return ex
+
+    dims = Int[ findcheck(i, target, call, " on the left") for i in ijk ]
+
+    # Do we need permutedims, or equvalent?
+    perm = sortperm(dims)
+    if perm != 1:length(dims)
+        tupleperm = Tuple(perm)
+        if :strided in call.flags
+            A = :( Strided.@strided permutedims($A, $tupleperm) )
+        elseif :nolazy in call.flags
+            A = :( permutedims($A, $tupleperm) )
+            push!(call.flags, :collected)
+        elseif tupleperm == (2,1)
+            A = :( TensorCast.PermuteDims($A) )
+        else
+            A = :( PermutedDimsArray($A, $tupleperm) )
+            pop!(call.flags, :collected, :ok)
+        end
+    end
+
+    # Do we need orient()?
+    if length(dims)>0 && maximum(dims) != length(dims)
+        code = Tuple(Any[ d in dims ? (:) : (*) for d=1:maximum(dims) ])
+        A = :( TensorCast.orient($A, $code) )
+    end
+    # Those two steps are what might be replaced with TransmuteDims
+
+    # Does A need protecting from @__dot__?
+    A = maybepush(A, store, :nobroadcast)
+
+    return A
+end
+
+"""
+    matmultarget(A[i,j] * B[j,k], [i,k]) -> A * B
+
+For inplace, instead it returns tuple `(A,B)`, which `inplaceoutput()` can use.
+If there are more than two factors, it recurses, and you get `(A*B) * C`,
+or perhaps tuple `(A*B, C)`.
+"""
+function matmultarget(ex, target, parsed, store::NamedTuple, call::CallInfo)
+
+    @capture(ex, A_ * B_ * C__ | *(A_, B_, C__) ) || error("can't @matmul that!")
+
+    # Figure out what to sum over, and make A,B into matrices ready for *
+    iA = guesstarget(A)
+    iB = guesstarget(B)
+
+    isum = sort(intersect(iA, iB, parsed.reduced),
+        by = i -> findfirst(isequal(i), target)) # or target? parsed.reduced
+    iAnosum = setdiff(iA, isum)
+    iBnosum = setdiff(iB, isum)
+
+    Aex = targetcast(A, vcat(iAnosum, isum), store, call)
+    Bex = targetcast(B, vcat(isum, iBnosum), store, call)
+
+    Aex = matrixshape(Aex, iAnosum, isum, store, call)
+    Bex = matrixshape(Bex, isum, iBnosum, store, call)
+
+    Aex = maybepush(Aex, store, :mulA)
+    Bex = maybepush(Bex, store, :mulB)
+
+    # But don't actually * if you are going to mul!(Z,A,B) instead later:
+    if (:inplace in call.flags) && length(C)==0
+        return (Aex, Bex, iAnosum, iBnosum)
+    end
+
+    ABex = unmatrixshape(:( $Aex * $Bex ), iAnosum, iBnosum, store, call)
+    ABsym = gensym(:matmul)
+    push!(store.main, :( local $ABsym = $ABex ))
+    ABind = :( $ABsym[$(iAnosum...), $(iBnosum...)] )
+
+    if length(C) == 0
+        # Last step for Z := A * B case is reshape & permutedims etc:
+        subtarget = setdiff(target, isum)
+        return targetcast(ABind, subtarget, store, call)
+
+    else
+        # But if we have (A*B) * C then continue, whether in- or out-of-place:
+        ABCex = :( *($ABind, $(C...)) )
+        return matmultarget(ABCex, target, parsed, store, call)
     end
 end
 
+"""
+    recursemacro(@reduce sum(i) A[i,j]) -> G[j]
 
-#="""
-    canon, outUZ, nameZ, checkZ = readleft(left, redind, flags, store, icheck, where)
+Walked over RHS to look for `@reduce ...`, and replace with result,
+pushing calculation steps into store.
 
-outUZ = (redUind, negV, codeW, sizeX, getY, numY, indZ, sizeZ)
-are things passed to output construction.
-"""=#
-function readleft(left, redind, flags, store, icheck, where)
+Also a convenient place to tidy all indices, including e.g. `fun(M[:,j],N[j]).same[i']`.
+"""
+function recursemacro(ex, store::NamedTuple, call::CallInfo)
 
-    if @capture(left, Z_[outer__][inner__]) ||  @capture(left, [outer__][inner__])
-        push!(flags, :slice)
-    elseif @capture(left, Z_[outer__]{inner__}) || @capture(left, [outer__]{inner__})
-        push!(flags, :staticslice)
-    elseif @capture(left, Z_[outer__]) || @capture(left, [outer__])
-        inner = []
-    elseif left==nothing
-        @assert :scalar in flags
-        inner = []
-        outer = []
-        Z = nothing
+    # Actually look for recursion
+    if @capture(ex, @reduce(subex__) )
+        subcall = CallInfo(call.mod, call.src,
+            TensorCast.unparse("innder @reduce", subex...), Set([:reduce, :recurse]))
+        name, ind, scalar, steps = _macro(subex...; call=subcall, dict=store.dict)
+        append!(store.main, steps)
+        ex = scalar ? :($name) :  :($name[$(ind...)])
+
+    elseif @capture(ex, @matmul(subex__) )
+        subcall = CallInfo(call.mod, call.src,
+            TensorCast.unparse("innder @matmul", subex...), Set([:matmul, :recurse]))
+        name, ind, scalar, steps = _macro(subex...; call=subcall, dict=store.dict)
+        append!(store.main, steps)
+        ex = scalar ? :($name) :  :($name[$(ind...)])
+
+    elseif @capture(ex, @cast(subex__) )
+        subcall = CallInfo(call.mod, call.src,
+            TensorCast.unparse("inner @cast", subex...), Set([:recurse]))
+        name, ind, scalar, steps = _macro(subex...; call=subcall, dict=store.dict)
+        append!(store.main, steps)
+        ex = scalar ? :($name) :  :($name[$(ind...)])
+    end
+
+    # Tidy up indices, A[i,j][k] will be hit on different rounds...
+    if @capture(ex, A_[ijk__])
+        return :( $A[$(tensorprimetidy(ijk)...)] )
+    elseif @capture(ex, A_{ijk__})
+        return :( $A{$(tensorprimetidy(ijk)...)} )
     else
-        throw(MacroError("readleft doesn't know what to do with $left", where))
+        return ex
     end
-
-    if Z == nothing
-        nameZ = gensym(:Z) # no output name
-        if :inplace in flags
-            throw(MacroError("can't write in-place into nowhere!", where))
-        end
-    else
-        nameZ = Z
-    end
-
-    if !(:inplace in flags)
-        Z = nothing # tells parse! not to think about size(Z,...)
-    end
-    flat12, getY, sizeZ, negV = parse!(store, Z, outer, inner; allowranges=true) # true allows A[i]{j:3}
-    redUind, _,_,_ = parse!(store, nothing, [], redind; allowranges=true) # true means sum(i:3) allowed
-
-    if length(flat12)-length(inner) == 2 && flat12[end] == flat12[end-1] # Z[i,i] special case
-        length(getY) == 2 || throw(MacroError("can't fix output index with Diagonal output", where)) # because I'm lazy, this would not be impossible
-        push!(flags, :diagleft)
-        pop!(flat12) # remove index from flat list
-        pop!(getY)
-        pop!(sizeZ)
-    end
-
-    canon = vcat(flat12, redUind) # order here is [inner, outer, reduced]
-
-    checkrepeats(flat12, " on left hand side", where)
-    checkrepeats(canon, " in reduction function", where)
-
-    codeW = repeat(Any[*], length(canon) - length(redUind))
-    codeW[1:length(inner)] .= (:)
-
-    indW = canon[1:length(inner)] # inner without minuses etc
-
-    indX = flat12[length(inner)+1:end] # flattened outer without minuses, also without fixed
-    sizeX = Any[ Symbol(:sz_,i) for i in indX ] # only for in-place
-
-    numY = count(!isequal(:), getY) # the number of fixed indices in output
-
-    if length(getY) - numY != length(sizeX)
-        push!(flags, :backshape) # whether reshaping of view(Z, getY) is needed, only in-place
-    end
-
-    if (length(sizeZ) + numY) != (length(canon) - length(inner) - length(redUind))
-        push!(flags, :outshape) # whether final reshaping is needed, for := case
-    end
-
-    indZ = [] # like indX, but with fixed indices re-inserted, for :named / :axis
-    iz = 1
-    for g in getY
-        if g == (:)
-            push!(indZ, indX[iz])
-            iz += 1
-        else
-            push!(indZ, g)
-        end
-    end
-
-    checkZ = nothing
-    if icheck
-        checknow = check_one(:($nameZ[$(outer...)]), where)
-        if check_options.size
-            checkZ = checknow # check!(...) to be inserted
-        end
-    end
-
-    outUZ = (redUind, negV, codeW, indW, sizeX, getY, numY, indZ, sizeZ)
-    V && @info "readleft" Tuple(canon) outUZ nameZ
-    return canon, outUZ, nameZ, checkZ
 end
 
-#="""
-    walker(outex, x, canon, flags, store, icheck, where)
+"""
+    rightsizes(A[i,j][k])
 
-Called by `MacroTools.prewalk` on RHS, finds tensors & pushes `:( sym = inputex(this) )` into
-`outex.args`, and then replaces them with `sym`.
-"""=#
-function walker(outex, ex, canon, flags, store, icheck, where)
+This saves to `store` the sizes of all input tensors, and their sub-slices if any.
+* Deals with `A[i,j][k]` at once, before seeing `A[i,j]`, hence `prewalk` & destruction.
+* For `fun(x)[i,j]` it saves `sz_i` under name `Symbol(fun(x),"_val")` used later by standardise
+* But for `fun(M[:,j],N[j]).same[i]` it can't save `sz_i` as this isn't calculated yet,
+  however it should not destroy this so that `sz_j` can be got later.
+"""
+function rightsizes(ex, store::NamedTuple, call::CallInfo)
+    :recurse in call.flags && return nothing # outer version took care of this
 
-    # allow @reduce inside RHS, by simply calling the entire macro first
-    if @capture(ex, @reduce(redex__))
-        Rsym = gensym(:R)
-        Rval, Rind = _macro(redex...; reduce=true, where=where, recurse=true)
-
-        # sew the result of that into ... not outex but topex, as may need its size:
-        push!(store.topex, :(local $Rsym = $Rval ) )
-
-        # construct name for resulting tensor, for outer @cast to further process
-        ex =  :( $Rsym[$(Rind...)] )
-
-    elseif @capture(ex, @mul(mulex__))
-        Msym = gensym(:M)
-        Mval, Mind = _mul(mulex...; where=where, recurse=true)
-
-        push!(store.topex, :(local $Msym = $Mval ) )
-
-        ex =  :( $Msym[$(Mind...)] )
+    if @capture(ex, A_[outer__][inner__] | A_[outer__]{inner__} )
+        field = nothing
+    elseif @capture(ex, A_[outer__].field_[inner__] | A_[outer__].field_{inner__} )
+    elseif  @capture(ex, A_[outer__] | A_{outer__} )
+        field = nothing
+    else
+        return ex
     end
 
-    # find any indexed tensor, process it, and replace it
-    if @capture(ex, A_[ij__][kl__] ) || @capture(ex, A_[ij__]{kl__} ) || @capture(ex, A_[ij__] )
+    # Special treatment for  fun(x)[i,j], goldilocks A not just symbol, but no indexing
+    if A isa Symbol || @capture(A, AA_.ff_)
+    elseif !containsindexing(A)
+        A = Symbol(A,"_val") # the exact same symbol is used by standardiser
+    end
 
-        push!(store.rightnames, A) # used for @cast A[i,j] -> B[i\j]
-
-        if isa(A, Symbol) || @capture(A, Astruct_.field_)
-
-        # allow something like mapslices:
-        # @pretty @cast Z[i,j] := fun(X[:,i,:],42)[j] + X[j,i,3] + Y[j]^2
-        elseif @capture(A, f_(B_[i_colons__],rest__) )
-
-            kl == nothing || throw(MacroError("can't nest this deeply: $ex", where))
-
-            # i_colons = vcat(rvec(ii1), rvec(i1), Any[:(:)], rvec(i2), rvec(ii2)) # NB contains the symbol :(:) not the function (:)
-
-            A, ex = slicemap(f, B, i_colons, rest, ij, store)
-
-        # if we have f(x)[i,j] then we should evaluate f just once, e.g.
-        # @pretty @cast A[i]{j:5} |= rand(15)[i\j]
+    # When we can save the sizes, then we destroy so as not to save again:
+    if A isa Symbol || @capture(A, AA_.ff_) && !containsindexing(A)
+        indexparse(A, outer, store, call; save=true)
+        if field==nothing
+            innerparse(:(first($A)), inner, store, call; save=true)
         else
-            Atop = gensym(:A)
-            push!(store.topex, :(local $Atop = $A ) )
-            A = Atop
+            innerparse(:(first($A).$field), inner, store, call; save=true)
         end
-
-        V && @info "walker before inputex" A ex canon store
-
-        Aval = inputex(A, ex, canon, flags, store, icheck, where)
-
-        if isa(Aval, Symbol)
-            ex = Aval
-        else
-            Asym = gensym(:A)
-            push!(outex.args, :(local $Asym = $Aval) )
-            ex =  Asym
-        end
-        V && @info "walker" ex Aval
-
-    # catch A[i,j]' as element-wise conj
-    elseif @capture(ex, arg_')
-        ex = :( Base.conj($arg) )
-
-    # try to protect log(2) etc from @. , but not log(A[i])
-    elseif @capture(ex, f_(x_Symbol) ) || @capture(ex, f_(x_Int) ) || @capture(ex, f_(x_Float64) )
-        fxsym = gensym(:fx)
-        push!(outex.args, :( local $fxsym = $ex ))
-        ex = fxsym
+        return nothing
     end
 
     return ex
 end
 
-#="""
-    slicemap(f, :B, [:i, :(:), :j], rest, kl, store)
+#==================== Various Parsing Functions ====================#
 
-This processes `f(B[i,:mj],rest...)[k,l]`, such as in these:
-```
-@pretty @cast Z[i,j] := fun(X[:,i,:],42)[j] + X[j,i,3] + Y[j]^2
-@pretty @cast Z[i,j\k] := fun(X[:,i\k,:])[j] + Y[k]^2
-```
+"""
+    canon, parsed = castparse(Z[out][inner] := right)
 
-* Note that `f(X[i,:], Y[i,:])` is not allowed (yet).
+For `@cast`, this digests the LHS.
+`parsed.outer` is the indices exactly as given, `parsed.flat` cleans up,
+and `canon` prepends inner indices too.
+"""
+function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
+    Z = gensym(:left)
 
-* `g(X[i,:,_])` should work, but notices _ after map,
-and thus `g(X[i,:,3])` will evaluate g on many slices which aren't required.
+    # Do we make a new array? With or without collecting:
+    if @capture(ex, left_ := right_ )
+    elseif @capture(ex, left_ == right_ )
+        @warn "using == no longer does anything" call.string maxlog=1 _id=hash(call.string)
+    elseif @capture(ex, left_ |= right_ )
+        push!(call.flags, :collect)
 
-These could be fixed by upgrading this function -- TODO maybe?
-"""=#
-function slicemap(f, B, i_colons, rest, kl, store)
+    # Do we write into an exising array? Possibly updating it:
+    elseif @capture(ex, left_ = right_ )
+        push!(call.flags, :inplace)
+    elseif @capture(ex, left_ += right_ )
+        push!(call.flags, :inplace)
+        right = :( $left + $right )
+        reduce && throw(MacroError("can't use += with @reduce", call))
+    elseif @capture(ex, left_ -= right_ )
+        push!(call.flags, :inplace)
+        right = :( $left - ($right) )
+        reduce && throw(MacroError("can't use -= with @reduce", call))
+    elseif @capture(ex, left_ *= right_ )
+        push!(call.flags, :inplace)
+        right = :( $left * ($right) )
+        reduce && throw(MacroError("can't use *= with @reduce", call))
 
-    if isa(B, Symbol) || @capture(B, Bstruct_.field_)
-    else # pull out B = B(x) so that it's evaluated only once
-        Btop = gensym(:B)
-        push!(store.topex, :(local $Btop = $B ) )
-        B = Btop
-    end
-
-    # assertions, and size information for resising etc.
-    Bdims = length(i_colons)
-    str = "expected a $Bdims-tensor $B[" * join(i_colons, ", ") * "]"
-    push!(store.checks, :(TensorCast.@assert_ ndims($B)==$Bdims $str) )
-    for (dout, ind) in enumerate(i_colons)
-        if ind != :(:) && !isconstant(ind)
-            savesize!(store, ind, :( size($B, $dout) ) )
-        end
-    end
-
-    # construct map(f,eachslice(B)) expression
-    Atop = gensym(:slicemap)
-    i_code = map(i -> i==:(:) ? (:) : (*), Tuple(i_colons))
-    if count(isequal(:), i_code) > 0
-        sliceex = :( TensorCast.sliceview($B, $i_code) )
+    # @reduce might not have a LHS, otherwise some errors:
+    elseif @capture(ex, right_ => left_ )
+        throw(MacroError("anonymous functions using => currently not supported", call))
+        # @capture(right, AA_[ii__] | AA_[ii__].ff_ | AA_{ii__} ) ||
+        #     throw(MacroError("anonymous functions => only accept simpler input A[...] => ...", call))
+        # push!(call.flags, :anonfunc) # TODO make the output understand this
+    elseif reduce
+        return (Any[], nothing)
     else
-        sliceex = B
+        error("wtf is $ex")
     end
-    if length(rest) == 0
-        push!(store.topex, :(local $Atop = map($f, $sliceex) ) )
+
+    static = @capture(left, ZZ_{ii__})
+
+    if @capture(left, Z_[outer__][inner__] | [outer__][inner__] | Z_[outer__]{inner__} | [outer__]{inner__} )
+        isnothing(Z) && (:inplace in call.flags) && throw(MacroError("can't write into a nameless tensor", call))
+        Z = isnothing(Z) ? gensym(:output) : Z
+        parsed = indexparse(Z, outer, store, call, save=(:inplace in call.flags))
+        innerflat = innerparse(:(first($Z)), inner, store, call, save=(:inplace in call.flags))
+        canon = vcat(innerflat, parsed.flat)
+        checknorepeats(canon, call, " on the left")
+
+    elseif @capture(left, Z_[outer__] | [outer__] )
+        isnothing(Z) && (:inplace in call.flags) && throw(MacroError("can't write into a nameless tensor", call))
+        Z = isnothing(Z) ? gensym(:output) : Z
+        parsed = indexparse(Z, outer, store, call, save=(:inplace in call.flags))
+        canon = parsed.flat
+        inner, innerflat = [], []
+
+    elseif left isa Symbol # only for @reduce A := sum(i) ...
+        (:reduce in call.flags) || throw(MacroError("@cast really needs an indexing expression on left!", call))
+        (:inplace in call.flags) && throw(MacroError("scalar output needs @reduce Z := ...", call))
+        Z = left
+        push!(call.flags, :scalar)
+        parsed = indexparse(Z, [], store, call) # just to get the right namedtuple
+        canon, outer, inner, innerflat = [], [], [], []
+
     else
-        Xsymb = gensym(:X)
-        push!(store.topex, :(local $Atop = map($Xsymb -> $f($Xsymb, $(rest...)), $sliceex) ) )
+        error("don't know what to do with left = $left")
     end
 
-    # construct ex for inputex later
-    ij = filter(!isequal(:(:)), i_colons)
-    ex = :( $Atop[$(ij...)][$(kl...)] )
-
-    return Atop, ex
+    return canon, (parsed..., name=Z, outer=outer, inner=inner, innerflat=innerflat,
+        static=static, left=left, right=right)
 end
 
-#="""
-    inputex(:A, :( A[i,j][k] ), target, flags, store, icheck, where)
+"""
+    canon, parsed = reduceparse(Z[i,j] := sum(j), right)
 
-Figures out all the steps needed to transform the given tensor to a boring one,
-aligned with the given target, and returns the necessary expression.
-Writes sizes which can be read from `A` into `store`, and necessary reshapes in terms of `sz_i`.
+Similar to `castparse()`, which it uses before adding on what `@reduce` needs.
+Tries to be smart about the order of `canon` in the hope that reduction over `parsed.rdims`
+can be done without `permutedims`.
+"""
+function reduceparse(ex1, ex2, store::NamedTuple, call::CallInfo)
 
-Now `target` need not be `== canon`, since `sz_i` is independent of that.
-
-Now needs explicitly the name of tensor `A`,
-so that when `inex = rand(2,3)[i,j]` this is not evaluated twice.
-"""=#
-function inputex(A, inex, target, flags, store, icheck, where)
-
-    if @capture(inex, Aa_[outer__][inner__])
-        glue = :yes
-    elseif @capture(inex, Aa_[outer__]{inner__})
-        glue = :static
-    elseif @capture(inex, Aa_[outer__])
-        inner = []
-        glue = :no
-    else error("inputex should not have been called")
+    # Parse the LHS if there is one, else only @reduce sum(i,j) A[i,j]
+    leftcanon, parsed = castparse(ex1, store, call; reduce=true)
+    if parsed==nothing
+        @capture(ex1, redfun_(redlist__))
+        push!(call.flags, :scalar)
+        parsed = (indexparse(nothing, [])..., name=gensym(:noleft), outer=[], inner=[], static=false)
+    else
+        @capture(parsed.right, redfun_(redlist__) ) || error("how do I reduce over $(parsed.right) ?")
     end
 
-    flatE, getB, _, negF = parse!(store, A, outer, inner)
-
-    append!(store.seen, flatE)
-
-    ex = A
-    if icheck
-        ex = check_one(:($A[$(outer...)]), where)           # @check!
+    # Then parse redlist, decoding ranges like sum(i:10,j) which specify sizes
+    reduced = []
+    for item in tensorprimetidy(redlist) # normalise θ'
+        i = @capture(item, j_:s_) ? saveonesize(j, s, store) : item
+        push!(reduced, i)
     end
+    checknorepeats(reduced, call, " in the reduction") # catches sum(i,i) B[i,j,k]
 
-    numB = count(!isequal(:), getB)
-    if numB > 0                                             # A[_,i]
-        if numB == length(getB) || :nolazy in flags
-            needview!(getB) # replace _ with 1 if any
-            ex = :( $ex[$(getB...)] )
-        elseif needview!(getB) # then at least one index fixed and not _
-            ex = :(view($ex, $(getB...) ))
+    # Now work out canonical list. For sum!(), reduced indices must come last.
+    if :inplace in call.flags
+        canon = vcat(leftcanon, reduced)
+    else
+        # But for Z = sum(A, dims=...) can try to avoid permutedims, not sure it matters.
+        guess = guesstarget(ex2) # TODO make guess smarter, use leftcanon as a target
+        # @show guess reduced
+        [ deleteat!(guess, findcheck(i, guess, call, " on the right")) for i in reduced ]
+        if leftcanon == guess
+            canon = guesstarget(ex2)
         else
-            ex = :(TensorCast.rview($ex, $(getB...) )) # really a reshape
+            canon = vcat(leftcanon, reduced)
         end
     end
+    checknorepeats(canon, call, " in the reduction") # catches A[i] := sum(i)
 
-    sizeC = Any[ Symbol(:sz_, i) for i in flatE[length(inner)+1 : end] ]
+    # Finally, record positions in canon of reductions
+    rdims = sort([ findfirst(isequal(i), canon) for i in reduced ])
 
-    if (length(sizeC) + numB) != length(outer)              # A[i\j]
-        sizeCex = :(($(sizeC...) ,))
-        ex = :( reshape($ex, $sizeCex) )
-        push!(flags, :needsize)
-    end
-
-    if length(flatE)-length(inner) == 2 && flatE[end] == flatE[end-1]  # A[i,i] special case
-        if :nolazy in flags
-            ex = :( TensorCast.diag($ex) ) # LinearAlgebra might not be loaded by caller
-            push!(flags, :havecopied)
-        else
-            ex = :( TensorCast.diagview($ex) )
-        end
-        pop!(flatE) # remove repeated index from the end
-    end
-
-    checkrepeats(flatE, " in term $inex", where) # after dealing with diag story
-
-    dirs = [ findcheck(i, target, where) for i in flatE ]
-
-    if glue == :yes                                         # A[i][k]
-        codeD = repeat(Any[*],length(flatE))
-        codeD[1:length(inner)] .= (:)
-
-        if codeD == [:,*] && dirs[1] > dirs[2] # then we can avoid a transpose
-            codeD = [*,:]
-            dirs = [dirs[2], dirs[1]]
-        end
-        # you could perform more elaborate versions of that, e.g. for this:
-        # @pretty @reduce A[i\j,_] = sum(k) B[i,j][k]
-        # however only copy_glue and julienne_glue understand arbitrary codes
-
-        if :lazy in flags || :mustview in flags
-            ex = :( TensorCast.lazy_glue($ex, $(codeD...,))  )
-
-        elseif :cat in flags
-            ex = :( TensorCast.cat_glue($ex, $(codeD...,))  )
-            push!(flags, :havecopied)
-        elseif :glue in flags
-            ex = :( TensorCast.copy_glue($ex, $(codeD...,))  )
-            push!(flags, :havecopied)
-        elseif :julienne in flags
-            ex = :( TensorCast.julienne_glue($ex, $(codeD...,))  )
-            push!(flags, :havecopied)
-        else
-            ex = :( TensorCast.red_glue($ex, $(codeD...,))  )
-            push!(flags, :havecopied)
-        end
-
-    elseif glue == :static                                  # A[i]{k}
-        ex = :( TensorCast.static_glue($ex)  )
-        push!(flags, :staticglue) # for packagecheck
-    end
-
-    perm = ntuple(identity, length(dirs))
-    if dirs != sort(dirs)                                   # A[j,i]
-        perm = Tuple(sortperm(dirs))
-        if :nolazy in flags
-            ex = :( permutedims($ex, $perm) )
-            push!(flags, :havecopied)
-        elseif :strided in flags
-            ex = :( Strided.@strided permutedims($ex, $perm) )
-        elseif perm == (2,1)
-            ex = :( TensorCast.PermuteDims($ex) ) # avoids transpose, except on numbers, because it's recursive
-        else
-            ex = :( PermutedDimsArray($ex, $perm) )
-        end
-        dirs = sort(dirs) # avoids unnecessary orient(PermuteDims(M), (:,:,*))
-    end
-
-    for i in negF                                           # A[-i,j]
-        d = invperm(perm)[findcheck(i, flatE, where)]
-        if :nolazy in flags
-            ex = :( reverse($ex, dims=$d) )
-            push!(flags, :havecopied)
-        else
-            ex = :( TensorCast.Reverse{$d}($ex) )
-        end
-    end
-
-    if length(flatE) != length(target) && dirs != 1:length(dirs) # A[i] + B[j]
-        codeH = repeat(Any[*],length(target))
-        codeH[dirs] .= (:)
-        while codeH[end] == *
-            pop!(codeH)
-        end
-        ex = :( TensorCast.orient($ex, $(codeH...,)) )
-    end
-
-    return ex
+    return canon, (parsed..., redfun=redfun, reduced=reduced, rdims=rdims, right=ex2) # this replaces parsed.right
 end
 
-#="""
-     outputnew(newright, outUZ, redfun, canonsize, canon, flags, store, where)
+"""
+    p = indexparse(A, [i,j,k])
 
-For the case of `:=`, this constructs the expression to do reduction if needed,
-and slicing/reshaping/reversing for LHS.
+`p.flat` strips constants, colons, tensor/brackets, minus, tilde, and doubled indices.
+`p.outsize` is a list like `[sz_i, 1, star(...)]` for use on LHS.
+`p.reversed` has all those with a minus.
+Sizes are saved to `store` only with keyword `save=true`, i.e. only when called by `rightsizes()`
+"""
+function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
+    flat, outsize, reversed, shuffled = [], [], [], []
 
-outUZ = (redUind, negV, codeW, indW, sizeX, getY, numY, indZ, sizeZ)
-"""=#
-function outputnew(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, indZ, sizeZ),
-        redfun, canonsize, canon, flags, store, where)
+    ijk = tensorprimetidy(ijk) # un-wrap i⊗j to tuples, and normalise i' to i′
 
-    ex = newright
+    stripminustilde!(ijk, reversed, shuffled)
 
-    for ri in negV                                          # Z[-i,j]
-        d = findcheck(ri, canon, where)
-        ex = :( reverse($ex, dims=$d) )
-    end
+    for (d,i) in enumerate(ijk)
 
-    if :reduce in flags && :scalar in flags                 # Z = @reduce sum(i) ...
-        ex = :( $redfun($ex) )
-    elseif :reduce in flags                                 # Z[i] := sum(j) ...
-        rdims = Tuple([findcheck(i, canon, where) for i in redUind])
-        if length(rdims)==1
-            rdims = first(rdims)
+        if iscolon(i) || isrange(i)
+            if i isa QuoteNode
+                str = "fixed size in $A[" * join(ijk, ", ") * "]" # DimensionMismatch("fixed size in M[i, \$(QuoteNode(5))]: size(M, 2) == 5") TODO print more nicely
+                push!(store.mustassert, :( TensorCast.@assert_ size($A,$d)==$(i.value) $str) )
+            end
+            continue
         end
-        ex = :( $redfun($ex, dims=$rdims) )
-        if :outshape in flags && !(:slice in flags || :staticslice in flags)
-            # then we need not dropdims, as reshape will handle it
+
+        if isconstant(i)
+            push!(outsize, 1)
+            if i == :_ && save
+                str = "underscore in $A[" * join(ijk, ", ") * "]"
+                push!(store.mustassert, :( TensorCast.@assert_ size($A,$d)==1 $str) )
+            end
+            continue
+        end
+
+        if @capture(i, (ii__,))
+            stripminustilde!(ii, reversed, shuffled)
+            append!(flat, ii)
+            push!(outsize, szwrap(ii))
+            save && saveonesize(ii, :(size($A, $d)), store)
+
+        elseif @capture(i, B_[klm__])
+            innerparse(B, klm, store, call) # called just for error on tensor/colon/constant
+            sub = indexparse(B, klm, store, call; save=save) # I do want to save size(B,1) etc.
+            append!(flat, sub.flat)
+
+        elseif i isa Symbol
+            push!(flat, i)
+            push!(outsize, szwrap(i))
+            save && saveonesize(i, :(size($A, $d)), store)
+
         else
-            ex = :( dropdims($ex, dims=$rdims) )
+            throw(MacroError("don't understand index $i", call))
         end
     end
 
-    if :slice in flags                                      # Z[i][k] :=
-        if :mustcopy in flags # && !(:havecopied in flags) # make |= slightly stronger
-            ex = :( TensorCast.slicecopy($ex, $(codeW...,)) )
-            push!(flags, :havecopied)
-        elseif :julienne in flags
-            ex = :( TensorCast.julienne_slice($ex, $(codeW...,)) )
+    if save && length(ijk)>0
+        N = length(ijk)
+        str = "expected a $N-tensor $A[" * join(ijk, ", ") * "]"
+        push!(store.assert, :( TensorCast.@assert_ ndims($A)==$N $str) )
+    end
+
+    if length(flat)==2 && flat[1]==flat[2] # allow for diag, A[i,i]
+        pop!(flat)
+    end
+
+    checknorepeats(flat, call)
+
+    reversed = filter(i -> isodd(count(isequal(i), reversed)), reversed)
+    shuffled = unique(shuffled)
+
+    return (flat=flat, outsize=outsize, reversed=reversed, shuffled=shuffled)
+end
+
+function stripminustilde!(ijk::Vector, reversed, shuffled)
+    # @show ijk
+    for (d,i) in enumerate(ijk)
+        # if @capture(i, -(j, jj__))
+        #     append!(reversed, vcat(j,jj))
+        #     ijk[d] = :( ($j,$(jj...),) )
+
+        if @capture(i, -j_)
+            push!(reversed, j)
+            ijk[d] = j
+        elseif @capture(i, ~j_)
+            push!(shuffled, j)
+            ijk[d] = j
+        end
+    end
+end
+
+"""
+    innerparse(firstA, [i,j])
+Checks that inner indices are kosher, and returns the list.
+If `save=true` then it now expects expr. `first(A)` to allow `first(A).field` too,
+otherwise it ignores first arg.
+"""
+function innerparse(firstA, ijk, store::NamedTuple, call::CallInfo; save=false)
+    isnothing(ijk) && return []
+
+    ijk = tensorprimetidy(ijk) # only for primes really
+
+    innerflat = []
+    for (d,i) in enumerate(ijk)
+        iscolon(i) && throw(MacroError("can't have a colon in inner index!", call))
+        isrange(i) && @capture(i, alpha_Int:omega_)  && throw(MacroError("can't have a range in inner index!", call)) # this is an imperfect check, must not be triggered by @cast R2[j]{i:3} := M[i,j]  which is another kind of range!
+        istensor(i) && throw(MacroError("can't tensor product inner indices", call))
+        @capture(i, -j_) || @capture(i, ~j_) && throw(MacroError("can't reverse or shuffle along inner indices", call))
+
+        if @capture(i, j_:s_)
+            push!(innerflat, j)
+            saveonesize(j, s, store) # save=true on LHS only for in-place, save this anyway
+        elseif isconstant(i)
+            i == :_ && save && push!(store.mustassert, :(TensorCast.@assert_ size($firstA, $d)==1 "inner underscore") )
         else
-            ex = :( TensorCast.sliceview($ex, $(codeW...,)) )
+            push!(innerflat, i)
         end
-    elseif :staticslice in flags                            # Z[i]{k} :=
-        # codeW worked out already, but sizeWstatic must be done here
-        # TODO sizeinfer!(store, canon, where, false)
-        sizeWstatic = :( StaticArrays.Size($([store.dict[i] for i in indW]...)) )
-        if :outshape in flags
-            ex = :( TensorCast.static_slice($ex, $sizeWstatic, false) )
+        save && saveonesize(i, :(size($firstA, $d)), store)
+    end
+
+    checknorepeats(innerflat, call)
+
+    return innerflat
+end
+
+function optionparse(opt, store::NamedTuple, call::CallInfo)
+    if isnothing(opt)
+        return
+    elseif @capture(opt, (opts__,) )
+        [ optionparse(o, store, call) for o in opts ]
+        return
+    end
+
+    if @capture(opt, i_:s_)
+        saveonesize(tensorprimetidy(i), s, store)
+        push!(call.flags, :assert)
+    elseif opt in (:assert, :lazy, :nolazy, :cat, :strided)
+        push!(call.flags, opt)
+    elseif opt == :(!)
+        @warn "please replace option ! with assert" call.string maxlog=1 _id=hash(call.string)
+        push!(call.flags, :assert)
+    else
+        throw(MacroError("don't understand option $opt", call))
+    end
+end
+
+#==================== Smaller Helper Functions ====================#
+
+"""
+    saveonesize(:i, size(A,3), store) -> :i
+
+Saves sizes for indices `:i` or products like  `[:i,:j]` to `store`.
+It it already has a size for this single index,
+then save an assertion that new size is equal to old.
+"""
+function saveonesize(ind, long, store::NamedTuple)
+    if !haskey(store.dict, ind)
+        store.dict[ind] = long
+    else
+        if isa(ind, Symbol)
+            str = "range of index $ind must agree"
+            push!(store.assert, :(TensorCast.@assert_ $(store.dict[ind]) == $long $str) )
+        end
+    end
+    ind
+end
+
+function findsizes(store::NamedTuple, call::CallInfo)
+    out = []
+    if :assert in call.flags
+        append!(out, store.assert)
+        empty!(store.assert)
+    end
+    if length(store.need) > 0
+        sizes = sizeinfer(store, call)
+        sz_list = map(szwrap, store.need)
+        push!(out, :( local ($(sz_list...),) = ($(sizes...),) ) )
+    end
+    append!(out, store.mustassert) # NB do this after calling sizeinfer()
+    out
+end
+
+function sizeinfer(store::NamedTuple, call::CallInfo)
+    sort!(unique!(store.need))
+    sizes = Any[ (:) for i in store.need ]
+
+    # First pass looks for single indices whose lengths are known directly
+    for pair in store.dict
+        if isa(pair.first, Symbol)
+            d = findfirst(isequal(pair.first), store.need)
+            d != nothing && (sizes[d] = pair.second)
+        end
+    end
+
+    count(isequal(:), sizes) < 2 && return sizes
+
+    # Second pass looks for tuples where exactly one entry has unknown length
+    for pair in store.dict
+        if isa(pair.first, Vector)
+            known = [ haskey(store.dict, j) for j in pair.first ]
+
+            if sum(.!known) == 1 # bingo! now work out its size:
+                num = pair.second
+                denfacts = [ store.dict[i] for i in pair.first[known] ]
+                if length(denfacts) > 1
+                    den = :( *($(denfacts...)) )
+                else
+                    den = :( $(denfacts[1]) )
+                end
+                rat = :( $num ÷ $den )
+
+                i = pair.first[.!known][1]
+
+                d = findfirst(isequal(i), store.need)
+                d != nothing && (sizes[d] = rat)
+
+                str = "inferring range of $i from range of $(join(pair.first, " ⊗ "))"
+                push!(store.mustassert, :( TensorCast.@assert_ rem($num, $den)==0 $str) )
+            end
+        end
+    end
+
+    unknown = store.need[sizes .== (:)]
+    str = join(unknown, ", ")
+    length(unknown) <= 1 || throw(MacroError("unable to infer ranges for indices $str", call))
+
+    return sizes
+end
+
+"""
+    maybestaticsizes([:, :, i], (:,:,*)) -> (:,:,*)
+    maybestaticsizes([:3, :4, i], (:,:,*)) -> Size(3,4)
+Produces the 2nd argument of `static_slice()`, for slicing `A{:3, :4, i}`.
+"""
+function maybestaticsizes(ijk::Vector, code::Tuple)
+    iscodesorted(code) || error("not sorted!")
+    length(ijk) == length(code) || error("wrong length of code!")
+    staticsize = Any[ i.value for i in ijk if i isa QuoteNode ]
+    if length(staticsize) == count(iscolon, ijk)
+        return :( StaticArrays.Size($(staticsize...)) )
+    else
+        return code
+    end
+end
+
+"""
+    maybestaticsizes([:i,:j,:k], (:,:,*), store) -> Size(3,4)
+Produces the 2nd argument of `static_slice()`, using sizes from `store.dict` if available.
+"""
+function maybestaticsizes(ijk::Vector, code::Tuple, store::NamedTuple)
+    iscodesorted(code) || error("not sorted!")
+    length(ijk) == length(code) || error("wrong length of code!")
+    staticsize = []
+    for d=1:countcolons(code)
+        if haskey(store.dict, ijk[d])
+            push!(staticsize, store.dict[ijk[d]])
         else
-            ex = :( TensorCast.static_slice($ex, $sizeWstatic) )
+            return code
+        end
+    end
+    return :( StaticArrays.Size($(staticsize...)) )
+end
+
+"""
+    A = maybepush(ex, store, :name)
+If `ex` is not just a symbol, then it pushes `:(Asym = ex)` into `store.main`
+and returns `Asym`.
+"""
+maybepush(s::Symbol, any...) = s
+function maybepush(ex::Expr, store::NamedTuple, name::Symbol=:A) # TODO make this look for same?
+    Asym = gensym(name)
+    push!(store.main, :( local $Asym = $ex ) )
+    return Asym
+end
+
+tensorprimetidy(v::Vector) = Any[ tensorprimetidy(x) for x in v ]
+function tensorprimetidy(ex)
+    MacroTools.postwalk(ex) do x
+
+        @capture(x, ((ij__,) \ k_) ) && return :( ($(ij...),$k) )
+        @capture(x, i_ \ j_ ) && return :( ($i,$j) )
+
+        @capture(x, ((ij__,) ⊗ k_) ) && return :( ($(ij...),$k) )
+        @capture(x, i_ ⊗ j_ ) && return :( ($i,$j) )
+
+        @capture(x, ((ij__,), k__) ) && return :( ($(ij...),$(k...)) )
+
+        @capture(x, i_') && return Symbol(i,"′")
+        x
+    end
+end
+
+szwrap(i::Symbol) = Symbol(:sz_,i)
+function szwrap(ijk::Vector)
+    length(ijk) == 0 && return nothing
+    length(ijk) == 1 && return szwrap(first(ijk))
+    return :( TensorCast.star($([ Symbol(:sz_,i) for i in ijk ]...)) )
+end
+
+isconstant(n::Int) = true
+isconstant(s::Symbol) = s == :_
+isconstant(ex::Expr) = ex.head == :($)
+isconstant(q::QuoteNode) = false
+
+isindexing(s) = false
+isindexing(ex::Expr) = @capture(x, A_[ijk__])
+
+isCorI(i) = isconstant(i) || isindexing(ii)
+
+isrange(ex::Expr) = @capture(ex, alpha_:omega_) # this may be a terrible idea
+isrange(i) = false
+
+isCorR(i) = isconstant(i) || isrange(i) # ranges are treated a bit like constants!
+
+istensor(n::Int) = false
+istensor(s::Symbol) = false
+function istensor(ex::Expr)
+    @capture(ex, i_' )     && return istensor(i)
+    @capture(ex, -(ij__) ) && return length(ij)>1 # TODO maybe reject -(i,j) ... istensor(:( -i⊗j )) is OK without this line
+    @capture(ex, i_⊗j_ )   && return true
+    @capture(ex, i_\j_ )   && return true
+    @capture(ex, (ij__,) ) && return length(ij)>1
+end
+istensor(::QuoteNode) = false
+
+iscolon(s::Int) = false
+iscolon(s::Symbol) = s == :(:)
+iscolon(ex::Expr) = false
+iscolon(q::QuoteNode) = true
+
+containsindexing(s) = false
+function containsindexing(ex::Expr)
+    flag = false
+    # MacroTools.postwalk(x -> @capture(x, A_[ijk__]) && (flag=true), ex)
+    MacroTools.postwalk(ex) do x
+        # @capture(x, A_[ijk__]) && !(all(isconstant, ijk)) && (flag=true)
+        if @capture(x, A_[ijk__])
+            # @show x ijk # TODO this is a bit broken?  @pretty @cast Z[i,j] := W[i] * exp(X[1][i] - X[2][j])
+            flag=true
+        end
+    end
+    flag
+end
+
+listindices(s::Symbol) = []
+function listindices(ex::Expr)
+    list = []
+    MacroTools.postwalk(ex) do x
+        if @capture(x, A_[ijk__])
+            flat, _ = indexparse(nothing, ijk)
+            push!(list, flat)
+        end
+        x
+    end
+    list
+end
+
+function guesstarget(ex::Expr)
+    list = sort(listindices(ex), by=length, rev=true)
+    shortlist = unique(reduce(vcat, list))
+end
+
+# function overlapsorted(x,y) # works fine but not in use yet
+#     z = intersect(x,y)
+#     length(z) ==0 && return true
+#     xi = map(i -> findfirst(isequal(i),x), z)
+#     yi = map(i -> findfirst(isequal(i),y), z)
+#     return sortperm(xi) == sortperm(yi)
+# end
+
+"""
+    needview!([:, 3, A])   # true, need view(A, :,3,:)
+    needview!([:, :_, :])  # false, can use rview(A, :,1,:)
+
+Mutates the given vector, replacing symbol `:_` with `1`.
+If the vector contains only colons & underscores, then the result is suitable for use
+with `rview`, but if not, we need a real view, so it returns `true`.
+"""
+function needview!(ij::Vector)
+    out = false
+    for k = 1:length(ij)
+        if ij[k] == :_
+            ij[k] = 1
+        elseif ij[k] isa Int || ij[k] isa Symbol
+            out = true
+        elseif ij[k] isa Colon
+            nothing
+        elseif ij[k] isa Expr && ij[k].head == :($)
+            ij[k] = ij[k].args[1]
+            out = true
+        elseif ij[k] isa Expr && @capture(ij[k], alpha_:omega_) # i.e. isrange(ij[k])
+            out = true
+        else
+            error("this should never happen! needview! got ", ij[k])
+        end
+    end
+    out
+end
+
+"""
+    matrixshape(A, [i,j], [k,l]) -> reshape(A, sz_i * sz_j, sz_k * sz_l)
+    matrixshape(A, [], [k,l]) -> reshape(A, 1, sz_k * sz_l) # rowvector * something
+    matrixshape(A, [i,j], []) -> reshape(A, sz_i * sz_j)    # something * vector
+"""
+function matrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call::CallInfo)
+    # Deal with simple matrix, and with empty right of V in M*V
+    length(left) == 1 && length(right) <= 1 && return ex
+    # and empty right because it's M * vec(T)
+    isempty(right) && return :( reshape($ex, :) )
+
+    # Deal with empty left of V in V'*M, or perhaps V=vec(T) first
+    if isempty(left)
+        if length(right) == 1
+            return :( TensorCast.PermuteDims($ex) )
+        else
+            return :( TensorCast.PermuteDims(reshape($ex, :)) )
         end
     end
 
-    if :outshape in flags                                   # Z[i\j, _, k]
-        sizeZex = :(($(sizeZ...) ,))
-        ex = :( reshape($ex, $sizeZex) )
-        push!(flags, :needsize)
-        for n in filter(!isequal(:), getY)
-            n == 1 || n == :_ || throw(MacroError("can't fix output index to $n != 1, when creating a new array", where))
+    # Otherwise we are going to need to reshape
+    left_sz = szwrap(left)
+    right_sz = szwrap(right) # this is the product!
+    append!(store.need, left)
+    append!(store.need, right)
+    return :( reshape($ex, ($left_sz,$right_sz)) )
+end
+
+function unmatrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call::CallInfo)
+    # Easy cases M*M and M*V
+    length(left) == 1 && length(right) <= 1 && return ex
+
+    # For V' * V, did we want a scalar or not? What we will get is unknown to the macro:
+    if length(left) == 0 && length(right) == 0
+        if :scalar in call.flags
+            return :( first($ex) )
+            # If you had arrays of arrays, then PermuteDims would have permutedims-ed, and * would make an array, so this is still OK.
+        else
+            return :( TensorCast.zeroarray($ex) ) # or rvec good enough?
         end
     end
 
-    if :mustcopy in flags                                   # Z[i] |= ...
-        if !(:havecopied in flags) && !(:broadcast in flags)
-            ex = :( collect($ex) )
-        elseif (:slice in flags) && (:strided in flags)     # Z[i][j] |= ... strided
-            ex = :( collect.($ex) ) # because slicecopy actually makes views here
-        elseif (:staticslice in flags) || (:strided in flags) # i.e. then copy even if there was a broadcast etc.
-            ex = :( collect($ex) )
-        end
+    # For V'*M, you may get a Transpose row-vector, for which this is .parent:
+    if length(left) == 0
+        ex = :( TensorCast.rview($ex, 1,:) )
+        length(right) == 1 && return ex # literally V'*M done,
+        # but for V'*T we should reshape this .parent
+    end
 
-    elseif :mustview in flags                               # Z[i] == ...
-        if :havecopied in flags
-            m_error("can't do what you ask without copying, sorry", where)
-        elseif :broadcast in flags
-            m_error("can't broadcast without copying, sorry", where)
+    # For anything more complicated, we will need to reshape:
+    sizes = vcat(map(szwrap, left), map(szwrap, right))
+    append!(store.need, left)
+    append!(store.need, right)
+    return :( reshape($ex, ($(sizes...),)) )
+end
+
+#==================== Nice Errors ====================#
+
+"""
+    @assert_ cond str
+
+Like `@assert`, but prints both the given string and the condition.
+Throws a `DimensionMismatch` error if `cond` is false.
+"""
+macro assert_(ex, str)
+    msg = str * ": " * string(ex)
+    return esc(:($ex || throw(DimensionMismatch($msg))))
+end
+
+# m_error(str::String) = @error str
+# m_error(str::String, call::CallInfo) =
+#     @error str  input=call.str _module=call.mod  _line=call.src.line  _file=string(call.src.file)
+
+struct MacroError <: Exception
+    msg::String
+    call::Union{Nothing, CallInfo}
+    MacroError(msg, call=nothing) = new(msg, call)
+end
+
+wherecalled(call::CallInfo) = "@ " * string(call.mod) * " " * string(call.src.file) * ":" * string(call.src.line)
+
+function Base.showerror(io::IO, err::MacroError)
+    print(io, err.msg)
+    if err.call isa CallInfo
+        printstyled(io, "\n    ", err.call.string; color = :blue)
+        printstyled(io, "\n    ", wherecalled(err.call); color = :normal)
+    end
+end
+
+function checknorepeats(flat, call=nothing, msg=nothing)
+    msg == nothing && (msg = " in " * string(:( [$(flat...)] )))
+    seen = Set{Symbol}()
+    for i in flat
+        (i in seen) ? throw(MacroError("index $i repeated" * msg, call)) : push!(seen, i)
+    end
+end
+
+function checkallseen(canon, store, call)
+    left = setdiff(canon, unique!(store.seen))
+    length(left) > 0 && throw(MacroError("index $(left[1]) appears only on the left", call))
+    right = setdiff(store.seen, canon)
+    length(right) > 0 && throw(MacroError("index $(right[1]) appears only on the right", call))
+end
+
+# this may never be necessary with checkallseen?
+function findcheck(i::Symbol, flat::Vector, call=nothing, msg=nothing)
+    msg == nothing && (msg = " in " * string(:( [$(flat...)] )))
+    res = findfirst(isequal(i), flat)
+    res == nothing ? throw(MacroError("can't find index $i" * msg, call)) : return res
+end
+findcheck(i, flat, call=nothing, msg=nothing) =
+    throw(MacroError("expected a single symol not $i", call))
+
+
+#==================== The Output Functions ====================#
+
+function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
+    isempty(parsed.reversed) || throw(MacroError("can't reverse along indices on LHS right now", call))
+    isempty(parsed.shuffled) || throw(MacroError("can't shuffle along on LHS right now", call))
+    any(iscolon, parsed.outer) && throw(MacroError("can't have colons on the LHS right now", call))
+    any(isrange, parsed.outer) && throw(MacroError("can't have ranges on the LHS right now", call))
+
+    # Is there a reduction?
+    if :reduce in call.flags
+        if :scalar in call.flags
+            ex = :( $(parsed.redfun)($ex) )
+        else
+            dims = length(parsed.rdims)>1 ? Tuple(parsed.rdims) : parsed.rdims[1]
+            ex = :( dropdims($(parsed.redfun)($ex, dims=$dims), dims=$dims) )
+        end
+        canon = deleteat!(copy(canon), sort(parsed.rdims))
+    end
+
+    # Were we asked to slice the output?
+    if length(parsed.inner) != 0
+        code = Tuple(Any[ i in parsed.innerflat ? (:) : (*) for i in canon ])
+        if parsed.static
+            sizeorcode = maybestaticsizes(canon, code, store)
+            ex = :( TensorCast.static_slice($ex, $sizeorcode) )
+        elseif :collect in call.flags
+            ex = :( TensorCast.slicecopy($ex, $code) )
+            push!(call.flags, :collected)
+        else
+            ex = :( TensorCast.sliceview($ex, $code) )
+        end
+        # Now I allow fixing output indices
+        if any(isconstant, parsed.inner)
+            any(i -> isconstant(i) && !(i == :_ || i == 1), parsed.inner) && throw(MacroError("can't fix output index to something other than 1", call))
+            code = Tuple(map(i -> isconstant(i) ? (*) : (:), parsed.inner))
+            Asafe = maybepush(ex, store, :outfix)
+            ex = :(TensorCast.orient.($Asafe, Ref($code)) ) # @. would need a dollar
         end
     end
 
-    if :diagleft in flags                                   # Z[i,i] := ...
-        if :nolazy in flags
+    # Must we collect? Do this now, as reshape(PermutedDimsArray(...)) is awful.
+    if :collect in call.flags && !(:collected in call.flags)
+        ex = :( collect($ex) )
+    end
+
+    # Do we need to reshape the container? Using orient() avoids needing sz_i
+    if any(i -> istensor(i) || isconstant(i), parsed.outer)
+        any(i -> isconstant(i) && !(i == :_ || i == 1), parsed.outer) && throw(MacroError("can't fix output index to $i, only to 1", call))
+        if any(istensor, parsed.outer)
+            ex = :( reshape($ex, ($(parsed.outsize...),)) )
+            append!(store.need, parsed.flat)
+        else
+            code = Tuple(map(i -> isconstant(i) ? (*) : (:), parsed.outer))
+            ex = :( TensorCast.orient($ex, $code) )
+        end
+    end
+
+    # Is the result Diagonal or friends? Doesn't allow Z[i,i,1] or Z[i,-i] but that's OK
+    if length(parsed.outer)==2 && parsed.outer[1]==parsed.outer[2]
+        if :nolazy in call.flags
             ex = :( TensorCast.diagm(0 => $ex) )
         else
             ex = :( TensorCast.Diagonal($ex) )
         end
     end
 
-    if :namedarray in flags                                 # Z[i] := ... named
-        ex = :( TensorCast.namedarray($ex, $(indZ...,) ) )
-    elseif :nameddims in flags || :named in flags
-        ex = :( NamedDims.NamedDimsArray{$(indZ...,)}($ex) )
-    # elseif :axis in flags
-    #     ex = :( TensorCast.axisarray($ex, $(indZ...,) ) )
-    end
-
     return ex
 end
 
-#="""
-    outputinplace(newright, outUZ, redfun, canonsize, canon, flags, store, nameZ, where)
-
-For the case of `=` this figures out how to write RHS into LHS, in one of three ways:
-* reduction `sum!(Z, newright)`
-* broadcasting `@. Z[...] = newright`
-* neither, `copyto!(Z, newright)`
-
-No longer attempts to write `permutedims!(Z, A, ...)`, now just `copyto!(Z, PermutedDimsArray(A, ...))`.
-Doesn't really need so many arguments...
-"""=#
-function outputinplace(newright, (redUind, negV, codeW, indW, sizeX, getY, numY, indZ, sizeZ),
-        redfun, canonsize, canon, flags, store, nameZ, where)
-
-    if :slice in flags
-        throw(MacroError("can't write to sliced arrays in-place, for now", where))
-    end
-    if length(negV) > 0
-        m_error("can't reverse axes of in-place output, try moving -$(negV[1]) to right hand side", where)
+function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
+    if !(parsed.static)
+        isempty(parsed.inner) || throw(MacroError("can't write in-place into slices right now",call))
+        any(iscolon, parsed.outer) && throw(MacroError("can't have colons on the LHS right now",call))
     end
 
-    if :reduce in flags                                     # sum!(revleft, newright)
+    out = []
+    Zsym = gensym(:reverse)
 
-        if :broadcast in flags
-            if :lazy in flags
-                newright = :( Base.@__dot__ TensorCast.lazy($newright) ) # really LazyArrays.lazy
-            elseif :strided in flags
-                dotted = Broadcast.__dot__(newright) # @strided does not work on @.
-                newright = :( Strided.@strided $dotted )
-            else
-                newright = :( Base.@__dot__ $newright ) # prettier in @pretty
-            end
-        end
+    # We can re-use exactly the same "standardise" function as for RHS terms:
+    pop!(call.flags, :nolazy, :ok) # ensure we use diagview(), Reverse{}, etc, not a copy
 
-        # working backwards
-        revleft = nameZ
-
-        if numY > 0
-            if needview!(getY)
-                revleft = :(view($revleft, $(getY...) ))
-            else
-                revleft = :(TensorCast.rview($revleft, $(getY...) )) # really a reshape
-            end
-            push!(flags, :finalres)
-        end
-
-        if :diagleft in flags
-            revleft = :( TensorCast.diagview($revleft) )
-            push!(flags, :finalres)
-        end
-
-        if :backshape in flags
-            sizeXex = :(($(sizeX...) ,))
-            revleft = :( reshape($revleft, $sizeXex) )
-            push!(flags, :needsize)
-            push!(flags, :finalres)
-        end
-
-        if !endswith(string(redfun), '!')
-            redfun = Symbol(redfun, '!')
-        end
-
-        ex = :( $redfun($revleft, $newright) )
-
-    elseif :broadcast in flags                              # @. revleft[...] = newright
-
-        # working backwards
-        revleft = nameZ
-
-        if numY > 0 # when getY has only : and 1, and backshape, then you could skip this
-            if needview!(getY)
-                revleft = :(view($revleft, $(getY...) ))
-            else
-                revleft = :(TensorCast.rview($revleft, $(getY...) )) # really a reshape
-            end
-            push!(flags, :finalres)
-        end
-
-        if :diagleft in flags
-            revleft = :( TensorCast.diagview($revleft) )
-            push!(flags, :finalres)
-        end
-
-        if :backshape in flags
-            sizeXex = :(($(sizeX...) ,))
-            revleft = :( reshape($revleft, $sizeXex) )
-            push!(flags, :needsize)
-            push!(flags, :finalres)
-        end
-
-        if :strided in flags
-            dotted = Broadcast.__dot__(newright)
-            ex = :( Strided.@strided $revleft .= $dotted )
-        else
-            ex = :( $revleft .= Base.@__dot__ $newright ) # don't apply @. to reshape(diagview(Z))
-        end
-
-    else                                                    # copyto!(revleft, newright)
-
-        if :strided in flags
-            newright = :( Strided.@strided $newright )
-        end
-
-        # working backwards
-        revleft = nameZ
-
-        if numY > 0
-            if needview!(getY)
-                revleft = :(view($revleft, $(getY...) ))
-            else
-                revleft = :(TensorCast.rview($revleft, $(getY...) )) # really a reshape
-            end
-            push!(flags, :finalres)
-        end
-
-        if :diagleft in flags
-            revleft = :( TensorCast.diagview($revleft) )
-            push!(flags, :finalres)
-        end
-
-        ex = :( $copyto!($revleft, $newright) )
-
-    end
-
-    return ex
-end
-
-#="""
-    anoninput(store.rightnames)
-
-Given a vector of names captured from `A_[i...]`, returns ex needed for `(A,B) -> ...`
-"""=#
-function anoninput(rightnames, where)
-    for A in rightnames
-        isa(A,Symbol) || throw(MacroError("can't use $A as anonymous function input", where))
-        # TODO make this understand that $B means interpolate not arg
-    end
-    if length(rightnames) == 1
-        return rightnames[1]
+    if @capture(parsed.left, zed_[]) # special case Z[] = ... else allconst pulls it out
+        zed isa Symbol || @capture(zed, ZZ_.field_) || error("wtf")
+        newleft = parsed.left
+        str = "expected a 0-tensor $zed[]"
+        push!(store.mustassert, :( TensorCast.@assert_ ndims($zed)==0 $str) )
     else
-        return :( ($(rightnames...),) )
+        newleft = standardise(parsed.left, store, call)
+        @capture(newleft, zed_[ijk__]) || throw(MacroError("failed to parse LHS correctly, $(parsed.left) -> $newleft"))
+
+        if !(zed isa Symbol) # then standardise did something!
+            push!(call.flags, :showfinal)
+            Zsym = gensym(:reverse)
+            push!(out, :( local $Zsym = $zed ) )
+            zed = Zsym
+        end
     end
+
+    # Now write into that, either sum!(Z,...) or mul!(Z,A,B) or Z .= ..., no copyto!(Z,...)
+    if :reduce in call.flags
+        redfun! = endswith(string(parsed.redfun),'!') ? parsed.redfun : Symbol(parsed.redfun, '!')
+        push!(out, :( $redfun!($zed, $ex) ) )
+    elseif :matmul in call.flags
+        ex isa Tuple || error("wtf?")
+
+        zmul = targetcast(newleft, vcat(ex[3], ex[4]), store, call)
+        zmul = matrixshape(zmul, ex[3], ex[4], store, call)
+        zmul isa Symbol || push!(call.flags, :showfinal)
+        # zed = maybepush(zed, out, :mul!)
+        push!(out, :( TensorCast.mul!($zmul, $(ex[1]), $(ex[2])) ) )
+    else
+        push!(out, :( $zed .= $ex ) )
+    end
+
+    if :showfinal in call.flags
+        push!(out, parsed.name)
+    end
+
+    return out
 end
 
-using LinearAlgebra  # for diag()
-
-function packagecheck(flags, where)
-    where === nothing && return
-    # now check in caller's scope?
-    if :staticslice in flags || :staticglue in flags
-        isdefined(where.mod, :StaticArrays) || m_error("can't use static arrays without using StaticArrays", where)
-    end
-    if :strided in flags
-        isdefined(where.mod, :Strided) || m_error("can't use option strided without using Strided", where)
-    end
-    if :julienne in flags
-        isdefined(where.mod, :JuliennedArrays) || m_error("can't use option julienne without using JuliennedArrays", where)
-    end
-    if :namedarray in flags
-        isdefined(where.mod, :NamedArrays) || m_error("can't use option namedarray without using NamedArrays", where)
-    end
-    if :named in flags || :nameddims in flags
-        isdefined(where.mod, :NamedDims) || m_error("can't use option nameddims without using NamedDims", where)
-    end
-    # if :axis in flags
-    #     isdefined(where.mod, :AxisArrays) || m_error("can't use option axis without using AxisArrays", where)
-    # end
-end
+#==================== The End ====================#
