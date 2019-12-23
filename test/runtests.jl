@@ -4,6 +4,7 @@ using Test
 using LinearAlgebra
 using StaticArrays
 using Einsum
+using Compat
 
 @testset "ex-@shape" begin include("shape.jl") end
 @testset "@reduce" begin include("reduce.jl")  end
