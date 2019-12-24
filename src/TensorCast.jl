@@ -12,7 +12,6 @@ include("string.jl")
 
 include("slice.jl")     # slice, glue, etc
 include("view.jl")      # orient, Reverse{d} etc
-include("recursive.jl") # RecursiveArrayTools
 include("lazy.jl")      # LazyCast
 include("static.jl")    # StaticArrays
 

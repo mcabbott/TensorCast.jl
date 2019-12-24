@@ -43,9 +43,8 @@ But there are other options, controlled by keywords after the expression:
 size(A) == (3, 4) # true
 ```
 
-The option `lazy` uses [RecursiveArrayTools.jl](https://github.com/JuliaDiffEq/RecursiveArrayTools.jl)
-to create a view of the original vectors. This would also be possible with 
-[JuliennedArrays.jl](https://github.com/bramtayl/JuliennedArrays.jl), I may change what gets used later. 
+The option `lazy` uses [LazyStack.jl](https://github.com/mcabbott/LazyStack.jl)
+to create a view of the original vectors. 
 
 Another kind of slices are provided by [StaticArrays.jl](https://github.com/JuliaArrays/StaticArrays.jl),
 in which a Vector of SVectors is just a different interpretation of the same memory as a Matrix. 

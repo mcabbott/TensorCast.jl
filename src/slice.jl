@@ -180,6 +180,19 @@ end
     :( ($(list...),) )
 end
 
+using LazyStack
+
+@inline function lazy_glue(A::AbstractArray{IT,N}, code::Tuple) where {IT,N}
+    gluecodecheck(A, code)
+    if code == (*,:)
+        PermuteDims(stack(A))
+    elseif iscodesorted(code)
+        stack(A)
+    else
+        error("can't glue code = $code with LazyStack")
+    end
+end
+
 using ZygoteRules # TODO add tests?
 
 # Rules moved from SliceView.jl
