@@ -5,7 +5,9 @@ using LinearAlgebra
 using StaticArrays
 using Einsum
 using Compat
-using LoopVectorization
+if VERSION >= v"1.1"
+    using LoopVectorization
+end
 
 @testset "ex-@shape" begin include("shape.jl") end
 @testset "@reduce" begin include("reduce.jl")  end

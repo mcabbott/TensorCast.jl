@@ -264,6 +264,7 @@ end
 
 
 end
+@static if VERSION >= v"1.1"
 @testset "@avx" begin
 
     using LoopVectorization
@@ -274,6 +275,7 @@ end
     @test_broken exp.(A') ≈ @cast B[i,j] := exp(A[j,i]) avx
     @test_broken exp.(A.+1) ≈ @cast B[i,j] := exp(A[i,j]+1) avx
 
+end
 end
 @testset "parse-time errors" begin
 
