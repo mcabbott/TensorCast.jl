@@ -69,6 +69,8 @@ Options can be specified at the end (if several, separated by `,` i.e. `options:
 * `strided` will place `@strided` in front of broadcasting operations,
   and use `@strided permutedims(A, ...)` instead of `PermutedDimsArray(A, ...)`.
   For this you need `using Strided` to load that package.
+* `avx` will place `@avx` in front of broadcasting operations,
+  which needs `using LoopVectorization` to load that package.
 
 To create static slices `D[k]{i,j}` you should give all slice dimensions explicitly.
 You may write `D[k]{i:2,j:2}` to specify `Size(2,2)` slices.
@@ -484,6 +486,8 @@ function targetcast(ex, target, store::NamedTuple, call::CallInfo)
     if :strided in call.flags
         ex = Broadcast.__dot__(ex) # @strided does not work on @.
         ex = :( Strided.@strided $ex )
+    elseif :avx in call.flags
+        ex = :( LoopVectorization.@avx @__dot__($ex) )
     else
         ex = :( @__dot__($ex) )
     end
@@ -964,7 +968,7 @@ function optionparse(opt, store::NamedTuple, call::CallInfo)
     if @capture(opt, i_:s_)
         saveonesize(tensorprimetidy(i), s, store)
         push!(call.flags, :assert)
-    elseif opt in (:assert, :lazy, :nolazy, :cat, :strided)
+    elseif opt in (:assert, :lazy, :nolazy, :cat, :strided, :avx)
         push!(call.flags, opt)
     elseif opt == :(!)
         @warn "please replace option ! with assert" call.string maxlog=1 _id=hash(call.string)

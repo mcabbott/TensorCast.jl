@@ -262,6 +262,18 @@ end
     @cast B[i,j] := getindex(A[i], (2:3)[j])
     @test B == getindex.(A, (2:3)')
 
+
+end
+@testset "@avx" begin
+
+    using LoopVectorization
+
+    A = rand(4,5)
+    @test exp.(A) ≈ @cast B[i,j] := exp(A[i,j]) avx
+
+    @test_broken exp.(A') ≈ @cast B[i,j] := exp(A[j,i]) avx
+    @test_broken exp.(A.+1) ≈ @cast B[i,j] := exp(A[i,j]+1) avx
+
 end
 @testset "parse-time errors" begin
 
