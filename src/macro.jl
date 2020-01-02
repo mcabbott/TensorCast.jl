@@ -274,12 +274,12 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
         elseif !static
             A = :( TensorCast.sliceview($A, $code) )
         else
-            sizeorcode = maybestaticsizes(ijk, code)
+            sizeorcode = maybestaticsizes(ijk, code, call)
             A = :( TensorCast.static_slice($A, $sizeorcode) )
         end
         ijk = filter(!iscolon, ijk)
     elseif static
-        error("shouldn't use curly brackets here")
+        throw(MacroError("shouldn't use curly brackets here", call))
     end
 
     # Nested indices A[i,j,B[k,l,m],n] or worse A[i,B[j,k],C[i,j]]
@@ -574,7 +574,7 @@ or perhaps tuple `(A*B, C)`.
 """
 function matmultarget(ex, target, parsed, store::NamedTuple, call::CallInfo)
 
-    @capture(ex, A_ * B_ * C__ | *(A_, B_, C__) ) || error("can't @matmul that!")
+    @capture(ex, A_ * B_ * C__ | *(A_, B_, C__) ) || throw(MacroError("can't @matmul that!", call))
 
     # Figure out what to sum over, and make A,B into matrices ready for *
     iA = guesstarget(A)
@@ -773,7 +773,7 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
         canon, outer, inner, innerflat = [], [], [], []
 
     else
-        error("don't know what to do with left = $left")
+        throw(MacroError("don't know what to do with left = $left", call))
     end
 
     return canon, (parsed..., name=Z, outer=outer, inner=inner, innerflat=innerflat,
@@ -796,7 +796,7 @@ function reduceparse(ex1, ex2, store::NamedTuple, call::CallInfo)
         push!(call.flags, :scalar)
         parsed = (indexparse(nothing, [])..., name=gensym(:noleft), outer=[], inner=[], static=false)
     else
-        @capture(parsed.right, redfun_(redlist__) ) || error("how do I reduce over $(parsed.right) ?")
+        @capture(parsed.right, redfun_(redlist__) ) || throw(MacroError("how do I reduce over $(parsed.right) ?", call))
     end
 
     # Then parse redlist, decoding ranges like sum(i:10,j) which specify sizes
@@ -1062,8 +1062,9 @@ end
     maybestaticsizes([:3, :4, i], (:,:,*)) -> Size(3,4)
 Produces the 2nd argument of `static_slice()`, for slicing `A{:3, :4, i}`.
 """
-function maybestaticsizes(ijk::Vector, code::Tuple)
-    iscodesorted(code) || error("not sorted!")
+function maybestaticsizes(ijk::Vector, code::Tuple, call::CallInfo)
+    iscodesorted(code) || throw(MacroError("static slices need all colons to the left, " *
+            "got {$(pretty(ijk))} hence code = $(pretty(code))", call))
     length(ijk) == length(code) || error("wrong length of code!")
     staticsize = Any[ i.value for i in ijk if i isa QuoteNode ]
     if length(staticsize) == count(iscolon, ijk)
@@ -1077,8 +1078,9 @@ end
     maybestaticsizes([:i,:j,:k], (:,:,*), store) -> Size(3,4)
 Produces the 2nd argument of `static_slice()`, using sizes from `store.dict` if available.
 """
-function maybestaticsizes(ijk::Vector, code::Tuple, store::NamedTuple)
-    iscodesorted(code) || error("not sorted!")
+function maybestaticsizes(ijk::Vector, code::Tuple, store::NamedTuple, call::CallInfo)
+    iscodesorted(code) || throw(MacroError("static slices need all colons to the left, " *
+            "got {$(pretty(ijk))} hence code = $(pretty(code))", call))
     length(ijk) == length(code) || error("wrong length of code!")
     staticsize = []
     for d=1:countcolons(code)
@@ -1364,7 +1366,7 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
     if length(parsed.inner) != 0
         code = Tuple(Any[ i in parsed.innerflat ? (:) : (*) for i in canon ])
         if parsed.static
-            sizeorcode = maybestaticsizes(canon, code, store)
+            sizeorcode = maybestaticsizes(canon, code, store, call)
             ex = :( TensorCast.static_slice($ex, $sizeorcode) )
         elseif :collect in call.flags
             ex = :( TensorCast.slicecopy($ex, $code) )
