@@ -272,7 +272,7 @@ end
     A = rand(4,5)
     @test exp.(A) ≈ @cast B[i,j] := exp(A[i,j]) avx
 
-    @test_broken exp.(A') ≈ @cast B[i,j] := exp(A[j,i]) avx
+    @test exp.(A') ≈ @cast B[i,j] := exp(A[j,i]) avx
     @test_broken exp.(A.+1) ≈ @cast B[i,j] := exp(A[i,j]+1) avx
 
 end
