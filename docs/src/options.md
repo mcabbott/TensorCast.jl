@@ -38,7 +38,7 @@ But there are other options, controlled by keywords after the expression:
 ```julia
 @cast A[i,k] := S[k][i]             # A = reduce(hcat, B)
 @cast A[i,k] := S[k][i]  cat        # A = hcat(B...); often slow
-@cast A[i,k] := S[k][i]  lazy       # A = VectorOfArrays(B)
+@cast A[i,k] := S[k][i]  lazy       # A = LazyStack.stack(B)
 
 size(A) == (3, 4) # true
 ```

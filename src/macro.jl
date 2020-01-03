@@ -41,7 +41,7 @@ Understands the following things:
 
 The left and right hand sides must have all the same indices,
 and the only repeated index allowed is `M[i,i]`, which is a diagonal not a trace.
-See `@reduce` and `@mul` for related macros which can sum over things.
+See `@reduce` and `@matmul` for related macros which can sum over things.
 
 If a function of one or more tensors appears on the right hand side,
 then this represents a broadcasting operation,
@@ -63,7 +63,7 @@ Options can be specified at the end (if several, separated by `,` i.e. `options:
 * `assert` will turn on explicit dimension checks of the input.
   (Providing any ranges will also turn these on.)
 * `cat` will glue slices by things like `hcat(A...)` instead of the default `reduce(hcat, A)`,
-  and `lazy` will instead make a `VectorOfArrays` container.
+  and `lazy` will instead make a `LazyStack.Stacked` container.
 * `nolazy` disables `PermutedDimsArray` and `Reverse` in favour of `permutedims` and `reverse`,
   and `Diagonal` in favour of `diagm` for `Z[i,i]` output.
 * `strided` will place `@strided` in front of broadcasting operations,
