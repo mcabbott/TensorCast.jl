@@ -4,7 +4,7 @@ module TensorCast
 export @cast, @reduce, @matmul, @pretty
 
 using MacroTools, StaticArrays, Compat
-using LinearAlgebra, Random
+using LinearAlgebra, Random, GPUArrays
 
 include("macro.jl")
 include("pretty.jl")
