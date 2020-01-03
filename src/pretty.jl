@@ -43,6 +43,8 @@ end
 function pretty(str::String)
     str = replace(str, r"\n(\s+\n)" => "\n")      # remove empty lines
 
+    str = replace(str, r"\w+\.var\"(@\w+)\"" => s"\1")   # Julia 1.3, deal with e.g. Strided.var"@strided"
+
     str = replace(str, r"\w+\.(\w+)\(" => s"\1(") # remove module names on functions
     str = replace(str, r"\w+\.(\w+)!\(" => s"\1!(")
     str = replace(str, r"\w+\.(@\w+)" => s"\1")   # and on macros

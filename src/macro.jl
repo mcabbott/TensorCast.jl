@@ -1072,7 +1072,7 @@ function maybestaticsizes(ijk::Vector, code::Tuple, call::CallInfo)
     length(ijk) == length(code) || error("wrong length of code!")
     staticsize = Any[ i.value for i in ijk if i isa QuoteNode ]
     if length(staticsize) == count(iscolon, ijk)
-        return :( StaticArrays.Size($(staticsize...)) )
+        return :( TensorCast.Size($(staticsize...)) ) # really StaticArrays.
     else
         return code
     end
@@ -1094,7 +1094,7 @@ function maybestaticsizes(ijk::Vector, code::Tuple, store::NamedTuple, call::Cal
             return code
         end
     end
-    return :( StaticArrays.Size($(staticsize...)) )
+    return :( TensorCast.Size($(staticsize...)) )
 end
 
 """
