@@ -1271,7 +1271,7 @@ function unmatrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call:
             return :( first($ex) )
             # If you had arrays of arrays, then PermuteDims would have permutedims-ed, and * would make an array, so this is still OK.
         else
-            return :( TensorCast.zeroarray($ex) ) # or rvec good enough?
+            return :( Base.fill($ex) ) # zero-dim array
         end
     end
 
@@ -1390,6 +1390,7 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
     # Must we collect? Do this now, as reshape(PermutedDimsArray(...)) is awful.
     if :collect in call.flags && !(:collected in call.flags)
         ex = :( collect($ex) )
+        # ex = :( identity.($ex) )
     end
 
     # Do we need to reshape the container? Using orient() avoids needing sz_i

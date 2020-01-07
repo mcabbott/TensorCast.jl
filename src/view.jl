@@ -115,17 +115,6 @@ rvec(x::Number) = [x]
 rvec(A) = LinearAlgebra.vec(A)
 
 """
-    zeroarray(x)
-
-Like `[x]` but with one less dimension.
-"""
-function zeroarray(x::T) where T
-    out = Array{T,0}(undef)
-    out[] = x
-    out
-end
-
-"""
     mul!(Z,A,B)
 
 Exactly `LinearAlgebra.mul!` except that it can write into a zero-array.
