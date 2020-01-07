@@ -123,13 +123,6 @@ mul!(Z,A,B) = LinearAlgebra.mul!(Z,A,B)
 mul!(Z::AbstractArray{T,0}, A,B) where {T} = copyto!(Z, A * B)
 
 """
-    apply(f,x...) = f(x...)
-
-For broadcasting a list of functions.
-"""
-apply(f,x...) = f(x...)
-
-"""
     star(x,y,...)
 
 Like `*` but intended for multiplying sizes, and understands that `:` is a wildcard.

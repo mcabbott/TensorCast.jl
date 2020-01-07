@@ -532,7 +532,7 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
         end
     # and arrays of functions, using apply:
     @capture(ex, funs_[ijk__](args__) ) &&
-        return :( TensorCast.apply($funs[$(ijk...)], $(args...) ) ) # Core._apply?
+        return :( Core._apply($funs[$(ijk...)], $(args...) ) )
 
     # Apart from those, readycast acts only on lone tensors:
     @capture(ex, A_[ijk__]) || return ex
