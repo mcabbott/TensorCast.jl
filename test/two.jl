@@ -172,6 +172,9 @@ end
     @reduce U[] = sum(i,j) B[j,i]/2 # inplace
     @test U[] ≈ sum(B)/2
 
+    @cast V[] := 2 * T[]
+    @test_broken V isa Array{Float64,0}
+
 end
 @testset "tupple broadcasting" begin
 
@@ -262,6 +265,9 @@ end
     @cast B[i,j] := getindex(A[i], (2:3)[j])
     @test B == getindex.(A, (2:3)')
 
+    @cast C[i,j] |= mat[j,i] # now identity.() not collect()
+    C[2,1] = 99
+    @test mat[1,2] != 99
 
 end
 @static if VERSION >= v"1.1"
