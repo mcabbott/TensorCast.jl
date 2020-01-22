@@ -11,14 +11,16 @@ diagview(A::LinearAlgebra.Diagonal) = A.diag
 """
     B = orient(A, code)
 
-Reshapes `A` such that its nontrivial axes lie in the directions where `code` contains a `:`,
+Usually this calls `_orient(A, code)`, which reshapes `A` such that its
+nontrivial axes lie in the directions where `code` contains a `:`,
 by inserting axes on which `size(B, d) == 1` as needed.
-Throws an error if `ndims(A) != length(code)`.
 
 When acting on `A::Transpose`, `A::PermutedDimsArray` etc, it will `collect(A)` first,
 because reshaping these is very slow.
 """
-@generated function orient(A::AbstractArray, code::Tuple)
+orient(A::AbstractArray, code::Tuple) = _orient(A::AbstractArray, code::Tuple)
+
+@generated function _orient(A::AbstractArray, code::Tuple)
     list = []
     pretty = [] # just for error
     d = 1
@@ -64,6 +66,23 @@ orient(A::LazyRowVec, ::Tuple{Colon,typeof(*),Colon}) = orient(A.parent, (*,*,:)
 orient(A::LazyRowVec, ::Tuple{typeof(*),typeof(*),Colon,Colon}) = orient(A.parent, (*,*,*,:))
 orient(A::LazyRowVec, ::Tuple{typeof(*),Colon,typeof(*),Colon}) = orient(A.parent, (*,*,*,:))
 orient(A::LazyRowVec, ::Tuple{Colon,typeof(*),typeof(*),Colon}) = orient(A.parent, (*,*,*,:))
+
+using OffsetArrays
+# reshaping causes offsets to be forgotten, https://github.com/mcabbott/TensorCast.jl/issues/11
+# so explicitly copy them around:
+@generated function _orient(A::OffsetArray, code::Tuple)
+    off = []
+    d = 1
+    for s in code.parameters
+        if s == Colon
+            push!(off, :( A.offsets[$d] ))
+            d += 1
+        else
+            push!(off, 0)
+        end
+    end
+    :( OffsetArray(_orient(parent(A), code), ($(off...),)) )
+end
 
 """
     rview(A, :,1,:) ≈ (@assert size(A,2)==1; view(A, :,1,:))
