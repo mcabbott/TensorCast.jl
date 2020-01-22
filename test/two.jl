@@ -283,6 +283,23 @@ end
 
 end
 end
+@testset "OffsetArrays" begin
+
+    # https://github.com/mcabbott/TensorCast.jl/issues/11
+    A = OffsetArray(rand(3, 3, 5, 5), 1:3, 1:3, -2:2, -2:2);
+    # A = OffsetArray(rand(3, 3, 5, 5), 1:3, 11:13, -2:2, -2:2);
+    B = OffsetArray(rand(3,    5)   , 1:3,        -2:2)
+    δ1 = I(3)
+    # δ1 = OffsetArray(I(3), 11:13, 11:13)
+    δ2 = OffsetArray(I(5), -2:2, -2:2)
+    Ap, Bp, δ1p, δ2p = parent(A), parent(B), δ1, parent(δ2);
+    # Ap, Bp, δ1p, δ2p = parent(A), parent(B), parent(δ1), parent(δ2);
+
+    @cast Cp[a, b, c, d] := Ap[a, b, c, d] + Bp[a, c] * δ1p[a, b] * δ2p[c, d]
+    @cast C[ a, b, c, d] := A[ a, b, c, d] + B[ a, c] * δ1[ a, b] * δ2[ c, d]
+    @test C.parent == Cp
+
+end
 @testset "parse-time errors" begin
 
     using TensorCast: MacroError, _macro, CallInfo

@@ -3,6 +3,7 @@ using TensorCast
 using Test
 using LinearAlgebra
 using StaticArrays
+using OffsetArrays
 using Einsum
 using Compat
 if VERSION >= v"1.1"
