@@ -289,9 +289,9 @@ end
     A = OffsetArray(rand(3, 3, 5, 5), 1:3, 1:3, -2:2, -2:2);
     # A = OffsetArray(rand(3, 3, 5, 5), 1:3, 11:13, -2:2, -2:2);
     B = OffsetArray(rand(3,    5)   , 1:3,        -2:2)
-    δ1 = I(3)
-    # δ1 = OffsetArray(I(3), 11:13, 11:13)
-    δ2 = OffsetArray(I(5), -2:2, -2:2)
+    δ1 = Matrix(I,3,3)
+    # δ1 = OffsetArray(Matrix(I,3,3), 11:13, 11:13)
+    δ2 = OffsetArray(Matrix(I,5,5), -2:2, -2:2)
     Ap, Bp, δ1p, δ2p = parent(A), parent(B), δ1, parent(δ2);
     # Ap, Bp, δ1p, δ2p = parent(A), parent(B), parent(δ1), parent(δ2);
 
