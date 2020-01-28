@@ -1,9 +1,10 @@
 
 # TensorCast.jl
 
-[![](https://img.shields.io/badge/docs-stable-blue.svg)](https://pkg.julialang.org/docs/TensorCast/)
+[![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://pkg.julialang.org/docs/TensorCast/)
 [![Latest Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://mcabbott.github.io/TensorCast.jl/dev)
 [![Build Status](https://travis-ci.org/mcabbott/TensorCast.jl.svg?branch=master)](https://travis-ci.org/mcabbott/TensorCast.jl)
+[![PkgEval](https://juliaci.github.io/NanosoldierReports/pkgeval_badges/T/TensorCast.svg)](https://juliaci.github.io/NanosoldierReports/pkgeval_badges/report.html)
 
 This package lets you write expressions involving many-dimensional arrays in index notation, 
 by defining a few macros. The first is `@cast`, which deals both with "casting" into new shapes 
@@ -107,7 +108,7 @@ and [docs/speed.ipynb](docs/speed.ipynb) explaining what's fast and what's slow.
 
 ## What's new
 
-Version 0.2 has substantially re-worked logic. Maybe new bugs too.
+Version 0.2 has substantially re-worked logic. (Maybe new bugs too.)
 
 Added:
 
@@ -143,10 +144,16 @@ Added:
 * Zygote gradient definitions for slicing/glueing from [SliceMap.jl](https://github.com/mcabbott/SliceMap.jl)
   have moved here. Thus mapslices-like operations `@cast A[i,j] := f(B[:,j])[i]` should be differentiable.
 
+* Option `@cast A[i] := exp(B[i]) avx` inserts the `@avx` macro 
+  from [LoopVectorization.jl](https://github.com/chriselrod/LoopVectorization.jl).
+
 Removed:
 
 * `@mul` replaced by `@matmul`, which for now requires you to explicitly write what 
-  indices are summed. And no longer supports a batch index, sorry.
+  indices are summed. 
+
+* This no longer does batched matrix multiplication, `@mul Z[i,k,b] := A[i,j,b] * C[j,k,b]`.
+  However [OMEinsum](https://github.com/under-Peter/OMEinsum.jl) now supports this operation.
 
 * The proofreading / named-tensor functions of `@check!`, `@cast!` etc. will move to
   another package.
