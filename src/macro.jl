@@ -616,6 +616,7 @@ function matmultarget(ex, target, parsed, store::NamedTuple, call::CallInfo)
 
     else
         # But if we have (A*B) * C then continue, whether in- or out-of-place:
+        @warn "@matmul has bugs in how it handles more than two factors" call.string maxlog=1 _id=hash(call.string)
         ABCex = :( *($ABind, $(C...)) )
         return matmultarget(ABCex, target, parsed, store, call)
     end
