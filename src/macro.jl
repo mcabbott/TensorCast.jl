@@ -1017,6 +1017,8 @@ function findsizes(store::NamedTuple, call::CallInfo)
 end
 
 function sizeinfer(store::NamedTuple, call::CallInfo)
+    allowedcolons = :strided in call.flags ? 0 : 1
+
     sort!(unique!(store.need))
     sizes = Any[ (:) for i in store.need ]
 
@@ -1028,7 +1030,7 @@ function sizeinfer(store::NamedTuple, call::CallInfo)
         end
     end
 
-    count(isequal(:), sizes) < 2 && return sizes
+    count(isequal(:), sizes) <= allowedcolons && return sizes
 
     # Second pass looks for tuples where exactly one entry has unknown length
     for pair in store.dict
@@ -1058,7 +1060,7 @@ function sizeinfer(store::NamedTuple, call::CallInfo)
 
     unknown = store.need[sizes .== (:)]
     str = join(unknown, ", ")
-    length(unknown) <= 1 || throw(MacroError("unable to infer ranges for indices $str", call))
+    length(unknown) <= allowedcolons || throw(MacroError("unable to infer ranges for indices $str", call))
 
     return sizes
 end
@@ -1366,6 +1368,9 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         else
             dims = length(parsed.rdims)>1 ? Tuple(parsed.rdims) : parsed.rdims[1]
             ex = :( dropdims($(parsed.redfun)($ex, dims=$dims), dims=$dims) )
+            if :strided in call.flags
+                pop!(call.flags, :collected, :ok) # dropdims makes reshape(stridedview(...
+            end
         end
         canon = deleteat!(copy(canon), sort(parsed.rdims))
     end
@@ -1393,7 +1398,6 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
 
     # Must we collect? Do this now, as reshape(PermutedDimsArray(...)) is awful.
     if :collect in call.flags && !(:collected in call.flags)
-        # ex = :( collect($ex) )
         ex = :( identity.($ex) )
     end
 

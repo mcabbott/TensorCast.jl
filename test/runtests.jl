@@ -5,6 +5,7 @@ using LinearAlgebra
 using StaticArrays
 using OffsetArrays
 using Einsum
+using Strided
 using Compat
 if VERSION >= v"1.1"
     using LoopVectorization

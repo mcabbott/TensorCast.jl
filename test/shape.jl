@@ -205,7 +205,7 @@ end
     @cast g[(y,e),(b,c),x] := bcde[b,c,(x,y),e] x:1;
     @test size(g) == (20, 6, 1)
     @cast bcde2[b,c,(x,y),e] = g[(y,e),(b,c),x];
-    @test all(bcde2 .== bcde) # fails when using Strided, why? WTF?
+    @test all(bcde2 .== bcde)
 
 end
 @testset "combined" begin

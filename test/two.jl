@@ -300,6 +300,31 @@ end
     @test C.parent == Cp
 
 end
+@testset "Strided" begin
+
+    bcde = rand(2,3,4,5);
+    bcde2 = similar(bcde);
+
+    @cast oo[d,e,b,c] |= bcde[b,c,d,e] strided;
+    @test size(oo) == (4,5,2,3)
+    @test oo[1,3,1,3] == bcde[1,3,1,3]
+
+    oo[1] = 99
+    @test bcde[1] != 99 # copy not a view
+
+    @cast g[(y,e),(b,c),x] := bcde[b,c,(x,y),e]  x:1, strided;
+    @test size(g) == (20, 6, 1)
+    @cast bcde2[b,c,(x,y),e] = g[(y,e),(b,c),x]  strided;
+    @test all(bcde2 .== bcde) # used to say "fails when using Strided"
+
+    # https://github.com/mcabbott/TensorCast.jl/issues/2
+    A = rand(3,3); B = rand(3,5);
+    @reduce C[i, j] := sum(l) A[i, l] * B[l, j] strided
+    @test C ≈ A * B
+    @reduce D[i, j] |= sum(l) A[i, l] * B[l, j] strided
+    @test D isa Array
+
+end
 @testset "parse-time errors" begin
 
     using TensorCast: MacroError, _macro, CallInfo
