@@ -873,7 +873,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
             stripminustilde!(ii, reversed, shuffled)
             append!(flat, ii)
             push!(outsize, szwrap(ii))
-            save && saveonesize(ii, :(size($A, $d)), store)
+            save && saveonesize(ii, :(size($A, $d)), store, A)
 
         elseif @capture(i, B_[klm__])
             innerparse(B, klm, store, call) # called just for error on tensor/colon/constant
@@ -883,7 +883,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
         elseif i isa Symbol
             push!(flat, i)
             push!(outsize, szwrap(i))
-            save && saveonesize(i, :(size($A, $d)), store)
+            save && saveonesize(i, :(size($A, $d)), store, A)
 
         else
             throw(MacroError("don't understand index $i", call))
@@ -951,7 +951,7 @@ function innerparse(firstA, ijk, store::NamedTuple, call::CallInfo; save=false)
         else
             push!(innerflat, i)
         end
-        save && saveonesize(i, :(size($firstA, $d)), store)
+        save && saveonesize(i, :(size($firstA, $d)), store, firstA)
     end
 
     checknorepeats(innerflat, call)
@@ -983,13 +983,15 @@ end
 #==================== Smaller Helper Functions ====================#
 
 """
-    saveonesize(:i, size(A,3), store) -> :i
+    saveonesize(:i, size(A,3), store, A) -> :i
 
 Saves sizes for indices `:i` or products like  `[:i,:j]` to `store`.
 It it already has a size for this single index,
 then save an assertion that new size is equal to old.
+
+Optional to give name :A at the end, used only to check for OffsetArrays.
 """
-function saveonesize(ind, long, store::NamedTuple)
+function saveonesize(ind, long, store::NamedTuple, A=nothing)
     if !haskey(store.dict, ind)
         store.dict[ind] = long
     else
@@ -998,6 +1000,10 @@ function saveonesize(ind, long, store::NamedTuple)
             push!(store.assert, :(TensorCast.@assert_ $(store.dict[ind]) == $long $str) )
         end
     end
+    # if A !== nothing
+        str′ = "array $A can't be an Offsetarray here"
+        push!(store.assert, :(TensorCast.@assert_ !Base.has_offset_axes($A) $str′) )
+    # end
     ind
 end
 
