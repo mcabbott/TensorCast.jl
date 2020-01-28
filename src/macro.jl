@@ -332,6 +332,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
         flatsize = map(szwrap, flat)
         A = :( reshape($A, ($(flatsize...),)) )
         append!(store.need, flat)
+        # push!(store.mustassert, :( TensorCast.@assert_ !(A isa OffsetArray) "can't combine indices of an OffsetArray") ) # ??
     end
 
     # Reversed A[-i,j] and shuffled A[i,~j]
@@ -1258,6 +1259,7 @@ function matrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call::C
     right_sz = szwrap(right) # this is the product!
     append!(store.need, left)
     append!(store.need, right)
+    # push!(call.flags, :reshaped)
     return :( reshape($ex, ($left_sz,$right_sz)) )
 end
 
@@ -1286,6 +1288,7 @@ function unmatrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call:
     sizes = vcat(map(szwrap, left), map(szwrap, right))
     append!(store.need, left)
     append!(store.need, right)
+    # push!(call.flags, :reshaped)
     return :( reshape($ex, ($(sizes...),)) )
 end
 
@@ -1399,6 +1402,7 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         if any(istensor, parsed.outer)
             ex = :( reshape($ex, ($(parsed.outsize...),)) )
             append!(store.need, parsed.flat)
+            # push!(call.flags, :reshaped)
         else
             code = Tuple(map(i -> isconstant(i) ? (*) : (:), parsed.outer))
             ex = :( TensorCast.orient($ex, $code) )
