@@ -97,79 +97,12 @@ You need [Julia](https://julialang.org/downloads/) 1.0 or later:
 ] add TensorCast
 ```
 
-The registered version is 0.1.5, for which you want the 
-[stable](https://pkg.julialang.org/docs/) docs above. 
-Version 0.2.0 from  `] add TensorCast#master` is a re-write with some new features, 
-described below, with [new docs](https://mcabbott.github.io/TensorCast.jl/dev). 
+Version 0.2 has substantially re-worked logic, and [new docs](https://mcabbott.github.io/TensorCast.jl/dev). 
+See [tag page](https://github.com/mcabbott/TensorCast.jl/releases/tag/v0.2.0) for what's changed.
 <!--
 There are also some notebooks: [docs/einops.ipynb](docs/einops.ipynb) explaining with images,
 and [docs/speed.ipynb](docs/speed.ipynb) explaining what's fast and what's slow.
 -->
-
-## What's new
-
-Version 0.2 has substantially re-worked logic. (Maybe new bugs too.)
-
-Added:
-
-* Slicing can be written `A[i,:]`, which allows for generalised mapslices operations, 
-  such as `@cast V[i,k] := real(eigen(T[:,:,k]).values[i])`. This is done by two broadcasting
-  operations, the first of which includes `getproperty(...,:values)` here,
-  the second applies `real(...)`.
-
-* Arrays can be indexed by other arrays, for instance `A[i, B[j,k]]` is the 
-  3-tensor `A[:,B]`, where `eltype(B)==Int`.
-
-* An array of functions can be applied to other arrays, for instance 
-  `@cast A[i,j,k] := F[i](X[j], y, Z[k])`.
-
-* Updating an array can be written `@cast A[i] += f(B[i])` or similarly `*=` or `-=`.
-
-* You can shuffle along a direction by writing `A[i,~j]`, 
-  in addition to reversing with `A[i,-j]`.
-
-* Inner indices can now be fixed, for instance `A[i][3,k]` takes the 3rd row 
-  of each element of `A`, which is a vector of matrices.
-
-* Prime `'` now means `adjoint`, which is complex conjugation when applied to 
-  numbners `A[i,j,k]'`, but conjugate-transpose when applied to matrices `A[:,:,k]'`.
-  Applied to indices, `A[i']` is normalised to the unicode \\prime `A[i′]`.
-
-* Slicing into StaticArrays can be written `A{:,j}`, always the leftmost indices. 
-  The fact that such slices have (say) `Size(3)` can be provided by writing `A{:3, j}`. 
-  This allows static-mapslices operations: `@cast C[i,j] |= fun(A{:3,j}){i}`. 
-
-* Lazy broadcasting `@cast A[i] := f(B[i]) lazy` will return the [BroadcastArray](https://github.com/JuliaArrays/LazyArrays.jl#broadcasting).
-
-* Zygote gradient definitions for slicing/glueing from [SliceMap.jl](https://github.com/mcabbott/SliceMap.jl)
-  have moved here. Thus mapslices-like operations `@cast A[i,j] := f(B[:,j])[i]` should be differentiable.
-
-* Option `@cast A[i] := exp(B[i]) avx` inserts the `@avx` macro 
-  from [LoopVectorization.jl](https://github.com/chriselrod/LoopVectorization.jl).
-
-Removed:
-
-* `@mul` replaced by `@matmul`, which for now requires you to explicitly write what 
-  indices are summed. 
-
-* This no longer does batched matrix multiplication, `@mul Z[i,k,b] := A[i,j,b] * C[j,k,b]`.
-  However [OMEinsum](https://github.com/under-Peter/OMEinsum.jl) now supports this operation.
-
-* The proofreading / named-tensor functions of `@check!`, `@cast!` etc. will move to
-  another package.
-
-* The sign `==` as in `@cast A[i] == B[i]` no longer works. 
-  Using `:=` still returns a view of `B` when it can do so efficiently, 
-  and `|=` still insists on `collect`ing this. 
-
-* Anonymous functions `@cast f(A[i]) => B[i]` are currently don't work, 
-  but may be revived in more limited form.  
-
-* You cannot reverse indices on the left `A[i,-j] := ...` when making a new array `A`.
-
-* Staic slicing `A[j]{i}` no longer requires you to load `StaticArrays`, this removes 
-  all optional dependencies. 
-
 
 ## About
 
