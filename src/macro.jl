@@ -30,12 +30,12 @@ Understands the following things:
 * `g(H[:,k])[i,j]` is a generalised `mapslices`, with `g` mapping columns of `H`
     to matrices, which are glued into a 3-tensor `A[i,j,k]`.
 * `h(I[i], J[j])[k]` expects an `h` which maps two scalars to a vector,
-  which gets broadcasted `h.(I,J')` then glued into to a 3-tensor.
+  which gets broadcasted `h.(I,J')`, then glued to make a 3-tensor.
 * `K[i,j]'` conjugates each element, equivalent to `K'[j,i]` which is the
   conjugate-transpose of the matrix.
 * `M[i,i]` means `diag(M)[i]`, but only for matrices: `N[i,i,k]` is an error.
 * `P[i,i']` is normalised to `P[i,i′]` with unicode \\prime.
-* `R[i,-j,k]` means roughly `reverse(R, dims=2)`, and `Q[i,-j,k]` similar with `shuffle`.
+* `R[i,-j,k]` means roughly `reverse(R, dims=2)`, and `Q[i,~j,k]` similar with `shuffle`.
 * `S[i,T[j,k]]` is the 3-tensor `S[:,T]` created by indexing a matrix `S` with `T`,
   where these integers are `all(1 .<= T .<= size(S,2))`.
 
