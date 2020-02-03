@@ -13,7 +13,7 @@ by defining a few macros. The first is `@cast`, which deals both with "casting" 
 ```julia
 @cast A[row][col] := B[row, col]        # slice a matrix B into its rows, also @cast A[r] := B[r,:]
 
-@cast C[(i,j), (k,ℓ)] := D[i,j,k,ℓ]     # reshape a 4-tensor D to give a matrix
+@cast C[(i,j), (k,ℓ)] := D.x[i,j,k,ℓ]   # reshape a 4-tensor D.x to give a matrix
 
 @cast E[φ,γ] = F[φ]^2 * exp(G[γ])       # broadcast E .= F.^2 .* exp.(G') into existing E
 
@@ -25,7 +25,7 @@ but otherwise understands all the same things. Among such sums is matrix multipl
 which can be performed much more efficiently by using `@matmul` instead:
 
 ```julia
-@reduce K[_,b] := prod(a,c) L[a,b,c]                 # product over dims=(1,3), and drop dims=3
+@reduce K[_,b] := prod(a,c) L.field[a,b,c]           # product over dims=(1,3), and drop dims=3
 
 @reduce S[i] = sum(n) -P[i,n] * log(P[i,n]/Q[n])     # sum!(S, @. -P*log(P/Q')) into exising S
 
@@ -48,7 +48,7 @@ performs Einstein-convention contractions and traces:
 @tensor D[i] := 2 * E[i] + F[i,k,k]         # partial trace of F only, Dᵢ = 2Eᵢ + Σⱼ Fᵢⱼⱼ
 ```
 
-More general contractions are allowed by the new 
+More general contractions are allowed by 
 [OMEinsum.jl](https://github.com/under-Peter/OMEinsum.jl), but only one term:
 ```julia
 @ein W[i,j,k] := X[i,ξ] * Y[j,ξ] * Z[k,ξ]   # star contraction
@@ -76,7 +76,7 @@ This means that they are very generic, and will (mostly) work well
 with small [StaticArrays](https://github.com/JuliaArrays/StaticArrays.jl), 
 with [Flux](https://github.com/FluxML/Flux.jl)'s TrackedArrays, 
 on the GPU via [CuArrays](https://github.com/JuliaGPU/CuArrays.jl),
-and on almost anything else. 
+and on almost anything else. To see what is generated, insert `@pretty` before any command.
 
 These commands are usually what you would write anyway, with zero runtime penalty. 
 However some operations can sometime be very slow -- for instance using `@reduce` for matrix
