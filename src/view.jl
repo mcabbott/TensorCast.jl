@@ -9,6 +9,17 @@ diagview(A::AbstractMatrix) = view(A, diagind(A))
 diagview(A::LinearAlgebra.Diagonal) = A.diag
 
 """
+    storage_type(A)
+
+Return the type of the underlying matrix for PermutedDimsArray, Transpose, etc...,
+(e.g., `CuArray{Float64,2}` or `Array{Float64,1}`).
+"""
+function storage_type(A::AbstractArray)
+    P = parent(A)
+    typeof(A) === typeof(P) ? typeof(A) : storage_type(P)
+end
+
+"""
     B = orient(A, code)
 
 Usually this calls `_orient(A, code)`, which reshapes `A` such that its
@@ -16,7 +27,10 @@ nontrivial axes lie in the directions where `code` contains a `:`,
 by inserting axes on which `size(B, d) == 1` as needed.
 
 When acting on `A::Transpose`, `A::PermutedDimsArray` etc, it will `collect(A)` first,
-because reshaping these is very slow.
+because reshaping these is very slow. However, this is only done when the underlying array
+is a "normal" CPU `Array`, since e.g., for GPU arrays, `collect(A)` copies the array to
+the CPU. Fortunately, the speed penalty for reshaping transposed GPU arrays is lower than
+on the CPU.
 """
 orient(A::AbstractArray, code::Tuple) = _orient(A::AbstractArray, code::Tuple)
 
@@ -48,9 +62,18 @@ V = rand(500);
 # was 0.140318 seconds seconds, now 0.030957 seconds, factor 4
 =#
 
-# performance: avoid reshaping lazy transposes, as this is very slow in broadcasting
+# performance: avoid reshaping lazy transposes (of CPU arrays), as this is very slow in broadcasting
 const LazyPerm = Union{PermutedDimsArray, LinearAlgebra.Transpose, LinearAlgebra.Adjoint}
-orient(A::Union{LazyPerm, SubArray{<:Any,<:Any,<:LazyPerm}}, code::Tuple) = orient(collect(A), code)
+orient(A::Union{LazyPerm, SubArray{<:Any,<:Any,<:LazyPerm}}, code::Tuple) = begin
+    if storage_type(A) <: Array
+        # for "normal" CPU arrays, collect before reshaping
+        _orient(collect(A), code)
+    else
+        # for other storage (e.g., GPU arrays), call the original algorithm with reshape,
+        # since collect copies to CPU. Fortunately, reshape is not slow on GPU
+        _orient(A,code)
+    end
+end
 #=
 A = rand(10,100); B = rand(100,100); C = rand(100,10);
 @time @reduce D[a,d] := sum(b,c) A[a,b] * B[b,c] * C[c,d] lazy;
