@@ -11,16 +11,13 @@ diagview(A::LinearAlgebra.Diagonal) = A.diag
 """
     storage_type(A)
 
-Return the type of the underlying matrix for PermutedDimsArray, Transpose, 
-Adjoint, and SubArray (or any nested combination of them).
+Return the type of the underlying matrix for PermutedDimsArray, Transpose, etc...,
 (e.g., `CuArray{Float64,2}` or `Array{Float64,1}`).
 """
-storage_type(::T) where {T<:AbstractArray} = storage_type(T)
-storage_type(::Type{T}) where {T<:AbstractArray} = T
-storage_type(::Type{<:PermutedDimsArray{T,N,perm,iperm,AA}}) where {T,N,perm,iperm,AA} = storage_type(AA)
-storage_type(::Type{<:LinearAlgebra.Transpose{T,S}}) where {T,S} = storage_type(S)
-storage_type(::Type{<:LinearAlgebra.Adjoint{T,S}}) where {T,S} = storage_type(S)
-storage_type(::Type{<:SubArray{T,N,P}}) where {T,N,P} = storage_type(P)
+function storage_type(A::AbstractArray)
+    P = parent(A)
+    typeof(A) === typeof(P) ? typeof(A) : storage_type(P)
+end
 
 """
     B = orient(A, code)
@@ -30,9 +27,10 @@ nontrivial axes lie in the directions where `code` contains a `:`,
 by inserting axes on which `size(B, d) == 1` as needed.
 
 When acting on `A::Transpose`, `A::PermutedDimsArray` etc, it will `collect(A)` first,
-because reshaping these is very slow. However, this is not done when the underlying array 
-is a GPUArray, since the speed penalty is much lower and `collect(A)` would copy the array
-to the CPU.
+because reshaping these is very slow. However, this is only done when the underlying array
+is a "normal" CPU `Array`, since e.g., for GPU arrays, `collect(A)` copies the array to
+the CPU. Fortunately, the speed penalty for reshaping transposed GPU arrays is lower than
+on the CPU.
 """
 orient(A::AbstractArray, code::Tuple) = _orient(A::AbstractArray, code::Tuple)
 
@@ -64,15 +62,16 @@ V = rand(500);
 # was 0.140318 seconds seconds, now 0.030957 seconds, factor 4
 =#
 
-# performance: avoid reshaping lazy transposes (apart from GPU arrays), as this is very slow in broadcasting
+# performance: avoid reshaping lazy transposes (of CPU arrays), as this is very slow in broadcasting
 const LazyPerm = Union{PermutedDimsArray, LinearAlgebra.Transpose, LinearAlgebra.Adjoint}
 orient(A::Union{LazyPerm, SubArray{<:Any,<:Any,<:LazyPerm}}, code::Tuple) = begin
-    if storage_type(A) <: GPUArray
-        # call the original algorithm with reshape, since collect would copy to CPU
-        # fortunately, this is not slow on GPU
-        invoke(orient,Tuple{AbstractArray,Tuple},A,code)
+    if storage_type(A) <: Array
+        # for "normal" CPU arrays, collect before reshaping
+        _orient(collect(A), code)
     else
-        orient(collect(A), code)
+        # for other storage (e.g., GPU arrays), call the original algorithm with reshape,
+        # since collect copies to CPU. Fortunately, reshape is not slow on GPU
+        _orient(A,code)
     end
 end
 #=
