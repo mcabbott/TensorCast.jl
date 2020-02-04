@@ -941,7 +941,7 @@ function innerparse(firstA, ijk, store::NamedTuple, call::CallInfo; save=false)
         iscolon(i) && throw(MacroError("can't have a colon in inner index!", call))
         isrange(i) && @capture(i, alpha_Int:omega_)  && throw(MacroError("can't have a range in inner index!", call)) # this is an imperfect check, must not be triggered by @cast R2[j]{i:3} := M[i,j]  which is another kind of range!
         istensor(i) && throw(MacroError("can't tensor product inner indices", call))
-        @capture(i, -j_) || @capture(i, ~j_) && throw(MacroError("can't reverse or shuffle along inner indices", call))
+        (@capture(i, -j_) || @capture(i, ~j_)) && throw(MacroError("can't reverse or shuffle along inner indices", call))
 
         if @capture(i, j_:s_)
             push!(innerflat, j)
