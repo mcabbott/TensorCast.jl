@@ -2,27 +2,13 @@ language: julia
 os:
   - linux
   - osx
-  - windows
 julia:
   - 1.0
   - 1.3
   - nightly
-notifications:
-  email: false
-git:
-  depth: 99999999
-
-matrix:
+jobs:
   allow_failures:
   - julia: nightly
-
-after_success:
-  # push coverage results to Coveralls
-  - julia -e 'cd(Pkg.dir("TensorCast")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
-  # push coverage results to Codecov
-  - julia -e 'cd(Pkg.dir("TensorCast")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
-
-jobs:
   include:
     - stage: "Documentation"
       julia: 1.3
@@ -32,3 +18,9 @@ jobs:
                                                Pkg.instantiate()'
         - julia --project=docs/ docs/make.jl
       after_success: skip
+notifications:
+  email: false
+after_success:
+  - julia -e 'using Pkg; Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder()); Coveralls.submit(process_folder())'
+#  - julia -e 'cd(Pkg.dir("TensorCast")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
+#  - julia -e 'cd(Pkg.dir("TensorCast")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
