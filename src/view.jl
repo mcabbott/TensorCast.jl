@@ -18,6 +18,7 @@ function storage_type(A::AbstractArray)
     P = parent(A)
     typeof(A) === typeof(P) ? typeof(A) : storage_type(P)
 end
+storage_type(A) = typeof(A)
 
 """
     B = orient(A, code)
@@ -65,9 +66,10 @@ V = rand(500);
 # performance: avoid reshaping lazy transposes (of CPU arrays), as this is very slow in broadcasting
 const LazyPerm = Union{PermutedDimsArray, LinearAlgebra.Transpose, LinearAlgebra.Adjoint}
 orient(A::Union{LazyPerm, SubArray{<:Any,<:Any,<:LazyPerm}}, code::Tuple) = begin
-    if storage_type(A) <: Array
+    if storage_type(A) <: Union{Array, SArray, Tuple}
         # for "normal" CPU arrays, collect before reshaping
         _orient(collect(A), code)
+        # _orient(identity.(A), code) # alternative
     else
         # for other storage (e.g., GPU arrays), call the original algorithm with reshape,
         # since collect copies to CPU. Fortunately, reshape is not slow on GPU
