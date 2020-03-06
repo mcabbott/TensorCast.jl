@@ -64,6 +64,8 @@ function glue(A::AbstractArray{<:AbstractArray{T,IN},ON}, code::Tuple=defaultcod
     end
 end
 
+glue(A::AbstractArray{<:Tuple,ON}, code::Tuple=defaultcode(1,ON)) where {ON} = copy_glue(A, code)
+
 glue(A::AbstractArray{<:Number,ON}, code::Tuple=defaultcode(0,ON)) where {ON} = A
 
 defaultcode(IN::Int, ON::Int) = ntuple(d-> d<=IN ? (:) : (*), IN+ON)
@@ -113,7 +115,7 @@ end
 @doc @doc(glue)
 function glue!(B::AbstractArray{T,N}, A::AbstractArray{IT,ON}, code::Tuple) where {T,N,IT,ON}
     gluecodecheck(A, code)
-    N == ndims(A) + ndims(first(A))  || throw(DimensionMismatch("wrong size target"))
+    N == _ndims(A) + _ndims(first(A))  || throw(DimensionMismatch("wrong size target"))
     iter = Iterators.product(ntuple(d -> (code[d]==*) ? axes(B,d) : Ref(:), Val(N))...)
     for i in iter
         copyto!(view(B, i...), A[decolonise(i)...] )
@@ -123,8 +125,8 @@ end
 
 function gluecodecheck(A::AbstractArray, code::Tuple)
     colons = countcolons(code)
-    inner = ndims(first(A))
-    outer = ndims(A)
+    inner = _ndims(first(A))
+    outer = _ndims(A)
     colons == inner || throw(DimensionMismatch("wrong number of dimensions: " *
         "ndims(first(A)) == $inner not cannot be glued with code = $(pretty(code))"))
     length(code) - colons == outer || throw(DimensionMismatch("wrong number of dimensions: " *
@@ -179,6 +181,9 @@ end
     end
     :( ($(list...),) )
 end
+
+_ndims(A) = ndims(A)
+_ndims(A::Tuple) = 1
 
 using LazyStack
 
