@@ -9,7 +9,7 @@ end
 
 export @cast, @reduce, @matmul, @pretty
 
-using MacroTools, StaticArrays, Compat
+using MacroTools, StaticArrays, LazyStack, Compat
 using LinearAlgebra, Random
 
 include("macro.jl")

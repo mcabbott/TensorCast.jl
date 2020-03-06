@@ -22,13 +22,6 @@ or call `static_slice(A, sizes, false)` to omit the reshape.
     end
 end
 
-function static_slice(A::AbstractArray{T,N}, code::Tuple, finalshape::Bool=true) where {T,N}
-    N == length(code) ||  throw(ArgumentError("static_glue needs length($(pretty(code))) == ndims(A)"))
-    iscodesorted(code) || throw(ArgumentError("static_glue needs a sorted code, not $(pretty(code))"))
-    sizes = Size(ntuple(d -> size(A,d), countcolons(code))...)
-    static_slice(A, sizes, finalshape)
-end
-
 """
     static_glue(A)
 
@@ -45,16 +38,19 @@ For `MArray` slices, which can't be reinterpreted, this reverts to `red_glue`.
 end
 
 function static_glue(A::AbstractArray{IT}, finalshape=true) where {IT<:MArray}
-    code = defaultcode(ndims(IT), ndims(A))
-    red_glue(A, code)
+    stack(A)
 end
 
-function glue(A::AbstractArray{IT,ON}, code::Tuple) where {IT<:StaticArray,ON}
-    if iscodesorted(code)
-        static_glue(A)
-    elseif code == (*,:)
-        PermuteDims(static_glue(A))
-    else
-        copy_glue(A, code)
+# This is now used only by maybestaticsizes...
+@generated function iscodesorted(code::Tuple) # true if all colons before all stars
+    colons = true
+    sorted = true
+    for s in code.parameters
+        if s != Colon && colons # then we're at transition, change flag
+            colons = false
+        elseif s == Colon && !colons # then a : is following a *
+            sorted = false
+        end
     end
+    sorted
 end
