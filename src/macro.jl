@@ -238,7 +238,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     if @capture(ex, A_{ijk__})
         static=true
         push!(call.flags, :staticslice)
-    elseif @capture(ex, A_[ijk__])
+    elseif @capture_(ex, A_[ijk__])
         static=false
     else
         return ex
@@ -380,7 +380,7 @@ Simple glue / stand. does not permutedims, but broadcasting may have to... avoid
 function standardglue(ex, target, store::NamedTuple, call::CallInfo)
 
     # The sole target here is indexing expressions:
-    if @capture(ex, A_[inner__])
+    if @capture_(ex, A_[inner__])
         static=false
     elseif @capture(ex, A_{inner__})
         static=true
@@ -471,7 +471,7 @@ by permutedims and if necessary broadcasting, always using `readycast()`.
 function targetcast(ex, target, store::NamedTuple, call::CallInfo)
 
     # If just one naked expression, then we won't broadcast:
-    if @capture(ex, A_[ijk__])
+    if @capture_(ex, A_[ijk__])
         containsindexing(A) && error("that should have been dealt with")
         return readycast(ex, target, store, call)
     end
@@ -536,7 +536,7 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
         return :( Core._apply($funs[$(ijk...)], $(args...) ) )
 
     # Apart from those, readycast acts only on lone tensors:
-    @capture(ex, A_[ijk__]) || return ex
+    @capture_(ex, A_[ijk__]) || return ex
 
     dims = Int[ findcheck(i, target, call, " on the left") for i in ijk ]
 
@@ -656,7 +656,7 @@ function recursemacro(ex, store::NamedTuple, call::CallInfo)
     end
 
     # Tidy up indices, A[i,j][k] will be hit on different rounds...
-    if @capture(ex, A_[ijk__])
+    if @capture_(ex, A_[ijk__])
         return :( $A[$(tensorprimetidy(ijk)...)] )
     elseif @capture(ex, A_{ijk__})
         return :( $A{$(tensorprimetidy(ijk)...)} )
@@ -875,7 +875,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
             push!(outsize, szwrap(ii))
             save && saveonesize(ii, :(size($A, $d)), store)
 
-        elseif @capture(i, B_[klm__])
+        elseif @capture_(i, B_[klm__])
             innerparse(B, klm, store, call) # called just for error on tensor/colon/constant
             sub = indexparse(B, klm, store, call; save=save) # I do want to save size(B,1) etc.
             append!(flat, sub.flat)
@@ -1143,7 +1143,7 @@ isconstant(ex::Expr) = ex.head == :($)
 isconstant(q::QuoteNode) = false
 
 isindexing(s) = false
-isindexing(ex::Expr) = @capture(x, A_[ijk__])
+isindexing(ex::Expr) = @capture_(x, A_[ijk__])
 
 isCorI(i) = isconstant(i) || isindexing(ii)
 
@@ -1171,10 +1171,10 @@ iscolon(q::QuoteNode) = true
 containsindexing(s) = false
 function containsindexing(ex::Expr)
     flag = false
-    # MacroTools.postwalk(x -> @capture(x, A_[ijk__]) && (flag=true), ex)
+    # MacroTools.postwalk(x -> @capture_(x, A_[ijk__]) && (flag=true), ex)
     MacroTools.postwalk(ex) do x
-        # @capture(x, A_[ijk__]) && !(all(isconstant, ijk)) && (flag=true)
-        if @capture(x, A_[ijk__])
+        # @capture_(x, A_[ijk__]) && !(all(isconstant, ijk)) && (flag=true)
+        if @capture_(x, A_[ijk__])
             # @show x ijk # TODO this is a bit broken?  @pretty @cast Z[i,j] := W[i] * exp(X[1][i] - X[2][j])
             flag=true
         end
@@ -1186,7 +1186,7 @@ listindices(s::Symbol) = []
 function listindices(ex::Expr)
     list = []
     MacroTools.postwalk(ex) do x
-        if @capture(x, A_[ijk__])
+        if @capture_(x, A_[ijk__])
             flat, _ = indexparse(nothing, ijk)
             push!(list, flat)
         end
@@ -1445,7 +1445,7 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         push!(store.mustassert, :( TensorCast.@assert_ ndims($zed)==0 $str) )
     else
         newleft = standardise(parsed.left, store, call)
-        @capture(newleft, zed_[ijk__]) || throw(MacroError("failed to parse LHS correctly, $(parsed.left) -> $newleft"))
+        @capture_(newleft, zed_[ijk__]) || throw(MacroError("failed to parse LHS correctly, $(parsed.left) -> $newleft"))
 
         if !(zed isa Symbol) # then standardise did something!
             push!(call.flags, :showfinal)
