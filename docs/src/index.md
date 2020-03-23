@@ -3,7 +3,7 @@
 This package lets you write complicated formulae in index notation,
 which are turned into Julia's usual broadcasting, permuting, slicing, and reducing operations. 
 
-Version 0.2 is a re-write, see the [realse notes](https://github.com/mcabbott/TensorCast.jl/releases/tag/v0.2.0) to know what changed from version 0.1.5.
+Version 0.2 is a re-write, see the [release notes](https://github.com/mcabbott/TensorCast.jl/releases/tag/v0.2.0) to know what changed from version 0.1.5.
 
 Source, issues, etc: https://github.com/mcabbott/TensorCast.jl
 
