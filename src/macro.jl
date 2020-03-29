@@ -235,7 +235,7 @@ but also pushes `A = f(x)` into `store.top`.
 """
 function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     # This acts only on single indexing expressions:
-    if @capture(ex, A_{ijk__})
+    if @capture_(ex, A_{ijk__})
         static=true
         push!(call.flags, :staticslice)
     elseif @capture_(ex, A_[ijk__])
@@ -285,11 +285,11 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     end
 
     # Nested indices A[i,j,B[k,l,m],n] or worse A[i,B[j,k],C[i,j]]
-    if any(i -> @capture(i, B_[klm__]), ijk)
+    if any(i -> @capture_(i, B_[klm__]), ijk)
         newijk, beecolon = [], [] # for simple case
         # listB, listijk = [], []
         for i in ijk
-            if @capture(i, B_[klm__])
+            if @capture_(i, B_[klm__])
                 append!(newijk, klm)
                 push!(beecolon, B)
                 # push!(listijk, klm)
@@ -382,7 +382,7 @@ function standardglue(ex, target, store::NamedTuple, call::CallInfo)
     # The sole target here is indexing expressions:
     if @capture_(ex, A_[inner__])
         static=false
-    elseif @capture(ex, A_{inner__})
+    elseif @capture_(ex, A_{inner__})
         static=true
     else
         return ex
@@ -394,7 +394,7 @@ function standardglue(ex, target, store::NamedTuple, call::CallInfo)
     end
 
     # Otherwise there are two options, (brodcasting...)[k] or simple B[i,j][k]
-    needcast = !@capture(A, B_[outer__])
+    needcast = !@capture_(A, B_[outer__])
 
     if needcast
         outer = unique(reduce(vcat, listindices(A)))
@@ -503,6 +503,7 @@ end
 This is walked over the expression to prepare for `@__dot__` etc, by `targetcast()`.
 """
 function readycast(ex, target, store::NamedTuple, call::CallInfo)
+    ex isa Symbol && return ex # quit early?
 
     # Scalar functions can be protected entirely from broadcasting:
     # TODO this means A[i,j] + rand()/10 doesn't work, /(...,10) is a function!
@@ -631,6 +632,7 @@ pushing calculation steps into store.
 Also a convenient place to tidy all indices, including e.g. `fun(M[:,j],N[j]).same[i']`.
 """
 function recursemacro(ex, store::NamedTuple, call::CallInfo)
+    ex isa Symbol && return ex # quit early?
 
     # Actually look for recursion
     if @capture(ex, @reduce(subex__) )
@@ -658,7 +660,7 @@ function recursemacro(ex, store::NamedTuple, call::CallInfo)
     # Tidy up indices, A[i,j][k] will be hit on different rounds...
     if @capture_(ex, A_[ijk__])
         return :( $A[$(tensorprimetidy(ijk)...)] )
-    elseif @capture(ex, A_{ijk__})
+    elseif @capture_(ex, A_{ijk__})
         return :( $A{$(tensorprimetidy(ijk)...)} )
     else
         return ex
@@ -680,7 +682,8 @@ function rightsizes(ex, store::NamedTuple, call::CallInfo)
     if @capture(ex, A_[outer__][inner__] | A_[outer__]{inner__} )
         field = nothing
     elseif @capture(ex, A_[outer__].field_[inner__] | A_[outer__].field_{inner__} )
-    elseif  @capture(ex, A_[outer__] | A_{outer__} )
+    # elseif  @capture(ex, A_[outer__] | A_{outer__} )
+    elseif  @capture_(ex, A_[outer__] ) || @capture_(ex, A_{outer__} )
         field = nothing
     else
         return ex
@@ -753,7 +756,7 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
         error("wtf is $ex")
     end
 
-    static = @capture(left, ZZ_{ii__})
+    static = @capture_(left, ZZ_{ii__})
 
     if @capture(left, Z_[outer__][inner__] | [outer__][inner__] | Z_[outer__]{inner__} | [outer__]{inner__} )
         isnothing(Z) && (:inplace in call.flags) && throw(MacroError("can't write into a nameless tensor", call))
@@ -1116,6 +1119,7 @@ end
 tensorprimetidy(v::Vector) = Any[ tensorprimetidy(x) for x in v ]
 function tensorprimetidy(ex)
     MacroTools.postwalk(ex) do x
+        x isa Symbol && return x # quit early?
 
         @capture(x, ((ij__,) \ k_) ) && return :( ($(ij...),$k) )
         @capture(x, i_ \ j_ ) && return :( ($i,$j) )
