@@ -245,7 +245,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     end
 
     # Ensure that f(x)[i,j] will evaluate once, including in size(A)
-    if A isa Symbol || @capture(A, AA_.ff_) # caller has ensured !containsindexing(A)
+    if A isa Symbol || @capture_(A, AA_.ff_) # caller has ensured !containsindexing(A)
     else
         Asym = Symbol(A,"_val") # exact same symbol is used by rightsizes()
         push!(store.top,  :( local $Asym = $A ) )
@@ -521,10 +521,10 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
         return :( getproperty($fun($(arg...)), $(QuoteNode(field))) )
     # tuple creation... now including namedtuples
     @capture(ex, (args__,) ) && any(containsindexing, args) &&
-        if any(a -> @capture(a, sym_ = val_), args)
+        if any(a -> @capture_(a, sym_ = val_), args)
             syms, vals = [], []
             map(args) do a
-                @capture(a, sym_ = val_ ) || throw(MacroError("invalid named tuple element $a", call))
+                @capture_(a, sym_ = val_ ) || throw(MacroError("invalid named tuple element $a", call))
                 push!(syms, QuoteNode(sym))
                 push!(vals, val)
             end
@@ -690,13 +690,13 @@ function rightsizes(ex, store::NamedTuple, call::CallInfo)
     end
 
     # Special treatment for  fun(x)[i,j], goldilocks A not just symbol, but no indexing
-    if A isa Symbol || @capture(A, AA_.ff_)
+    if A isa Symbol || @capture_(A, AA_.ff_)
     elseif !containsindexing(A)
         A = Symbol(A,"_val") # the exact same symbol is used by standardiser
     end
 
     # When we can save the sizes, then we destroy so as not to save again:
-    if A isa Symbol || @capture(A, AA_.ff_) && !containsindexing(A)
+    if A isa Symbol || @capture_(A, AA_.ff_) && !containsindexing(A)
         indexparse(A, outer, store, call; save=true)
         if field==nothing
             innerparse(:(first($A)), inner, store, call; save=true)
@@ -722,24 +722,24 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
     Z = gensym(:left)
 
     # Do we make a new array? With or without collecting:
-    if @capture(ex, left_ := right_ )
+    if @capture_(ex, left_ := right_ )
     elseif @capture(ex, left_ == right_ )
         @warn "using == no longer does anything" call.string maxlog=1 _id=hash(call.string)
     elseif @capture(ex, left_ |= right_ )
         push!(call.flags, :collect)
 
     # Do we write into an exising array? Possibly updating it:
-    elseif @capture(ex, left_ = right_ )
+    elseif @capture_(ex, left_ = right_ )
         push!(call.flags, :inplace)
-    elseif @capture(ex, left_ += right_ )
+    elseif @capture_(ex, left_ += right_ )
         push!(call.flags, :inplace)
         right = :( $left + $right )
         reduce && throw(MacroError("can't use += with @reduce", call))
-    elseif @capture(ex, left_ -= right_ )
+    elseif @capture_(ex, left_ -= right_ )
         push!(call.flags, :inplace)
         right = :( $left - ($right) )
         reduce && throw(MacroError("can't use -= with @reduce", call))
-    elseif @capture(ex, left_ *= right_ )
+    elseif @capture_(ex, left_ *= right_ )
         push!(call.flags, :inplace)
         right = :( $left * ($right) )
         reduce && throw(MacroError("can't use *= with @reduce", call))
@@ -1443,7 +1443,7 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
     pop!(call.flags, :nolazy, :ok) # ensure we use diagview(), Reverse{}, etc, not a copy
 
     if @capture(parsed.left, zed_[]) # special case Z[] = ... else allconst pulls it out
-        zed isa Symbol || @capture(zed, ZZ_.field_) || error("wtf")
+        zed isa Symbol || @capture_(zed, ZZ_.field_) || error("wtf")
         newleft = parsed.left
         str = "expected a 0-tensor $zed[]"
         push!(store.mustassert, :( TensorCast.@assert_ ndims($zed)==0 $str) )

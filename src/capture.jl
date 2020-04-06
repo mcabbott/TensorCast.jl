@@ -1,83 +1,98 @@
 """
     @capture_(ex, A_[ijk__])
 
-A faster drop-in replacement for `MacroTools.@capture`, for this particular pattern only.
+Faster drop-in replacement for `MacroTools.@capture`, for a few patterns only:
+* `A_[ijk__]` and `A_{ijk__}`
+* `[ijk__]`
+* `A_.field_`
+* `A_ := B_` and  `A_ = B_` and `A_ += B_` etc.
+* `f_(x_)`
 """
 macro capture_(ex, pat::Expr)
 
-    pat.head in [:ref, :curly] &&
-        length(pat.args)==2 &&
-        endswith(string(pat.args[1]), '_') &&
-        endswith(string(pat.args[2]), "__") ||
+    H = QuoteNode(pat.head)
+
+    A,B = if pat.head in [:ref, :curly] && length(pat.args)==2 &&
+        _endswithone(pat.args[1]) && _endswithtwo(pat.args[2]) # :( A_[ijk__] )
+        _symbolone(pat.args[1]), _symboltwo(pat.args[2])
+
+    elseif pat.head == :. &&
+        _endswithone(pat.args[1]) && _endswithone(pat.args[2].value) # :( A_.field_ )
+        _symbolone(pat.args[1]), _symbolone(pat.args[2].value)
+
+    elseif pat.head == :call  && length(pat.args)==2 &&
+        _endswithone(pat.args[1]) && _endswithone(pat.args[2]) # :( f_(x_) )
+        _symbolone(pat.args[1]), _symbolone(pat.args[2])
+
+    elseif pat.head in [:call, :(=), :(:=), :+=, :-=, :*=, :/=] &&
+        _endswithone(pat.args[1]) && _endswithone(pat.args[2]) # :( A_ += B_ )
+        _symbolone(pat.args[1]), _symbolone(pat.args[2])
+
+    elseif pat.head == :vect && _endswithtwo(pat.args[1]) # :( [ijk__] )
+        _symboltwo(pat.args[1]), gensym(:ignore)
+
+    else
         error("@capture_ doesn't work on pattern $pat")
-
-    A = Symbol(string(pat.args[1])[1:end-1])
-    ijk = Symbol(string(pat.args[2])[1:end-2])
-
-    qn = QuoteNode(pat.head)
+    end
 
     @gensym res
     quote
-        $A, $ijk = nothing, nothing
-        # $res = TensorCast._trymatch($ex, Val($qn))
-        $res = _trymatch($ex, Val($qn))
-        if $res == nothing
+        $A, $B = nothing, nothing
+        $res = TensorCast._trymatch($ex, Val($H))
+        # $res = _trymatch($ex, Val($H))
+        if $res === nothing
             false
         else
-            $A, $ijk = $res
+            $A, $B = $res
             true
         end
     end |> esc
 end
 
-_trymatch(s, v) = nothing # s::Symbol
-_trymatch(ex::Expr, ::Val{:ref}) = # A_[ijk__]
-    if ex.head === :ref
+_endswithone(ex) = endswith(string(ex), '_') && !_endswithtwo(ex)
+_endswithtwo(ex) = endswith(string(ex), "__")
+
+_symbolone(ex) = Symbol(string(ex)[1:end-1])
+_symboltwo(ex) = Symbol(string(ex)[1:end-2])
+
+_getvalue(::Val{val}) where {val} = val
+
+_trymatch(s, v) = nothing # Symbol, or other Expr
+_trymatch(ex::Expr, pat::Union{Val{:ref}, Val{:curly}}) = # A_[ijk__] or A_{ijk__}
+    if ex.head === _getvalue(pat)
         ex.args[1], ex.args[2:end]
     else
         nothing
     end
-_trymatch(ex::Expr, ::Val{:curly}) = # A_{ijk__}
-    if ex.head === :curly
-        ex.args[1], ex.args[2:end]
+_trymatch(ex::Expr, ::Val{:.}) = # A_.field_
+    if ex.head === :.
+        ex.args[1], ex.args[2].value
+    else
+        nothing
+    end
+_trymatch(ex::Expr, pat::Val{:call}) =
+    if ex.head === _getvalue(pat) && length(ex.args) == 2
+        ex.args[1], ex.args[2]
+    else
+        nothing
+    end
+_trymatch(ex::Expr, pat::Union{Val{:(=)}, Val{:(:=)}, Val{:(+=)}, Val{:(-=)}, Val{:(*=)}, Val{:(/=)}}) =
+    if ex.head === _getvalue(pat)
+        ex.args[1], ex.args[2]
+    else
+        nothing
+    end
+_trymatch(ex::Expr, ::Val{:vect}) = # [ijk__]
+    if ex.head === :vect
+        ex.args, nothing
     else
         nothing
     end
 
+# Cases for Tullio:
+# @capture(ex, B_[inds__].field_) --> @capture_(ex, Binds_.field_) && @capture_(Binds, B_[inds__])
+# @capture(ex, [inds__])
 
-    # elseif pat.head == :call && pat.args[1] === :|
-    #     length(pat.args)==3 || error("@capture_ doesn't work on pattern $pat") # Or syntax
-    #     for i in 2:3
-    #         pat.args[i].head in [:ref, :curly] &&
-    #             length(pat.args[i].args)==2 &&
-    #             endswith(string(pat.args[i].args[1]), '_') &&
-    #             endswith(string(pat.args[i].args[2]), "__") ||
-    #             error("@capture_ doesn't work on pattern $pat")
-
-    #         A = Symbol(string(pat.args[i].args[1])[1:end-1])
-    #         ijk = Symbol(string(pat.args[i].args[1])[1:end-2])
-    #     end
-    # end
-# _trymatch(ex::Expr, ::Val{:call}) = # A | B
-#     if ex.head === :call && ex.args[1] === :|
-#         ex.args[1], ex.args[2:end]
-#     else
-#         nothing
-#     end
-
-
-#     elseif pat.head === :call && pat.args[1] === :| # Or syntax
-#         left = _trymatch(pat.args[2], ex)
-#         if left !== nothing
-#             return left
-#         else
-#             return right = _trymatch(pat.args[3], ex)
-#         end
-#     end
-#     nothing
-# end
-
-# || pat.head === :curly # Patten is A_[ijk__] or A_{ijk__}
 #=
 
 julia> ex = :(Z[1,2,3])
@@ -129,12 +144,15 @@ f2(ex)
 
 $ time julia -e 'using TensorCast; TensorCast._macro(:(  Z[i,k][j] := fun(A[i,:], B[j])[k] + C[k]^2  ))'
 
-real    0m8.828s  # was 0m9.485s
+real    0m8.132s  # was 0m8.900s on master, noise or signal?
+user    0m7.747s
+sys 0m0.358s
+real    0m8.132s
 user    0m8.295s
 sys 0m0.329s
 
 $ time julia -e 'using TensorCast; @time TensorCast._macro(:(  Z[i,k][j] := fun(A[i,:], B[j])[k] + C[k]^2  ))'
 
-5.194806 seconds
+4.899634 seconds, best run # was 5.845 on master, that's a second?
 
 =#

@@ -356,3 +356,36 @@ end
     # @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:,j]).same[i]  i:99, j:4 # TODO make this check canonical length?
 
 end
+@testset "capture_ macro" begin
+
+    using TensorCast: @capture_
+
+    EXS  = [:(A[i,j,k]),  :(B{i,2,:}),  :(C.dee), :(fun(5)),   :(g := h+i),        :(k[3] += l[4]), :([m,n,0]) ]
+    PATS = [:(A_[ijk__]), :(B_{ind__}), :(C_.d_), :(f_(arg_)), :(left_ := right_), :(a_ += b_),     :([emm__]) ]
+    # @test length(EXS) == length(PATS)
+    @testset "ex = $(EXS[i])" for i in eachindex(EXS)
+        for j in eachindex(PATS)
+            @eval res = @capture_($EXS[$i], $(PATS[j]))
+            if i != j
+                @test res == false
+            else
+                @test res == true
+                if i==1
+                    @test A == :A
+                    @test ijk == [:i, :j, :k]
+                elseif i==3
+                    @test C == :C
+                    @test d == :dee
+                elseif i==5
+                    @test left == :g
+                    @test right == :(h+i)
+                elseif i==7
+                    @test emm == [:m, :n, 0]
+                end
+            end
+        end
+    end
+
+    @test !@capture_( :(f(1,2,3)), f_(x_) )
+
+end
