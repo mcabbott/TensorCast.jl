@@ -1,6 +1,12 @@
 
 module TensorCast
 
+# This speeds up loading a bit... but might slow down functions which act on data:
+# https://github.com/JuliaPlots/Plots.jl/pull/2544/files
+if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@optlevel"))
+    @eval Base.Experimental.@optlevel 1
+end
+
 export @cast, @reduce, @matmul, @pretty
 
 using MacroTools, StaticArrays, Compat
