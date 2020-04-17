@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Reduction · TensorCast</title><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit">TensorCast</span></div><form class="docs-search" action="../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../basics/">Basics</a></li><li class="is-active"><a class="tocitem" href>Reduction</a><ul class="internal"><li><a class="tocitem" href="#Not-just-sum-1"><span>Not just <code>sum</code></span></a></li><li><a class="tocitem" href="#Scalar-output-1"><span>Scalar output</span></a></li><li><a class="tocitem" href="#Recursion-1"><span>Recursion</span></a></li><li><a class="tocitem" href="#Matrix-multiplication-1"><span>Matrix multiplication</span></a></li></ul></li><li><a class="tocitem" href="../options/">Options</a></li><li><a class="tocitem" href="../docstrings/">Docstrings</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Reduction</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Reduction</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/mcabbott/TensorCast.jl/blob/master/docs/src/reduce.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Reductions-1"><a class="docs-heading-anchor" href="#Reductions-1">Reductions</a><a class="docs-heading-anchor-permalink" href="#Reductions-1" title="Permalink"></a></h1><pre><code class="language-julia-repl">julia&gt; using TensorCast
+
+julia&gt; M = collect(reshape(1:12, 3,4));</code></pre><p>This is the basic syntax to sum over one index:</p><pre><code class="language-julia-repl">julia&gt; @reduce S[i] := sum(j) M[i,j] + 1000
+3-element Array{Int64,1}:
+ 4022
+ 4026
+ 4030
+
+julia&gt; @pretty @reduce S[i] := sum(j) M[i,j] + 1000
+begin
+    S = dropdims(sum(@__dot__(M + 1000), dims=2), dims=2)
+end</code></pre><p>Note that:</p><ul><li>You must always specify the index to be summed over. </li><li>The sum applies to the whole right side (including the 1000 here). </li><li>And the summed dimensions are always dropped (unless you explicitly say <code>S[i,_] := ...</code>).</li></ul><h2 id="Not-just-sum-1"><a class="docs-heading-anchor" href="#Not-just-sum-1">Not just <code>sum</code></a><a class="docs-heading-anchor-permalink" href="#Not-just-sum-1" title="Permalink"></a></h2><p>You may use any reduction funciton which understands keyword <code>dims=...</code>, like <code>sum</code> does.  For example:</p><pre><code class="language-julia-repl">julia&gt; using Statistics
+
+julia&gt; @reduce A[j] := mean(i) M[i,j]^2
+4-element Array{Float64,1}:
+   4.666666666666666
+  25.666666666666664
+  64.66666666666666 
+ 121.66666666666666 </code></pre><p>If writing into an existing array, then the function must work like <code>sum!</code> does:</p><pre><code class="language-julia-repl">julia&gt; @pretty @reduce A[j] = mean(i) M[i,j]^2
+begin
+    local pelican = PermuteDims(M)
+    mean!(A, @__dot__(pelican ^ 2))
+end</code></pre><p>Otherwise all the same notation as <code>@cast</code> works.  Here&#39;s a max-pooling trick with combined indices, in which we group the numbers in <code>R</code> into tiplets and keep the maximum of each set – equivalent to the maximum of each column below.  </p><pre><code class="language-julia-repl">julia&gt; R = collect(0:5:149);
+
+julia&gt; @reduce Rmax[_,c] := maximum(r) R[r\c]  r:3
+1×10 LinearAlgebra.Transpose{Int64,Array{Int64,1}}:
+ 10  25  40  55  70  85  100  115  130  145
+
+julia&gt; reshape(R, 3,:)
+3×10 Array{Int64,2}:
+  0  15  30  45  60  75   90  105  120  135
+  5  20  35  50  65  80   95  110  125  140
+ 10  25  40  55  70  85  100  115  130  145</code></pre><p>Here <code>r:3</code> indicates the range of <code>r</code>, implying <code>c ∈ 1:10</code>.  You may also write <code>maximum(r:3) R[r\c]</code>. </p><p>In the same way, this down-samples an image by a factor of 2,  taking the mean of each 2×2 block of pixels, in each colour <code>c</code>:</p><pre><code class="language-julia-repl">julia&gt; @reduce smaller[I,J,c] := mean(i:2, j:2) orig[i\I, j\J, c]</code></pre><h2 id="Scalar-output-1"><a class="docs-heading-anchor" href="#Scalar-output-1">Scalar output</a><a class="docs-heading-anchor-permalink" href="#Scalar-output-1" title="Permalink"></a></h2><p>Here are different ways to write complete reduction:</p><pre><code class="language-julia-repl">julia&gt; @reduce Z := sum(i,j) M[i,j]      # Z = sum(M)
+78
+
+julia&gt; Z = @reduce sum(i,j) M[i,j]
+78
+
+julia&gt; @reduce Z0[] := sum(i,j) M[i,j]   # Z0 = dropdims(sum(M, dims=(1, 2)), dims=(1, 2))
+0-dimensional Array{Int64,0}:
+78
+
+julia&gt; @reduce Z1[_] := sum(i,j) M[i,j]
+1-element Array{Int64,1}:
+ 78</code></pre><h2 id="Recursion-1"><a class="docs-heading-anchor" href="#Recursion-1">Recursion</a><a class="docs-heading-anchor-permalink" href="#Recursion-1" title="Permalink"></a></h2><p>If you want to sum only part of an expression, or have one sum inside another,  then you can place a complete <code>@reduce</code> expression inside <code>@cast</code> or <code>@reduce</code>. There is no need to name the intermediate array, here <code>termite[x]</code>, but you must show its indices:</p><pre><code class="language-julia-repl">julia&gt; @pretty @reduce sum(x,θ) L[x,θ] * p[θ] * log(L[x,θ] / @reduce [x] := sum(θ′) L[x,θ′] * p[θ′])
+begin
+    local pelican = orient(p, (*, :))
+    termite = dropdims(sum(@__dot__(L * pelican), dims=2), dims=2)
+    local caterpillar = orient(p, (*, :))
+    goat = sum(@__dot__(L * caterpillar * log(L / termite)))
+end</code></pre><p>Notice that the inner sum here is a matrix-vector product, so it will be more efficient to  write <code>@matmul [x] := sum(θ&#39;) L[x,θ′] * p[θ′]</code> to call <code>L * p</code> instead of broadcasting. </p><h2 id="Matrix-multiplication-1"><a class="docs-heading-anchor" href="#Matrix-multiplication-1">Matrix multiplication</a><a class="docs-heading-anchor-permalink" href="#Matrix-multiplication-1" title="Permalink"></a></h2><p>It&#39;s possible to multiply matrices using <code>@reduce</code>,  but this is exceptionally inefficient, as it first broadcasts out a 3-tensor  before summing over one index:</p><pre><code class="language-julia-repl">julia&gt; @pretty @reduce R[i,k] := sum(j) M[i,j] * N[j,k]
+begin
+    local pelican = orient(N, (*, :, :))
+    R = dropdims(sum(@__dot__(M * pelican), dims=2), dims=2)
+end</code></pre><p>The macro <code>@matmul</code> has the same syntax, but instead calls <code>A*B</code>. </p><pre><code class="language-julia-repl">julia&gt; A = rand(100,100); B = rand(100,100);
+
+julia&gt; red(A,B) = @reduce R[i,k] := sum(j) A[i,j] * B[j,k];
+
+julia&gt; mul(A,B) = @matmul P[i,k] := sum(j) A[i,j] * B[j,k];
+
+julia&gt; using BenchmarkTools
+
+julia&gt; @btime red($A, $B);
+  1.471 ms (25 allocations: 7.71 MiB)
+
+julia&gt; @btime mul($A, $B);
+  33.489 μs (2 allocations: 78.20 KiB)</code></pre><p>Of course you may just write <code>A * B</code> yourself, but in general <code>@matmul</code> will handle the same  reshaping, transposing, fixed indices, etc. steps as <code>@reduce</code> does.  Once all of that is done, however, the result must be a product like <code>A * B</code> in which the indices being summed over appear on both tensors.  &lt;!– If there are more than two factors, then multiplication proceeds from the left, <code>(A * B) * C</code>.  But that has bugs! –&gt;</p><p>To use the more flexible <code>@reduce</code> in cases like this,  when creating the large intermediate tensor will be expensive, the option <code>lazy</code> which creates a <code>LazyArrays.BroadcastArray</code> instead can help: </p><pre><code class="language-julia-repl">julia&gt; lazyred(A,B) = @reduce R[i,k] := sum(j) A[i,j] * B[j,k]  lazy;
+
+julia&gt; @btime lazyred($A, $B);
+  223.172 μs (26 allocations: 78.95 KiB) </code></pre><p>More details on the next page. </p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../basics/">« Basics</a><a class="docs-footer-nextpage" href="../options/">Options »</a></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Friday 17 April 2020 23:18">Friday 17 April 2020</span>. Using Julia version 1.3.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
