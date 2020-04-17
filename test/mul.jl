@@ -113,7 +113,7 @@ end
     @matmul N2[σ, b\a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
     @test N ≈ N2
 
-    @reduce R[σ, b,a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  # lazy;
+    @reduce R[σ, b,a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  lazy;
     @matmul R2[σ, b,a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
     @test R ≈ R2
     # invperm((4,2,1,3)) == (3, 2, 4, 1)
@@ -125,7 +125,7 @@ end
 
     # ## in-place version
     N3 = similar(N); N4 = similar(N);
-    @reduce N3[σ, b\a, b′\a′] = sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  # lazy;
+    @reduce N3[σ, b\a, b′\a′] = sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  lazy;
     @matmul N4[σ, b\a, b′\a′] = sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
     @test N ≈ N3 ≈ N4
 

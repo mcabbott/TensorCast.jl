@@ -25,14 +25,18 @@ module Fast # shield non-macro code from @optlevel 1
     include("view.jl")      # orient, Reverse{d} etc
     export diagview, orient, rview, mul!, star, PermuteDims, Reverse, Shuffle
 
-    # include("lazy.jl")      # LazyCast # this costs about 3s in my test, 3.8s -> 7.7s
-
     include("static.jl")    # StaticArrays
     export static_slice, static_glue
 
 end
 using .Fast
 const mul! = Fast.mul!
+
+using Requires
+
+@init @require LazyArrays = "5078a376-72f3-5289-bfd5-ec5146d43c02" begin
+    include("lazy.jl")      # LazyCast # this costs about 3s in my test, 3.8s -> 7.7s
+end
 
 include("warm.jl") # worth 2s in my test
 

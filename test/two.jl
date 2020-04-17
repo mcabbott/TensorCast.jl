@@ -229,7 +229,7 @@ end
 
     list = [ i .* ones(2,2,1) for i=1:8 ];
     @cast mat[x\i, y\j] := Int(list[i\j][x,y,1])  i:2
-    @cast mat2[x\i, y\j] := Int(list[i\j][x,y,1])  i:2 # , lazy # crazy type
+    @cast mat2[x\i, y\j] := Int(list[i\j][x,y,1])  i:2, lazy # crazy type
     @test mat[3,5] == 6
     @test mat == mat2
 
