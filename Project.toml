@@ -1,7 +1,7 @@
 name = "TensorCast"
 uuid = "02d47bb6-7ce6-556a-be16-bb1710789e2b"
 authors = ["Michael Abbott"]
-version = "0.2.1"
+version = "0.2.2"
 
 [deps]
 Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"
