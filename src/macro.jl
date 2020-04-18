@@ -234,6 +234,8 @@ This mostly aims to re-work the given expression into `some(steps(A))[i,j]`,
 but also pushes `A = f(x)` into `store.top`.
 """
 function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
+    @nospecialize ex
+
     # This acts only on single indexing expressions:
     if @capture(ex, A_{ijk__})
         static=true
@@ -378,6 +380,7 @@ target dims not correctly handled yet -- what do I want? TODO
 Simple glue / stand. does not permutedims, but broadcasting may have to... avoid twice?
 """
 function standardglue(ex, target, store::NamedTuple, call::CallInfo)
+    @nospecialize ex
 
     # The sole target here is indexing expressions:
     if @capture(ex, A_[inner__])
@@ -469,6 +472,7 @@ This beings the expression to have target indices,
 by permutedims and if necessary broadcasting, always using `readycast()`.
 """
 function targetcast(ex, target, store::NamedTuple, call::CallInfo)
+    @nospecialize ex
 
     # If just one naked expression, then we won't broadcast:
     if @capture(ex, A_[ijk__])
@@ -503,6 +507,7 @@ end
 This is walked over the expression to prepare for `@__dot__` etc, by `targetcast()`.
 """
 function readycast(ex, target, store::NamedTuple, call::CallInfo)
+    @nospecialize ex
 
     # Scalar functions can be protected entirely from broadcasting:
     # TODO this means A[i,j] + rand()/10 doesn't work, /(...,10) is a function!
@@ -578,6 +583,7 @@ If there are more than two factors, it recurses, and you get `(A*B) * C`,
 or perhaps tuple `(A*B, C)`.
 """
 function matmultarget(ex, target, parsed, store::NamedTuple, call::CallInfo)
+    @nospecialize ex
 
     @capture(ex, A_ * B_ * C__ | *(A_, B_, C__) ) || throw(MacroError("can't @matmul that!", call))
 
@@ -631,6 +637,7 @@ pushing calculation steps into store.
 Also a convenient place to tidy all indices, including e.g. `fun(M[:,j],N[j]).same[i']`.
 """
 function recursemacro(ex, store::NamedTuple, call::CallInfo)
+    @nospecialize ex
 
     # Actually look for recursion
     if @capture(ex, @reduce(subex__) )
@@ -675,6 +682,8 @@ This saves to `store` the sizes of all input tensors, and their sub-slices if an
   however it should not destroy this so that `sz_j` can be got later.
 """
 function rightsizes(ex, store::NamedTuple, call::CallInfo)
+    @nospecialize ex
+
     :recurse in call.flags && return nothing # outer version took care of this
 
     if @capture(ex, A_[outer__][inner__] | A_[outer__]{inner__} )
@@ -1115,8 +1124,7 @@ end
 
 tensorprimetidy(v::Vector) = Any[ tensorprimetidy(x) for x in v ]
 function tensorprimetidy(ex)
-    MacroTools.postwalk(ex) do x
-
+    MacroTools.postwalk(ex) do @nospecialize x
         @capture(x, ((ij__,) \ k_) ) && return :( ($(ij...),$k) )
         @capture(x, i_ \ j_ ) && return :( ($i,$j) )
 
@@ -1172,7 +1180,7 @@ containsindexing(s) = false
 function containsindexing(ex::Expr)
     flag = false
     # MacroTools.postwalk(x -> @capture(x, A_[ijk__]) && (flag=true), ex)
-    MacroTools.postwalk(ex) do x
+    MacroTools.postwalk(ex) do @nospecialize x
         # @capture(x, A_[ijk__]) && !(all(isconstant, ijk)) && (flag=true)
         if @capture(x, A_[ijk__])
             # @show x ijk # TODO this is a bit broken?  @pretty @cast Z[i,j] := W[i] * exp(X[1][i] - X[2][j])
@@ -1185,7 +1193,7 @@ end
 listindices(s::Symbol) = []
 function listindices(ex::Expr)
     list = []
-    MacroTools.postwalk(ex) do x
+    MacroTools.postwalk(ex) do @nospecialize x
         if @capture(x, A_[ijk__])
             flat, _ = indexparse(nothing, ijk)
             push!(list, flat)
