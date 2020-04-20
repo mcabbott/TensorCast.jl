@@ -6,6 +6,7 @@ using StaticArrays
 using OffsetArrays
 using Einsum
 using Strided
+using LazyArrays
 using Compat
 if VERSION >= v"1.1"
     using LoopVectorization
