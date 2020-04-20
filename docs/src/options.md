@@ -79,11 +79,13 @@ In the following example, the product `V .* V' .* V3` contains about 1GB of data
 the writing of which is avoided by giving the option `lazy`: 
 
 ```julia
+using LazyArrays # you must now load this package
 V = rand(500); V3 = reshape(V,1,1,:);
 
 @time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k];        # 0.6 seconds, 950 MB
 @time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k]  lazy;  # 0.025 s, 5 KB
 ```
+However, right now this gives `3.7 s (250 M allocations, 9 GB)`, something is broken!
 
 The package [Strided.jl](https://github.com/Jutho/Strided.jl) can apply multi-threading to 
 broadcasting, and some other magic. You can enable it with the option `strided`, like this: 

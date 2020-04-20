@@ -1,5 +1,5 @@
 
-import LazyArrays
+import .LazyArrays
 
 #=
 The macro option "lazy" always produces things like sum(@__dot__(lazy(x+y)))
