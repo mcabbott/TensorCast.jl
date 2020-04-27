@@ -20,7 +20,7 @@ new shapes (including going to and from an array-of-arrays) and with broadcastin
 @cast T[x,y,n] := outer(M[:,n])[x,y]    # generalised mapslices, vector -> matrix function
 ```
 
-`@reduce` takes sums (or other reductions) over the indicated directions. Among such sums is 
+Second, `@reduce` takes sums (or other reductions) over the indicated directions. Among such sums is 
 matrix multiplication, which can be done more efficiently using `@matmul` instead:
 
 ```julia
@@ -38,9 +38,8 @@ with [StaticArrays](https://github.com/JuliaArrays/StaticArrays.jl), on the GPU 
 [CuArrays](https://github.com/JuliaGPU/CuArrays.jl), and with almost anything else. 
 For operations with arrays of arrays like `mapslices`, this package defines gradients for 
 [Zygote.jl](https://github.com/FluxML/Zygote.jl) (similar to those of [SliceMap.jl](https://github.com/mcabbott/SliceMap.jl)).
-To see what is generated, insert `@pretty` before any command.
 
-Similar notation used by some other packages, although all of them use an implicit sum over 
+Similar notation is used by some other packages, although all of them use an implicit sum over 
 repeated indices. [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl) performs 
 Einstein-convention contractions and traces:
 
@@ -56,17 +55,18 @@ More general contractions are allowed by
 W = ein" iξ,jξ,kξ -> ijk "(X,Y,Z)           # numpy-style notation
 ```
 
-Instead [Einsum.jl](https://github.com/ahwillia/Einsum.jl) sums the entire right hand side,
-but also allows arbitrary (element-wise) functions:
+Instead [Einsum.jl](https://github.com/ahwillia/Einsum.jl) and [Tullio.jl](https://github.com/mcabbott/Tullio.jl) 
+sum the entire right hand side, but also allow arbitrary (element-wise) functions:
 
 ```julia
 @einsum S[i] := -P[i,n] * log(P[i,n]/Q[n])  # sum over n, for each i (also with @reduce above)
 @einsum G[i] := 2 * E[i] + F[i,k,k]         # the sum includes everyting:  Gᵢ = Σⱼ (2Eᵢ + Fᵢⱼⱼ)
+@tullio Z[i,j] := abs(A[i+x, j+y] * K[x,y]) # convolution, summing over x and y
 ```
 
 These produce very different code for actually doing what you request:
 The macros `@tensor` and `@ein` work out a sequence of basic operations (like contraction and traces),
-while `@einsum` simply writes the necessary set of nested loops.
+while `@einsum` and `@tullio` simply write the necessary set of nested loops.
 
 For those who speak Python, `@cast` and `@reduce` allow similar operations to 
 [`einops`](https://github.com/arogozhnikov/einops) (minus the cool video, but plus broadcasting)
@@ -83,9 +83,10 @@ You need [Julia](https://julialang.org/downloads/) 1.0 or later:
 
 Version 0.2 has substantially re-worked logic, and [new docs](https://mcabbott.github.io/TensorCast.jl/dev). 
 See [tag page](https://github.com/mcabbott/TensorCast.jl/releases/tag/v0.2.0) for what's changed.
+
 <!--
-There are also some notebooks: [docs/einops.ipynb](docs/einops.ipynb) explaining with images,
-and [docs/speed.ipynb](docs/speed.ipynb) explaining what's fast and what's slow.
+Version 0.3 makes dependence on [LazyArrays.jl](https://github.com/JuliaArrays/LazyArrays.jl) optional,
+and disallows multiple factors in `@matmul`.
 -->
 
 ## About
