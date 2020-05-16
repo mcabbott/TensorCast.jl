@@ -160,12 +160,6 @@ macro matmul(exs...)
     _macro(exs...; call=call)
 end
 
-macro mul(exs...)
-    call = CallInfo(__module__, __source__, TensorCast.unparse("@matmul", exs...),
-        Set([:matmul, :nolazy]))
-    @warn "please replace @mul with @matmul, and ensure that it has explicit sum()" call.string maxlog=1 _id=hash(exs)
-    _macro(exs...; call=call)
-end
 
 #==================== The Main Functions ====================#
 
@@ -579,8 +573,9 @@ end
     matmultarget(A[i,j] * B[j,k], [i,k]) -> A * B
 
 For inplace, instead it returns tuple `(A,B)`, which `inplaceoutput()` can use.
+
 If there are more than two factors, it recurses, and you get `(A*B) * C`,
-or perhaps tuple `(A*B, C)`.
+or perhaps tuple `(A*B, C)`. But I'm going to remove this as I never got it working perfectly?
 """
 function matmultarget(ex, target, parsed, store::NamedTuple, call::CallInfo)
     @nospecialize ex
@@ -621,10 +616,10 @@ function matmultarget(ex, target, parsed, store::NamedTuple, call::CallInfo)
         return targetcast(ABind, subtarget, store, call)
 
     else
+        throw(MacroError("@matmul no longer supports more than two factors", call))
         # But if we have (A*B) * C then continue, whether in- or out-of-place:
-        @warn "@matmul has bugs in how it handles more than two factors" call.string maxlog=1 _id=hash(call.string)
-        ABCex = :( *($ABind, $(C...)) )
-        return matmultarget(ABCex, target, parsed, store, call)
++       # ABCex = :( *($ABind, $(C...)) )
++       # return matmultarget(ABCex, target, parsed, store, call)
     end
 end
 
