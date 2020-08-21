@@ -249,7 +249,9 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     end
 
     # Constant indices A[i,3], A[i,_], A[i,$c], and also A[i,3:5]
-    if all(isCorR, ijk)
+    if isempty(ijk)
+        # empty indices do not count as constant - this fixes some issues with 0d CuArrays
+    elseif all(isCorR, ijk)
         needview!(ijk)                                         # replace _ with 1, if any
         Asym = maybepush(:( $A[$(ijk...)] ), store, :allconst) # protect from later processing
         return Asym                                            # and nothing more to do here
