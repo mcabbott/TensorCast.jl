@@ -485,8 +485,7 @@ function targetcast(ex, target, store::NamedTuple, call::CallInfo)
         push!(call.flags, :collected)
     end
     if :strided in call.flags
-        ex = Broadcast.__dot__(ex) # @strided does not work on @.
-        ex = :( Strided.@strided $ex )
+        ex = :( Strided.@strided @__dot__($ex) )
     elseif :avx in call.flags
         ex = :( LoopVectorization.@avx @__dot__($ex) )
     else
