@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Basics · TensorCast</title><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit">TensorCast</span></div><form class="docs-search" action="../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li class="is-active"><a class="tocitem" href>Basics</a><ul class="internal"><li><a class="tocitem" href="#Broadcasting-1"><span>Broadcasting</span></a></li><li><a class="tocitem" href="#Slicing-1"><span>Slicing</span></a></li><li><a class="tocitem" href="#Fixed-indices-1"><span>Fixed indices</span></a></li><li><a class="tocitem" href="#Reshaping-1"><span>Reshaping</span></a></li><li><a class="tocitem" href="#Glue-and-reshape-1"><span>Glue &amp; reshape</span></a></li><li><a class="tocitem" href="#Reverse-and-shuffle-1"><span>Reverse &amp; shuffle</span></a></li><li><a class="tocitem" href="#Primes-&#39;-1"><span>Primes <code>&#39;</code></span></a></li><li><a class="tocitem" href="#Arrays-of-indices-or-functions-1"><span>Arrays of indices or functions</span></a></li><li><a class="tocitem" href="#Repeated-indices-1"><span>Repeated indices</span></a></li></ul></li><li><a class="tocitem" href="../reduce/">Reduction</a></li><li><a class="tocitem" href="../options/">Options</a></li><li><a class="tocitem" href="../docstrings/">Docstrings</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Basics</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Basics</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/mcabbott/TensorCast.jl/blob/master/docs/src/basics.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Basics-1"><a class="docs-heading-anchor" href="#Basics-1">Basics</a><a class="docs-heading-anchor-permalink" href="#Basics-1" title="Permalink"></a></h1><p>Install and set up:</p><pre><code class="language-julia-repl">(v1.1) pkg&gt; add TensorCast</code></pre><pre><code class="language-julia-repl">julia&gt; using TensorCast
+
+julia&gt; V = [10,20,30];
+
+julia&gt; M = collect(reshape(1:12, 3,4))
+3×4 Array{Int64,2}:
+ 1  4  7  10
+ 2  5  8  11
+ 3  6  9  12</code></pre><h2 id="Broadcasting-1"><a class="docs-heading-anchor" href="#Broadcasting-1">Broadcasting</a><a class="docs-heading-anchor-permalink" href="#Broadcasting-1" title="Permalink"></a></h2><p>Here&#39;s a simple use of <code>@cast</code>, broadcasting addition over a matrix, a vector, and a scalar.  Using <code>:=</code> makes a new array, after which the left and right will be equal for all possible  values of the indices:</p><pre><code class="language-julia-repl">julia&gt; @cast A[j,i] := M[i,j] + 10 * V[i]
+4×3 Array{Int64,2}:
+ 101  202  303
+ 104  205  306
+ 107  208  309
+ 110  211  312
+
+julia&gt; all(A[j,i] == M[i,j] + 10 * V[i] for i=1:3, j=1:4)
+true</code></pre><p>To make this happen, first <code>M</code> is transposed, and then the axis of <code>V</code> is re-oriented  to lie in the second dimension. The macro <code>@pretty</code> prints out what <code>@cast</code> produces:</p><pre><code class="language-julia">julia&gt; @pretty @cast A[j,i] := M[i,j] + 10 * V[i]
+begin
+    local pelican = PermuteDims(M)
+    local termite = orient(V, (*, :))
+    A = @__dot__(pelican + 10termite)
+end</code></pre><p>Functions like <code>orient</code> take a code in which <code>:</code> represents an index which varies, while <code>*</code> is fixed. (Or fixed on a given slice, for <code>sliceview</code> below.) The reason to do this is that <code>typeof(:) != typeof(*)</code>, and so this code is visible to the compiler, a trick I borrowed from <a href="https://github.com/bramtayl/JuliennedArrays.jl">JuliennedArrays.jl</a>.</p><p>Of course <code>@__dot__</code> is the full name of the broadcasting macro <code>@.</code>,  which simply produces <code>A = pelican .+ 10 .* termite</code>. And the animal names (in place of generated symbols) are from the indispensible <a href="https://github.com/MikeInnes/MacroTools.jl">MacroTools.jl</a>.</p><h2 id="Slicing-1"><a class="docs-heading-anchor" href="#Slicing-1">Slicing</a><a class="docs-heading-anchor-permalink" href="#Slicing-1" title="Permalink"></a></h2><p>Here are two ways to slice <code>M</code> into its columns, both of these produce <code>S = sliceview(M, (:, *))</code> which is simply <code>collect(eachcol(M))</code>:</p><pre><code class="language-julia-repl">julia&gt; @cast S[j][i] := M[i,j]
+4-element Array{SubArray{Int64,1,Array{Int64,2},Tuple{Base.Slice{Base.OneTo{Int64}},Int64},true},1}:
+ [1, 2, 3]
+ [4, 5, 6]   
+ [7, 8, 9]   
+ [10, 11, 12]
+
+julia&gt; all(S[j][i] == M[i,j] for i=1:3, j=1:4)
+true
+
+julia&gt; @cast S2[j] := M[:,j]; 
+
+julia&gt; S == S2
+true</code></pre><p>We can glue slices back together with the same notation, <code>M2[i,j] := S[j][i]</code>.  Combining this with slicing from <code>M[:,j]</code> is a convenient way to perform <code>mapslices</code> operations:</p><pre><code class="language-julia-repl">julia&gt; @cast C[i,j] := cumsum(M[:,j])[i]
+3×4 Array{Int64,2}:
+ 1   4   7  10
+ 3   9  15  21
+ 6  15  24  33
+
+julia&gt; C == mapslices(cumsum, M, dims=1)
+true</code></pre><p>This is both faster and more general than <code>mapslices</code>,  as it does not have to infer what shape the function produces:</p><pre><code class="language-julia-repl">julia&gt; using BenchmarkTools
+
+julia&gt; f(M) = @cast [i,j] := cumsum(M[:,j])[i];
+
+julia&gt; M10 = rand(10,1000);
+
+julia&gt; @btime mapslices(cumsum, $M10, dims=1);
+  630.725 μs (7508 allocations: 400.28 KiB)
+
+julia&gt; @btime f($M10);
+  64.056 μs (2006 allocations: 297.25 KiB)</code></pre><p>It&#39;s also more readable, in less trivial examples:</p><pre><code class="language-julia-repl">julia&gt; using LinearAlgebra, Random; Random.seed!(42);
+
+julia&gt; T = rand(3,3,5);
+
+julia&gt; @cast E[i,n] := eigen(T[:,:,n]).values[i];
+
+julia&gt; E == dropdims(mapslices(x -&gt; eigen(x).values, T, dims=(1,2)), dims=2)
+true</code></pre><h2 id="Fixed-indices-1"><a class="docs-heading-anchor" href="#Fixed-indices-1">Fixed indices</a><a class="docs-heading-anchor-permalink" href="#Fixed-indices-1" title="Permalink"></a></h2><p>Sometimes it&#39;s useful to insert a trivial index into the output – for instance  to match the output of <code>mapslices(x -&gt; eigen(...</code> just above:</p><pre><code class="language-julia-repl">julia&gt; @cast E3[i,_,n] := eigen(T[:,:,n]).values[i];
+
+julia&gt; size(E3)
+(3, 1, 5)</code></pre><p>Using <code>_</code> on the right will demand that <code>size(E3,2) == 1</code>; but you can also fix indices to other values.  If these are variables not integers, they must be interpolated <code>M[$row,j]</code>  to distinguish them from index names:</p><pre><code class="language-julia-repl">julia&gt; col = 3;
+
+julia&gt; @cast O[i,j] := (M[i,1], M[j,$col])
+3×3 Array{Tuple{Int64,Int64},2}:
+ (1, 7)  (1, 8)  (1, 9)
+ (2, 7)  (2, 8)  (2, 9)
+ (3, 7)  (3, 8)  (3, 9)</code></pre><h2 id="Reshaping-1"><a class="docs-heading-anchor" href="#Reshaping-1">Reshaping</a><a class="docs-heading-anchor-permalink" href="#Reshaping-1" title="Permalink"></a></h2><p>Sometimes it&#39;s useful to combine two (or more) indices into one,  which may be written  either <code>i⊗j</code> or <code>i\j</code> or <code>(i,j)</code>.  The simplest version of this is precisely what the built-in function <code>kron</code> does:</p><pre><code class="language-julia-repl">julia&gt; W = 1 ./ [10,20,30,40];
+
+julia&gt; @cast K[_, i⊗j] := V[i] * W[j]
+1×12 Array{Float64,2}:
+ 1.0  2.0  3.0  0.5  1.0  1.5  0.333333  0.666667  1.0  0.25  0.5  0.75
+
+julia&gt; K == kron(W, V)&#39;
+true
+
+julia&gt; all(K[i + 3(j-1)] == V[i] * W[j] for i=1:3, j=1:4)
+true
+
+julia&gt; Base.kron(A::Array{T,3}, X::Array{T′,3}) where {T,T′} =    # extend kron to 3-tensors
+           @cast [x⊗a, y⊗b, z⊗c] := A[a,b,c] * X[x,y,z]</code></pre><p>If an array on the right has a combined index, then it may be ambiguous how to divide up its range. You can resolve this by providing explicit ranges, after the main expression: </p><pre><code class="language-julia-repl">julia&gt; @cast A[i,j] := collect(1:12)[i⊗j]  i:2
+2×6 Array{Int64,2}:
+ 1  3  5  7   9  11
+ 2  4  6  8  10  12
+
+julia&gt; @cast A[i,j] := collect(1:12)[i⊗j]  i:4, j:3
+4×3 Array{Int64,2}:
+ 1  5   9
+ 2  6  10
+ 3  7  11
+ 4  8  12</code></pre><p>Writing into a given array with <code>=</code> instead of <code>:=</code> will also remove ambiguities,  as <code>size(A)</code> is known:</p><pre><code class="language-julia-repl">julia&gt; @cast A[i,j] = 10 * collect(1:12)[i⊗j];</code></pre><p>Aside, note that providing explicit ranges will also turn on checks of the input, for example:</p><pre><code class="language-julia">julia&gt; @pretty @cast W[i] := V[i]^2  i:3 
+begin
+    @assert_ 3 == size(V, 1) &quot;range of index i must agree&quot;
+    @assert_ ndims(V) == 1 &quot;expected a 1-tensor V[i]&quot;
+    W = @__dot__(V ^ 2)
+end</code></pre><h2 id="Glue-and-reshape-1"><a class="docs-heading-anchor" href="#Glue-and-reshape-1">Glue &amp; reshape</a><a class="docs-heading-anchor-permalink" href="#Glue-and-reshape-1" title="Permalink"></a></h2><p>As a less trivial example of these combined indices, here is one way to combine a list of matrices into one large grid. Notice that <code>x</code> varies faster than <code>i</code>, and so on – the linear order of index <code>x⊗i</code> agrees with that of two indices <code>x,i</code>. </p><pre><code class="language-julia-repl">julia&gt; list = [ i .* ones(2,2) for i=1:8 ];
+
+julia&gt; @cast mat[x\i, y\j] := Int(list[i\j][x,y])  i:2
+4×8 Array{Int64,2}:
+ 1  1  3  3  5  5  7  7
+ 1  1  3  3  5  5  7  7
+ 2  2  4  4  6  6  8  8
+ 2  2  4  4  6  6  8  8
+
+julia&gt; vec(mat) == @cast [xi\yj] := mat[xi, yj]
+true
+
+julia&gt; mat == Int.(hvcat((4,4), transpose(reshape(list,2,4))...))
+true</code></pre><p>Alternatively, this reshapes each matrix to a vector, and makes them columns of the output:</p><pre><code class="language-julia-repl">julia&gt; @cast colwise[x\y,i] := Int(list[i][x,y])
+4×8 Array{Int64,2}:
+ 1  2  3  4  5  6  7  8
+ 1  2  3  4  5  6  7  8
+ 1  2  3  4  5  6  7  8
+ 1  2  3  4  5  6  7  8
+
+julia&gt; colwise == Int.(reduce(hcat, vec.(list)))
+true</code></pre><h2 id="Reverse-and-shuffle-1"><a class="docs-heading-anchor" href="#Reverse-and-shuffle-1">Reverse &amp; shuffle</a><a class="docs-heading-anchor-permalink" href="#Reverse-and-shuffle-1" title="Permalink"></a></h2><p>A minus in front of an index will reverse that direction, and a tilde will shuffle it.  Both create views, which you may explicitly <code>collect</code> using <code>|=</code>:</p><pre><code class="language-julia-repl">julia&gt; @cast M2[i,j] := M[i,-j]
+3×4 view(::Array{Int64,2}, :, 4:-1:1) with eltype Int64:
+ 10  7  4  1
+ 11  8  5  2
+ 12  9  6  3
+
+julia&gt; using Random; Random.seed!(42); 
+
+julia&gt; @cast M3[i,j] |= M[i,~j]
+3×4 Array{Int64,2}:
+ 7  4  1  10
+ 8  5  2  11
+ 9  6  3  12</code></pre><h2 id="Primes-&#39;-1"><a class="docs-heading-anchor" href="#Primes-&#39;-1">Primes <code>&#39;</code></a><a class="docs-heading-anchor-permalink" href="#Primes-&#39;-1" title="Permalink"></a></h2><p>Acting on indices, <code>A[i&#39;]</code> is normalised to <code>A[i′]</code> unicode \prime (which looks identical in some fonts). Acting on elements, <code>C[i,j]&#39;</code> means <code>adjoint.(C)</code>, elementwise complex conjugate, equivalent to <code>(C&#39;)[j,i]</code>. If the elements are matrices, as in <code>C[:,:,k]&#39;</code>, then  <code>adjoint</code> is conjugate transpose.</p><pre><code class="language-julia-repl">julia&gt; @cast C[i,i&#39;] := (1:4)[i⊗i′] + im  (i:2, i′:2)
+2×2 Array{Complex{Int64},2}:
+ 1+1im  3+1im
+ 2+1im  4+1im
+
+julia&gt; @cast [i,j] := C[i,j]&#39;
+2×2 Array{Complex{Int64},2}:
+ 1-1im  3-1im
+ 2-1im  4-1im
+
+julia&gt; C&#39; == @cast [j,i] := C[i,j]&#39;
+true</code></pre><h2 id="Arrays-of-indices-or-functions-1"><a class="docs-heading-anchor" href="#Arrays-of-indices-or-functions-1">Arrays of indices or functions</a><a class="docs-heading-anchor-permalink" href="#Arrays-of-indices-or-functions-1" title="Permalink"></a></h2><p>Besides arrays of numbers (and arrays of arrays) you can also broadcast an array of functions, which is done by calling <code>apply(f,xs...) = f(xs...)</code>: </p><pre><code class="language-julia-repl">julia&gt; funs = [identity, sqrt];
+
+julia&gt; @cast applied[i,j] := funs[i](V[j])
+2×3 Array{Real,2}:
+ 10        20        30      
+  3.16228   4.47214   5.47723
+
+julia&gt; @pretty @cast applied[i,j] := funs[i](V[j])
+begin
+    local pelican = orient(V, (*, :))
+    applied = @__dot__(apply(funs, pelican))
+end</code></pre><p>You can also index one array using another, this example is just <code>view(M, :, ind)</code>:</p><pre><code class="language-julia-repl">julia&gt; ind = [1,1,2,2,4];
+
+julia&gt; @cast [i,j] := M[i,ind[j]]
+3×5 view(::Array{Int64,2}, :, [1, 1, 2, 2, 4]) with eltype Int64:
+ 1  1  4  4  10
+ 2  2  5  5  11
+ 3  3  6  6  12</code></pre><h2 id="Repeated-indices-1"><a class="docs-heading-anchor" href="#Repeated-indices-1">Repeated indices</a><a class="docs-heading-anchor-permalink" href="#Repeated-indices-1" title="Permalink"></a></h2><p>The only situation in which repeated indices are allowed is when they either  extract the diagonal of a matrix, or create a diagonal matrix:</p><pre><code class="language-julia-repl">julia&gt; @cast D[i] |= C[i,i]
+2-element Array{Complex{Int64},1}:
+ 1 + 1im
+ 4 + 1im
+
+julia&gt; D2 = @cast [i,i] := V[i]
+3×3 Diagonal{Int64,Array{Int64,1}}:
+ 10   ⋅   ⋅
+  ⋅  20   ⋅
+  ⋅   ⋅  30</code></pre><p>All indices appearing on the left must also appear on the right.  There is no implicit sum over repeated indices on different tensors. To sum over things, you need <code>@reduce</code> or <code>@matmul</code>. </p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../reduce/">Reduction »</a></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Friday 21 August 2020 17:22">Friday 21 August 2020</span>. Using Julia version 1.3.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
