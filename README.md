@@ -1,10 +1,9 @@
 
 # TensorCast.jl
 
-[![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://pkg.julialang.org/docs/TensorCast/)
+[![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://juliahub.com/docs/TensorCast/)
 [![Latest Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://mcabbott.github.io/TensorCast.jl/dev)
 [![Build Status](https://travis-ci.org/mcabbott/TensorCast.jl.svg?branch=master)](https://travis-ci.org/mcabbott/TensorCast.jl)
-[![PkgEval](https://juliaci.github.io/NanosoldierReports/pkgeval_badges/T/TensorCast.svg)](https://juliaci.github.io/NanosoldierReports/pkgeval_badges/report.html)
 
 This package lets you work with many-dimensional arrays in index notation, 
 by defining a few macros. The first is `@cast`, which deals both with "casting" into 
@@ -80,14 +79,6 @@ You need [Julia](https://julialang.org/downloads/) 1.0 or later:
 ```julia
 ] add TensorCast
 ```
-
-Version 0.2 has substantially re-worked logic, and [new docs](https://mcabbott.github.io/TensorCast.jl/dev). 
-See [tag page](https://github.com/mcabbott/TensorCast.jl/releases/tag/v0.2.0) for what's changed.
-
-<!--
-Version 0.3 makes dependence on [LazyArrays.jl](https://github.com/JuliaArrays/LazyArrays.jl) optional,
-and disallows multiple factors in `@matmul`.
--->
 
 ## About
 
