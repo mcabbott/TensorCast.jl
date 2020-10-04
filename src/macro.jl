@@ -172,9 +172,13 @@ function _macro(exone, extwo=nothing, exthree=nothing; call::CallInfo=CallInfo()
         optionparse(exthree, store, call)
         # Then the LHS, to get canonical list of indices:
         canon, parsed = reduceparse(exone, extwo, store, call)
+    elseif containsindexing(extwo) # @cast A[i,j] := softmax(j) B[i,j]
+        push!(call.flags, :dimcast)
+        optionparse(exthree, store, call)
+        canon, parsed = reduceparse(exone, extwo, store, call)
     else
-        # Much the same for @cast:
-        isnothing(exthree) || throw(MacroError("@cast doesn't take three expressions: $exthree", call))
+        # Simple @cast case:
+        isnothing(exthree) || throw(MacroError("too many expressions for @cast: $exthree", call))
         optionparse(extwo, store, call)
         canon, parsed = castparse(exone, store, call)
     end
@@ -832,7 +836,9 @@ function reduceparse(ex1, ex2, store::NamedTuple, call::CallInfo)
             canon = vcat(leftcanon, reduced)
         end
     end
-    checknorepeats(canon, call, " in the reduction") # catches A[i] := sum(i)
+    if !(:dimcast in call.flags)
+        checknorepeats(canon, call, " in the reduction") # catches A[i] := sum(i)
+    end
 
     # Finally, record positions in canon of reductions
     rdims = sort([ findfirst(isequal(i), canon) for i in reduced ])
@@ -1377,6 +1383,9 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
             end
         end
         canon = deleteat!(copy(canon), sort(parsed.rdims))
+    elseif :dimcast in call.flags
+        dims = length(parsed.rdims)>1 ? Tuple(parsed.rdims) : parsed.rdims[1]
+        ex = :( $(parsed.redfun)($ex, dims=$dims) )
     end
 
     # Were we asked to slice the output?
@@ -1463,6 +1472,10 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
     if :reduce in call.flags
         redfun! = endswith(string(parsed.redfun),'!') ? parsed.redfun : Symbol(parsed.redfun, '!')
         push!(out, :( $redfun!($zed, $ex) ) )
+    elseif :dimcast in call.flags
+        redfun! = endswith(string(parsed.redfun),'!') ? parsed.redfun : Symbol(parsed.redfun, '!')
+        dims = length(parsed.rdims)>1 ? Tuple(parsed.rdims) : parsed.rdims[1]
+        push!(out, :( $redfun!($zed, $ex; dims=$dims) ) )
     elseif :matmul in call.flags
         ex isa Tuple || error("wtf?")
 

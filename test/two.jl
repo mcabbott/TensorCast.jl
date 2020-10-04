@@ -176,6 +176,21 @@ end
     @test_broken V isa Array{Float64,0}
 
 end
+@testset ":dimcast" begin
+
+    M = randn(3,4)
+    normalise(p; dims) = p ./ sum(p; dims=dims)
+
+    @cast M2[i,j] := normalise(j) abs(M[i,j])
+    @test all(≈(1), sum(M2, dims=2))
+
+    # not many functions behave like this, but at least the error will make sense!
+    normalise!(dst, src; dims) = dst .= src ./ sum(src; dims=dims)
+    M1 = similar(M)
+    @cast M1[i,j] = normalise(i) abs(M[i,j])
+    @test all(≈(1), sum(M1, dims=1))
+
+end
 @testset "tupple broadcasting" begin
 
     V = 1:4
