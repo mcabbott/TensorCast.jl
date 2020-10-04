@@ -308,7 +308,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
 
     # Combined indices A[i,(j,k)]
     if any(istensor, ijk)
-        flatsize = map(szwrap, flat)
+        flatsize = map(axwrap, flat)
         A = :( reshape($A, ($(flatsize...),)) )
         append!(store.need, flat)
         # push!(store.mustassert, :( TensorCast.@assert_ !(A isa OffsetArray) "can't combine indices of an OffsetArray") ) # ??
@@ -884,12 +884,12 @@ end
     p = indexparse(A, [i,j,k])
 
 `p.flat` strips constants, colons, tensor/brackets, minus, tilde, and doubled indices.
-`p.outsize` is a list like `[sz_i, 1, star(...)]` for use on LHS.
+`p.outaces` is a list like `[ax_i, 1, star(...)]` for use on LHS.
 `p.reversed` has all those with a minus.
 Sizes are saved to `store` only with keyword `save=true`, i.e. only when called by `rightsizes()`
 """
 function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
-    flat, outsize, reversed, shuffled = [], [], [], []
+    flat, outaxes, reversed, shuffled = [], [], [], []
 
     ijk = tensorprimetidy(ijk) # un-wrap i⊗j to tuples, and normalise i' to i′
 
@@ -906,7 +906,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
         end
 
         if isconstant(i)
-            push!(outsize, 1)
+            push!(outaxes, Base.OneTo(1))
             if i == :_ && A != :_ && save
                 str = "underscore in $A[" * join(ijk, ", ") * "]"
                 push!(store.mustassert, :( size($A,$d)==1 || throw(ArgumentError($str))) )
@@ -917,7 +917,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
         if @capture(i, (ii__,))
             stripminustilde!(ii, reversed, shuffled)
             append!(flat, ii)
-            push!(outsize, szwrap(ii))
+            push!(outaxes, axwrap(ii))
             save && A != :_ && saveonesize(ii, :(size($A, $d)), store)
 
         elseif @capture(i, B_[klm__])
@@ -927,9 +927,8 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
 
         elseif i isa Symbol
             push!(flat, i)
-            push!(outsize, szwrap(i))
+            push!(outaxes, axwrap(i))
             save && A != :_ && saveonesize(i, :(size($A, $d)), store)
-
         else
             throw(MacroError("don't understand index $i", call))
         end
@@ -950,7 +949,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
     reversed = filter(i -> isodd(count(isequal(i), reversed)), reversed)
     shuffled = unique(shuffled)
 
-    return (flat=flat, outsize=outsize, reversed=reversed, shuffled=shuffled)
+    return (flat=flat, outaxes=outaxes, reversed=reversed, shuffled=shuffled)
 end
 
 function stripminustilde!(ijk::Vector, reversed, shuffled)
@@ -1071,7 +1070,7 @@ function findsizes(store::NamedTuple, call::CallInfo)
     empty!(store.assert)
     if length(store.need) > 0
         sizes = sizeinfer(store, call)
-        sz_list = map(szwrap, store.need)
+        sz_list = map(axwrap, store.need)
         push!(out, :( local ($(sz_list...),) = ($(sizes...),) ) )
     end
     append!(out, store.mustassert) # NB do this after calling sizeinfer()
@@ -1199,11 +1198,11 @@ end
 isprimedindex(s::Symbol, canon) = s in canon
 isprimedindex(any, canon) = false
 
-szwrap(i::Symbol) = Symbol(:sz_,i)
-function szwrap(ijk::Vector)
+axwrap(i::Symbol) = Symbol(:ax_,i)
+function axwrap(ijk::Vector)
     length(ijk) == 0 && return nothing
-    length(ijk) == 1 && return szwrap(first(ijk))
-    return :( TensorCast.star($([ Symbol(:sz_,i) for i in ijk ]...)) )
+    length(ijk) == 1 && return axwrap(first(ijk))
+    return :( TensorCast.star($(map(axwrap, ijk)...)) )
 end
 
 isconstant(n::Int) = true
@@ -1334,8 +1333,8 @@ function matrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call::C
     end
 
     # Otherwise we are going to need to reshape
-    left_sz = szwrap(left)
-    right_sz = szwrap(right) # this is the product!
+    left_sz = axwrap(left)
+    right_sz = axwrap(right) # this is the product!
     append!(store.need, left)
     append!(store.need, right)
     # push!(call.flags, :reshaped)
@@ -1365,7 +1364,7 @@ function unmatrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call:
     end
 
     # For anything more complicated, we will need to reshape:
-    sizes = vcat(map(szwrap, left), map(szwrap, right))
+    sizes = vcat(map(axwrap, left), map(axwrap, right))
     append!(store.need, left)
     append!(store.need, right)
     # push!(call.flags, :reshaped)
@@ -1487,7 +1486,7 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
     if any(i -> istensor(i) || isconstant(i), parsed.outer)
         any(i -> isconstant(i) && !(i == :_ || i == 1), parsed.outer) && throw(MacroError("can't fix output index to $i, only to 1", call))
         if any(istensor, parsed.outer)
-            ex = :( reshape($ex, ($(parsed.outsize...),)) )
+            ex = :( reshape($ex, ($(parsed.outaxes...),)) )
             append!(store.need, parsed.flat)
         else
             _d = 0

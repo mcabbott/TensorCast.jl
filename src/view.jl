@@ -28,11 +28,9 @@ mul!(Z::AbstractArray{T,0}, A,B) where {T} = copyto!(Z, A * B)
 """
     star(x,y,...)
 
-Like `*` but intended for multiplying sizes, and understands that `:` is a wildcard.
+Used for multiplying axes now, not sizes.
 """
-star(x,y) = *(x,y)
-star(::Colon,y) = Colon()
-star(x,::Colon) = Colon()
+star(x, y) = Base.OneTo(length(x) * length(y))
 star(x,y,zs...) = star(star(x,y), zs...)
 
 """
