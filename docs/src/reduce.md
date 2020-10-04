@@ -171,3 +171,18 @@ julia> @btime lazyred($A, $B);
 ```
 
 More details on the next page. 
+
+## No reduction
+
+The syntax of `@reduce` can also be used with `@cast`, to apply functions which 
+take a `dims` keyword, but do not produce trivial dimensions. 
+
+```jldoctest mylabel
+julia> normalise(p; dims) = p ./ sum(p; dims=dims);
+
+julia> @cast N[x,y] := normalise(x) M[x,y]
+3×4 Array{Float64,2}:
+ 0.166667  0.266667  0.291667  0.30303
+ 0.333333  0.333333  0.333333  0.333333
+ 0.5       0.4       0.375     0.363636
+```
