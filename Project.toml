@@ -27,7 +27,6 @@ julia = "1"
 [extras]
 Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"
 Einsum = "b7d42ee7-0b51-5a75-98ca-779d3107e4c0"
-JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
 JuliennedArrays = "5cadff95-7770-533d-a838-a1bf817ee6e0"
 LazyArrays = "5078a376-72f3-5289-bfd5-ec5146d43c02"
 LoopVectorization = "bdcacae8-1622-11e9-2a5c-532679323890"
@@ -36,4 +35,4 @@ Strided = "5e0ebb24-38b0-5f93-81fe-25c709ecae67"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "Compat", "Einsum", "JSON3", "JuliennedArrays", "LazyArrays", "LoopVectorization", "Statistics", "Strided"]
+test = ["Test", "Compat", "Einsum", "JuliennedArrays", "LazyArrays", "LoopVectorization", "Statistics", "Strided"]
