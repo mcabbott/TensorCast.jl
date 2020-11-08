@@ -36,10 +36,10 @@ julia> using Statistics
 
 julia> @reduce A[j] := mean(i) M[i,j]^2
 4-element Array{Float64,1}:
-   4.666666666666666
-  25.666666666666664
-  64.66666666666666 
- 121.66666666666666 
+   4.666666666666667
+  25.666666666666668
+  64.66666666666667
+ 121.66666666666667
 ```
 
 If writing into an existing array, then the function must work like `sum!` does:
