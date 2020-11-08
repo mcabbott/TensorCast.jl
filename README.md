@@ -1,9 +1,9 @@
 
 # TensorCast.jl
 
-[![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://juliahub.com/docs/TensorCast/)
-[![Latest Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://mcabbott.github.io/TensorCast.jl/dev)
-[![Build Status](https://travis-ci.org/mcabbott/TensorCast.jl.svg?branch=master)](https://travis-ci.org/mcabbott/TensorCast.jl)
+[![Stable Docs](https://img.shields.io/badge/docs-juliahub-blue.svg)](https://juliahub.com/docs/TensorCast/)
+[![Latest Docs](https://img.shields.io/badge/docs-latest-blue.svg?logo=github)](https://mcabbott.github.io/TensorCast.jl/dev)
+[![Build Status](https://github.com/mcabbott/TensorCast.jl/workflows/CI/badge.svg)](https://github.com/mcabbott/TensorCast.jl/actions)
 
 This package lets you work with many-dimensional arrays in index notation, 
 by defining a few macros. The first is `@cast`, which deals both with "casting" into 
