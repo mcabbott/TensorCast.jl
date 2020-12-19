@@ -38,6 +38,9 @@ using Requires
     include("lazy.jl")      # LazyCast # this costs about 3s in my test, 3.8s -> 7.7s
 end
 
-include("warm.jl") # worth 2s in my test
+if VERSION >= v"1.1"
+    # include("warm.jl") # worth 2s in my test
+    include("precompile.jl")
+end
 
 end # module
