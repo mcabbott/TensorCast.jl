@@ -528,7 +528,7 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
     @capture(ex, A_[ijk__]) || return ex
 
     dims = Int[ findcheck(i, target, call, " on the left") for i in ijk ]
-
+#=
     # Do we need permutedims, or equvalent?
     perm = sortperm(dims)
     if perm != 1:length(dims)
@@ -552,6 +552,12 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
         A = :( TensorCast.orient($A, $code) )
     end
     # Those two steps are what might be replaced with TransmuteDims
+=#
+    perm = ntuple(d -> findfirst(isequal(d), dims), maximum(dims))
+    if perm != ntuple(+, maximum(dims))
+        A = :( TensorCast.transmute($A, $perm) )
+        # ?? flags
+    end
 
     # Does A need protecting from @__dot__?
     A = maybepush(A, store, :nobroadcast)
@@ -1362,7 +1368,9 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
             ex = :( $(parsed.redfun)($ex) )
         else
             dims = length(parsed.rdims)>1 ? Tuple(parsed.rdims) : parsed.rdims[1]
-            ex = :( dropdims($(parsed.redfun)($ex, dims=$dims), dims=$dims) )
+            perm = Tuple(filter(d -> !(d in parsed.rdims), 1:length(canon)))
+            # ex = :( dropdims($(parsed.redfun)($ex, dims=$dims), dims=$dims) )
+            ex = :( TensorCast.transmute($(parsed.redfun)($ex, dims=$dims), $perm) )
             if :strided in call.flags
                 pop!(call.flags, :collected, :ok) # dropdims makes reshape(stridedview(...
             end
@@ -1388,9 +1396,12 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         # Now I allow fixing output indices
         if any(isconstant, parsed.inner)
             any(i -> isconstant(i) && !(i == :_ || i == 1), parsed.inner) && throw(MacroError("can't fix output index to something other than 1", call))
-            code = Tuple(map(i -> isconstant(i) ? (*) : (:), parsed.inner))
+            # code = Tuple(map(i -> isconstant(i) ? (*) : (:), parsed.inner))
             Asafe = maybepush(ex, store, :outfix)
-            ex = :(TensorCast.orient.($Asafe, Ref($code)) ) # @. would need a dollar
+            _d = 0
+            perm = Tuple(map(i -> isconstant(i) ? nothing : (_d+=1), parsed.inner))
+            # ex = :(TensorCast.orient.($Asafe, Ref($code)) ) # @. would need a dollar
+            ex = :(TensorCast.transmute.($Asafe, Ref($perm)) )
         end
     end
 
@@ -1407,8 +1418,13 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
             append!(store.need, parsed.flat)
             # push!(call.flags, :reshaped)
         else
-            code = Tuple(map(i -> isconstant(i) ? (*) : (:), parsed.outer))
-            ex = :( TensorCast.orient($ex, $code) )
+            # code = Tuple(map(i -> isconstant(i) ? (*) : (:), parsed.outer))
+            # ex = :( TensorCast.orient($ex, $code) )
+            # perm = ntuple(d -> isconstant(parsed.outer[d]) ? nothing : d, length(parsed.outer))
+            # perm = Tuple(map(((d,i),) -> isconstant(i) ? nothing : d, enumerate(parsed.outer)))
+            _d = 0
+            perm = Tuple(map(i -> isconstant(i) ? nothing : (_d+=1), parsed.outer))
+            ex = :( TensorCast.transmute($ex, $perm) )
         end
     end
 
