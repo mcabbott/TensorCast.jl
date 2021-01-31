@@ -22,6 +22,7 @@ include("pretty.jl")
 include("string.jl")
 
 module Fast # shield non-macro code from @optlevel 1
+    using ..TensorCast: pretty
     using LinearAlgebra, StaticArrays, Compat
 
     include("slice.jl")     # slice, glue, etc
