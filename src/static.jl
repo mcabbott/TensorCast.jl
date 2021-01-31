@@ -22,6 +22,12 @@ or call `static_slice(A, sizes, false)` to omit the reshape.
     end
 end
 
+function static_slice(A::AbstractArray, code::Tuple, finalshape::Bool=true)
+    iscodesorted(code) || error("expected to make slices of left-most dimensions")
+    tup = ntuple(d -> size(A,d), countcolons(code))
+    static_slice(A, Size(tup), finalshape)
+end
+
 """
     static_glue(A)
 
