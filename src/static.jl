@@ -13,6 +13,9 @@ or call `static_slice(A, sizes, false)` to omit the reshape.
 """
 @inline function static_slice(A::AbstractArray{T,N}, sizes::Size{tup}, finalshape::Bool=true) where {T,N,tup}
     IN = length(tup)
+    for d in 1:IN
+        size(A,d) == tup[d] || throw(DimensionMismatch("cannot slice array of size $(size(A)) using Size$tup"))
+    end
     IT = SArray{Tuple{tup...}, T, IN, prod(tup)}
     if N-IN>1 && finalshape
         finalsize = size(A)[1+IN:end]
@@ -22,11 +25,10 @@ or call `static_slice(A, sizes, false)` to omit the reshape.
     end
 end
 
-function static_slice(A::AbstractArray{T,N}, code::Tuple, finalshape::Bool=true) where {T,N}
-    N == length(code) ||  throw(ArgumentError("static_glue needs length($(pretty(code))) == ndims(A)"))
-    iscodesorted(code) || throw(ArgumentError("static_glue needs a sorted code, not $(pretty(code))"))
-    sizes = Size(ntuple(d -> size(A,d), countcolons(code))...)
-    static_slice(A, sizes, finalshape)
+function static_slice(A::AbstractArray, code::Tuple, finalshape::Bool=true)
+    iscodesorted(code) || error("expected to make slices of left-most dimensions")
+    tup = ntuple(d -> size(A,d), countcolons(code))
+    static_slice(A, Size(tup), finalshape)
 end
 
 """
@@ -45,16 +47,10 @@ For `MArray` slices, which can't be reinterpreted, this reverts to `red_glue`.
 end
 
 function static_glue(A::AbstractArray{IT}, finalshape=true) where {IT<:MArray}
-    code = defaultcode(ndims(IT), ndims(A))
-    red_glue(A, code)
+    stack(A)
 end
 
-function glue(A::AbstractArray{IT,ON}, code::Tuple) where {IT<:StaticArray,ON}
-    if iscodesorted(code)
-        static_glue(A)
-    elseif code == (*,:)
-        PermuteDims(static_glue(A))
-    else
-        copy_glue(A, code)
-    end
-end
+# This is now used only by maybestaticsizes...
+iscodesorted(code::Tuple{}) = true
+iscodesorted(code::Tuple{Any}) = true
+iscodesorted(code::Tuple) = !(code[1]===(*) && code[2]===(:)) && iscodesorted(code[2:end])

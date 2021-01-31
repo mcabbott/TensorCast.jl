@@ -305,7 +305,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
             ijk = newijk
             A = :( view($A, $(beecolon...)) )
         else
-            error("can't handle this indexing yet, sorry")
+            throw(MacroError("can't handle this indexing yet, sorry", call))
             # LHS && error("can't do this indexing on LHS sorry")
             # A = maybepush(A, store, :preget)
             # target = guesstarget(??)
@@ -432,32 +432,17 @@ function standardglue(ex, target, store::NamedTuple, call::CallInfo)
     checknorepeats(vcat(inner, outer), call,
         " in gluing " * string(:([$(outer...)])) * string(:([$(inner...)])))
 
-    # Now we glue, always in A[k,l][i,j] -> B[i,j,k,l] order to start with:
+    # Now we glue, always in A[k,l][i,j] -> B[i,j,k,l] order:
     ijk = vcat(inner, outer)
-    code = Tuple(Any[ i in inner ? (:) : (*) for i in ijk ])
 
     if static
         AB = :( TensorCast.static_glue($B) )
         pop!(call.flags, :collected, :ok)
-    elseif :glue in call.flags
-        # allow maximum freedom? TODO
-        code, ijk = gluereorder(code, ijk, target)
-
-        AB = :( TensorCast.copy_glue($B, $code) )
-    elseif :cat in call.flags
-        AB = :( TensorCast.cat_glue($B, $code) )
-        push!(call.flags, :collected)
     elseif :lazy in call.flags
-        AB = :( TensorCast.lazy_glue($B, $code) )
+        AB = :( TensorCast.stack($B) )
         pop!(call.flags, :collected, :ok)
     else
-        # allow a little freedom?
-        if code == (*,:) && ijk == reverse(target)
-            code = (:,*)
-            ijk = target
-        end
-
-        AB = :( TensorCast.red_glue($B, $code) )
+        AB = :( TensorCast.LazyStack.stack_iter($B) )
         push!(call.flags, :collected)
     end
 
