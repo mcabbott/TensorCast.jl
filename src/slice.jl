@@ -40,8 +40,9 @@ function glue!(B::AbstractArray{T,N}, A::AbstractArray{IT,ON}, code::Tuple) wher
     gluecodecheck(A, code)
     N == _ndims(A) + _ndims(first(A))  || throw(DimensionMismatch("wrong size target"))
     iter = Iterators.product(ntuple(d -> (code[d]==*) ? axes(B,d) : Ref(:), Val(N))...)
-    for i in iter
-        copyto!(view(B, i...), A[decolonise(i)...] )
+    for ind in iter
+        decolon = filter(j -> !(j isa Colon), ind)
+        copyto!(view(B, ind...), A[decolon...])
     end
     B
 end
@@ -56,25 +57,11 @@ function gluecodecheck(A::AbstractArray, code::Tuple)
         "ndims(A) == $outer cannot be glued with code = $(pretty(code))"))
 end
 
-@generated function decolonise(i::Tuple)
-    ind = Int[]
-    for k in 1:length(i.parameters)
-        if i.parameters[k] != Colon
-            push!(ind, k)
-        end
-    end
-    Expr(:tuple, [Expr(:ref, :i, k) for k in ind]...)
-end
+countcolons(code::Tuple{}) = 0
+countcolons(code::Tuple) = Int(first(code) isa Colon) + countcolons(Base.tail(code))
 
-@generated function countcolons(code::Tuple)
-    n = 0
-    for s in code.parameters
-        if s == Colon
-            n += 1
-        end
-    end
-    n
-end
+_ndims(A) = ndims(A)
+_ndims(A::Tuple) = 1
 
 @generated function gluedsize(A::AbstractArray{IT, N}, code::Tuple) where {IT, N}
     list = Any[]
@@ -91,9 +78,6 @@ end
     end
     :( ($(list...),) )
 end
-
-_ndims(A) = ndims(A)
-_ndims(A::Tuple) = 1
 
 using ZygoteRules # TODO add tests?
 

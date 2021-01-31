@@ -305,7 +305,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
             ijk = newijk
             A = :( view($A, $(beecolon...)) )
         else
-            error("can't handle this indexing yet, sorry")
+            throw(MacroError("can't handle this indexing yet, sorry", call))
             # LHS && error("can't do this indexing on LHS sorry")
             # A = maybepush(A, store, :preget)
             # target = guesstarget(??)

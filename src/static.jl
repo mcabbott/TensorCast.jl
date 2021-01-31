@@ -13,6 +13,9 @@ or call `static_slice(A, sizes, false)` to omit the reshape.
 """
 @inline function static_slice(A::AbstractArray{T,N}, sizes::Size{tup}, finalshape::Bool=true) where {T,N,tup}
     IN = length(tup)
+    for d in 1:IN
+        size(A,d) == tup[d] || throw(DimensionMismatch("cannot slice array of size $(size(A)) using Size$tup"))
+    end
     IT = SArray{Tuple{tup...}, T, IN, prod(tup)}
     if N-IN>1 && finalshape
         finalsize = size(A)[1+IN:end]
@@ -48,15 +51,6 @@ function static_glue(A::AbstractArray{IT}, finalshape=true) where {IT<:MArray}
 end
 
 # This is now used only by maybestaticsizes...
-@generated function iscodesorted(code::Tuple) # true if all colons before all stars
-    colons = true
-    sorted = true
-    for s in code.parameters
-        if s != Colon && colons # then we're at transition, change flag
-            colons = false
-        elseif s == Colon && !colons # then a : is following a *
-            sorted = false
-        end
-    end
-    sorted
-end
+iscodesorted(code::Tuple{}) = true
+iscodesorted(code::Tuple{Any}) = true
+iscodesorted(code::Tuple) = !(code[1]===(*) && code[2]===(:)) && iscodesorted(code[2:end])
