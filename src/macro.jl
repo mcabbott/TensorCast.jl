@@ -235,17 +235,17 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     @nospecialize ex
 
     # This acts only on single indexing expressions:
-    if @capture(ex, A_{ijk__})
+    if @capture_(ex, A_{ijk__})
         static=true
         push!(call.flags, :staticslice)
-    elseif @capture(ex, A_[ijk__])
+    elseif @capture_(ex, A_[ijk__])
         static=false
     else
         return ex
     end
 
     # Ensure that f(x)[i,j] will evaluate once, including in size(A)
-    if A isa Symbol || @capture(A, AA_.ff_) # caller has ensured !containsindexing(A)
+    if A isa Symbol || @capture_(A, AA_.ff_) # caller has ensured !containsindexing(A)
     else
         Asym = Symbol(A,"_val") # exact same symbol is used by rightsizes()
         push!(store.top,  :( local $Asym = $A ) )
@@ -287,11 +287,11 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     end
 
     # Nested indices A[i,j,B[k,l,m],n] or worse A[i,B[j,k],C[i,j]]
-    if any(i -> @capture(i, B_[klm__]), ijk)
+    if any(i -> @capture_(i, B_[klm__]), ijk)
         newijk, beecolon = [], [] # for simple case
         # listB, listijk = [], []
         for i in ijk
-            if @capture(i, B_[klm__])
+            if @capture_(i, B_[klm__])
                 append!(newijk, klm)
                 push!(beecolon, B)
                 # push!(listijk, klm)
@@ -383,9 +383,9 @@ function standardglue(ex, target, store::NamedTuple, call::CallInfo)
     @nospecialize ex
 
     # The sole target here is indexing expressions:
-    if @capture(ex, A_[inner__])
+    if @capture_(ex, A_[inner__])
         static=false
-    elseif @capture(ex, A_{inner__})
+    elseif @capture_(ex, A_{inner__})
         static=true
     else
         return ex
@@ -397,7 +397,7 @@ function standardglue(ex, target, store::NamedTuple, call::CallInfo)
     end
 
     # Otherwise there are two options, (brodcasting...)[k] or simple B[i,j][k]
-    needcast = !@capture(A, B_[outer__])
+    needcast = !@capture_(A, B_[outer__])
 
     if needcast
         outer = unique(reduce(vcat, listindices(A)))
@@ -460,7 +460,7 @@ function targetcast(ex, target, store::NamedTuple, call::CallInfo)
     @nospecialize ex
 
     # If just one naked expression, then we won't broadcast:
-    if @capture(ex, A_[ijk__])
+    if @capture_(ex, A_[ijk__])
         containsindexing(A) && error("that should have been dealt with")
         return readycast(ex, target, store, call)
     end
@@ -492,6 +492,7 @@ This is walked over the expression to prepare for `@__dot__` etc, by `targetcast
 """
 function readycast(ex, target, store::NamedTuple, call::CallInfo)
     @nospecialize ex
+    ex isa Symbol && return ex # quit early?
 
     # Scalar functions can be protected entirely from broadcasting:
     # TODO this means A[i,j] + rand()/10 doesn't work, /(...,10) is a function!
@@ -509,10 +510,10 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
         return :( getproperty($fun($(arg...)), $(QuoteNode(field))) )
     # tuple creation... now including namedtuples
     @capture(ex, (args__,) ) && any(containsindexing, args) &&
-        if any(a -> @capture(a, sym_ = val_), args)
+        if any(a -> @capture_(a, sym_ = val_), args)
             syms, vals = [], []
             map(args) do a
-                @capture(a, sym_ = val_ ) || throw(MacroError("invalid named tuple element $a", call))
+                @capture_(a, sym_ = val_ ) || throw(MacroError("invalid named tuple element $a", call))
                 push!(syms, QuoteNode(sym))
                 push!(vals, val)
             end
@@ -525,7 +526,7 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
         return :( Core._apply($funs[$(ijk...)], $(args...) ) )
 
     # Apart from those, readycast acts only on lone tensors:
-    @capture(ex, A_[ijk__]) || return ex
+    @capture_(ex, A_[ijk__]) || return ex
 
     dims = Int[ findcheck(i, target, call, " on the left") for i in ijk ]
 
@@ -623,6 +624,7 @@ Also a convenient place to tidy all indices, including e.g. `fun(M[:,j],N[j]).sa
 """
 function recursemacro(ex, store::NamedTuple, call::CallInfo)
     @nospecialize ex
+    ex isa Symbol && return ex # quit early?
 
     # Actually look for recursion
     if @capture(ex, @reduce(subex__) )
@@ -648,9 +650,9 @@ function recursemacro(ex, store::NamedTuple, call::CallInfo)
     end
 
     # Tidy up indices, A[i,j][k] will be hit on different rounds...
-    if @capture(ex, A_[ijk__])
+    if @capture_(ex, A_[ijk__])
         return :( $A[$(tensorprimetidy(ijk)...)] )
-    elseif @capture(ex, A_{ijk__})
+    elseif @capture_(ex, A_{ijk__})
         return :( $A{$(tensorprimetidy(ijk)...)} )
     else
         return ex
@@ -674,20 +676,21 @@ function rightsizes(ex, store::NamedTuple, call::CallInfo)
     if @capture(ex, A_[outer__][inner__] | A_[outer__]{inner__} )
         field = nothing
     elseif @capture(ex, A_[outer__].field_[inner__] | A_[outer__].field_{inner__} )
-    elseif  @capture(ex, A_[outer__] | A_{outer__} )
+    # elseif  @capture(ex, A_[outer__] | A_{outer__} )
+    elseif  @capture_(ex, A_[outer__] ) || @capture_(ex, A_{outer__} )
         field = nothing
     else
         return ex
     end
 
     # Special treatment for  fun(x)[i,j], goldilocks A not just symbol, but no indexing
-    if A isa Symbol || @capture(A, AA_.ff_)
+    if A isa Symbol || @capture_(A, AA_.ff_)
     elseif !containsindexing(A)
         A = Symbol(A,"_val") # the exact same symbol is used by standardiser
     end
 
     # When we can save the sizes, then we destroy so as not to save again:
-    if A isa Symbol || @capture(A, AA_.ff_) && !containsindexing(A)
+    if A isa Symbol || @capture_(A, AA_.ff_) && !containsindexing(A)
         indexparse(A, outer, store, call; save=true)
         if field==nothing
             innerparse(:(first($A)), inner, store, call; save=true)
@@ -713,24 +716,24 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
     Z = gensym(:left)
 
     # Do we make a new array? With or without collecting:
-    if @capture(ex, left_ := right_ )
+    if @capture_(ex, left_ := right_ )
     elseif @capture(ex, left_ == right_ )
         @warn "using == no longer does anything" call.string maxlog=1 _id=hash(call.string)
     elseif @capture(ex, left_ |= right_ )
         push!(call.flags, :collect)
 
     # Do we write into an exising array? Possibly updating it:
-    elseif @capture(ex, left_ = right_ )
+    elseif @capture_(ex, left_ = right_ )
         push!(call.flags, :inplace)
-    elseif @capture(ex, left_ += right_ )
+    elseif @capture_(ex, left_ += right_ )
         push!(call.flags, :inplace)
         right = :( $left + $right )
         reduce && throw(MacroError("can't use += with @reduce", call))
-    elseif @capture(ex, left_ -= right_ )
+    elseif @capture_(ex, left_ -= right_ )
         push!(call.flags, :inplace)
         right = :( $left - ($right) )
         reduce && throw(MacroError("can't use -= with @reduce", call))
-    elseif @capture(ex, left_ *= right_ )
+    elseif @capture_(ex, left_ *= right_ )
         push!(call.flags, :inplace)
         right = :( $left * ($right) )
         reduce && throw(MacroError("can't use *= with @reduce", call))
@@ -747,7 +750,7 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
         error("wtf is $ex")
     end
 
-    static = @capture(left, ZZ_{ii__})
+    static = @capture_(left, ZZ_{ii__})
 
     if @capture(left, Z_[outer__][inner__] | [outer__][inner__] | Z_[outer__]{inner__} | [outer__]{inner__} )
         isnothing(Z) && (:inplace in call.flags) && throw(MacroError("can't write into a nameless tensor", call))
@@ -871,7 +874,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
             push!(outsize, szwrap(ii))
             save && saveonesize(ii, :(size($A, $d)), store)
 
-        elseif @capture(i, B_[klm__])
+        elseif @capture_(i, B_[klm__])
             innerparse(B, klm, store, call) # called just for error on tensor/colon/constant
             sub = indexparse(B, klm, store, call; save=save) # I do want to save size(B,1) etc.
             append!(flat, sub.flat)
@@ -1112,6 +1115,8 @@ end
 tensorprimetidy(v::Vector) = Any[ tensorprimetidy(x) for x in v ]
 function tensorprimetidy(ex)
     MacroTools.postwalk(ex) do @nospecialize x
+        x isa Symbol && return x # quit early?
+
         @capture(x, ((ij__,) \ k_) ) && return :( ($(ij...),$k) )
         @capture(x, i_ \ j_ ) && return :( ($i,$j) )
 
@@ -1138,7 +1143,7 @@ isconstant(ex::Expr) = ex.head == :($)
 isconstant(q::QuoteNode) = false
 
 isindexing(s) = false
-isindexing(ex::Expr) = @capture(x, A_[ijk__])
+isindexing(ex::Expr) = @capture_(x, A_[ijk__])
 
 isCorI(i) = isconstant(i) || isindexing(ii)
 
@@ -1169,7 +1174,7 @@ function containsindexing(ex::Expr)
     # MacroTools.postwalk(x -> @capture(x, A_[ijk__]) && (flag=true), ex)
     MacroTools.postwalk(ex) do @nospecialize x
         # @capture(x, A_[ijk__]) && !(all(isconstant, ijk)) && (flag=true)
-        if @capture(x, A_[ijk__])
+        if @capture_(x, A_[ijk__])
             # @show x ijk # TODO this is a bit broken?  @pretty @cast Z[i,j] := W[i] * exp(X[1][i] - X[2][j])
             flag=true
         end
@@ -1181,7 +1186,7 @@ listindices(s::Symbol) = []
 function listindices(ex::Expr)
     list = []
     MacroTools.postwalk(ex) do @nospecialize x
-        if @capture(x, A_[ijk__])
+        if @capture_(x, A_[ijk__])
             flat, _ = indexparse(nothing, ijk)
             push!(list, flat)
         end
@@ -1437,13 +1442,13 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
     pop!(call.flags, :nolazy, :ok) # ensure we use diagview(), Reverse{}, etc, not a copy
 
     if @capture(parsed.left, zed_[]) # special case Z[] = ... else allconst pulls it out
-        zed isa Symbol || @capture(zed, ZZ_.field_) || error("wtf")
+        zed isa Symbol || @capture_(zed, ZZ_.field_) || error("wtf")
         newleft = parsed.left
         str = "expected a 0-tensor $zed[]"
         push!(store.mustassert, :( TensorCast.@assert_ ndims($zed)==0 $str) )
     else
         newleft = standardise(parsed.left, store, call)
-        @capture(newleft, zed_[ijk__]) || throw(MacroError("failed to parse LHS correctly, $(parsed.left) -> $newleft"))
+        @capture_(newleft, zed_[ijk__]) || throw(MacroError("failed to parse LHS correctly, $(parsed.left) -> $newleft"))
 
         if !(zed isa Symbol) # then standardise did something!
             push!(call.flags, :showfinal)

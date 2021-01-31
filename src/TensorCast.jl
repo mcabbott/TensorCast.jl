@@ -12,6 +12,7 @@ export @cast, @reduce, @matmul, @pretty
 using MacroTools, StaticArrays, LazyStack, Compat
 using LinearAlgebra, Random
 
+include("capture.jl")
 include("macro.jl")
 include("pretty.jl")
 include("string.jl")

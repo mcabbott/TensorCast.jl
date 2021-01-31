@@ -11,6 +11,7 @@ using Compat
 if VERSION >= v"1.1"
     using LoopVectorization
 end
+using TensorCast: @capture_
 
 @testset "ex-@shape" begin include("shape.jl") end
 @testset "@reduce" begin include("reduce.jl")  end
