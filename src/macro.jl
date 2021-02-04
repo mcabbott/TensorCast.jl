@@ -530,36 +530,16 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
     @capture(ex, A_[ijk__]) || return ex
 
     dims = Int[ findcheck(i, target, call, " on the left") for i in ijk ]
-#=
-    # Do we need permutedims, or equvalent?
-    perm = sortperm(dims)
-    if perm != 1:length(dims)
-        tupleperm = Tuple(perm)
-        if :strided in call.flags
-            A = :( Strided.@strided permutedims($A, $tupleperm) )
-        elseif :nolazy in call.flags
-            A = :( permutedims($A, $tupleperm) )
-            push!(call.flags, :collected)
-        elseif tupleperm == (2,1)
-            A = :( TensorCast.PermuteDims($A) )
-        else
-            A = :( PermutedDimsArray($A, $tupleperm) )
-            pop!(call.flags, :collected, :ok)
-        end
-    end
 
-    # Do we need orient()?
-    if length(dims)>0 && maximum(dims) != length(dims)
-        code = Tuple(Any[ d in dims ? (:) : (*) for d=1:maximum(dims) ])
-        A = :( TensorCast.orient($A, $code) )
-    end
-    # Those two steps are what might be replaced with TransmuteDims
-=#
+    # Both orient and permutedims are now rolled into transmute:
     if !isempty(dims)
         perm = ntuple(d -> findfirst(isequal(d), dims), maximum(dims))
         if perm != ntuple(identity, maximum(dims))
-            A = :( TensorCast.transmute($A, $perm) )
-            # ?? flags
+            # if :Strided in Call.flags
+            #     A = :( @strided TensorCast.transmute($A, $perm) )
+            # else
+                A = :( TensorCast.transmute($A, $perm) )
+            # end
             if increasing_or_zero(perm) # thus likely to be just a reshape
             else
                 pop!(call.flags, :collected, :ok)

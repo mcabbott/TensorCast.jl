@@ -14,14 +14,3 @@ pretty(@macroexpand @cast A[i,j] := B[j,i] + 1 )
 
 # time julia -e 'using TensorCast; TensorCast.sliceview(rand(3,3), (*,:))'
 # 4.6 sec without, 4.5 sec with!
-
-_A = collect(reshape(1:9,3,3))
-# red_glue(sliceview(_A, (*,:)), (*,:))
-# red_glue(sliceview(_A, (:,*)), (:,*))
-orient(_A, (*,:,:))
-orient(_A, (*,*,:,:))
-
-_V = collect(1:3)
-orient(_V, (*,:))
-orient(_V, (*,*,:))
-orient(_V, (*,*,*,:))
