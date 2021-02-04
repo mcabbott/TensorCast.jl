@@ -555,13 +555,15 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
     end
     # Those two steps are what might be replaced with TransmuteDims
 =#
-    perm = ntuple(d -> findfirst(isequal(d), dims), maximum(dims, init=0))
-    if perm != ntuple(identity, maximum(dims, init=0))
-        A = :( TensorCast.transmute($A, $perm) )
-        # ?? flags
-        if increasing_or_zero(perm) # thus likely to be just a reshape
-        else
-            pop!(call.flags, :collected, :ok)
+    if !isempty(dims)
+        perm = ntuple(d -> findfirst(isequal(d), dims), maximum(dims))
+        if perm != ntuple(identity, maximum(dims))
+            A = :( TensorCast.transmute($A, $perm) )
+            # ?? flags
+            if increasing_or_zero(perm) # thus likely to be just a reshape
+            else
+                pop!(call.flags, :collected, :ok)
+            end
         end
     end
 
