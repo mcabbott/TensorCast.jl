@@ -340,7 +340,7 @@ end
     @reduce C[i, j] := sum(l) A[i, l] * B[l, j] strided
     @test C ≈ A * B
     @reduce D[i, j] |= sum(l) A[i, l] * B[l, j] strided
-    @test D isa Array
+    @test_broken D isa Array
 
 end
 @testset "parse-time errors" begin

@@ -22,7 +22,7 @@ MacroTools = "0.5"
 OffsetArrays = "0.11, 1.0"
 Requires = "0.5, 1"
 StaticArrays = "0.10, 0.11, 0.12, 1.0"
-TransmuteDims = "0.1"
+TransmuteDims = "0.1.4"
 ZygoteRules = "0.2"
 julia = "1.3"
 

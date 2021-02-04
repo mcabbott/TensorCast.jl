@@ -8,6 +8,8 @@ diagview(A::AbstractMatrix) = view(A, diagind(A))
 
 diagview(A::LinearAlgebra.Diagonal) = A.diag
 
+#=
+
 """
     storage_type(A)
 
@@ -148,6 +150,7 @@ rview(A::LazyRowVec, ::Tuple{Int,Colon}) = A.parent
 
 rview(A::LazyPerm, code::Tuple) = view(A, code)
 # cannot use rview(collect(A), code) as this may be on LHS, e.g. sum!(rview(),...)
+=#
 
 """
     rvec(x) = [x]
@@ -176,18 +179,18 @@ star(::Colon,y) = Colon()
 star(x,::Colon) = Colon()
 star(x,y,zs...) = star(star(x,y), zs...)
 
-"""
-    PermuteDims(A::Matrix)
-    PermuteDims(A::Vector)
+# """
+#     PermuteDims(A::Matrix)
+#     PermuteDims(A::Vector)
 
-Lazy like `transpose`, but not recursive:
-calls `PermutedDimsArray` unless `eltype(A) <: Number`.
-"""
-PermuteDims(A::AbstractMatrix) = PermutedDimsArray(A, (2,1))
-PermuteDims(A::AbstractMatrix{T}) where {T<:Number} = transpose(A)
+# Lazy like `transpose`, but not recursive:
+# calls `PermutedDimsArray` unless `eltype(A) <: Number`.
+# """
+# PermuteDims(A::AbstractMatrix) = PermutedDimsArray(A, (2,1))
+# PermuteDims(A::AbstractMatrix{T}) where {T<:Number} = transpose(A)
 
-PermuteDims(A::AbstractVector) = reshape(A,1,:)
-PermuteDims(A::AbstractVector{T}) where {T<:Number} = transpose(A)
+# PermuteDims(A::AbstractVector) = reshape(A,1,:)
+# PermuteDims(A::AbstractVector{T}) where {T<:Number} = transpose(A)
 
 
 struct Reverse{D} end

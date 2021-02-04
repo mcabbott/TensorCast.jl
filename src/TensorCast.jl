@@ -13,6 +13,9 @@ using LinearAlgebra, Random
 
 using MacroTools, StaticArrays
 
+using TransmuteDims, LazyStack
+using LazyStack: stack_iter
+
 if VERSION < v"1.5" # not sure!
     using Compat # takes about 0.5s
 end
@@ -28,13 +31,13 @@ module Fast # shield non-macro code from @optlevel 1
     using ..TensorCast: pretty
     using LinearAlgebra, StaticArrays, Compat
 
-    include("slice.jl")     # slice, glue, etc
-    export sliceview, slicecopy, glue, glue!, red_glue, cat_glue, copy_glue, lazy_glue, iscodesorted, countcolons
+    include("slice.jl")
+    export sliceview, slicecopy, copy_glue, glue!, iscodesorted, countcolons
 
-    include("view.jl")      # orient, Reverse{d} etc
-    export diagview, orient, rview, mul!, star, PermuteDims, Reverse, Shuffle
+    include("view.jl")
+    export diagview, mul!, rview, star, Reverse, Shuffle
 
-    include("static.jl")    # StaticArrays
+    include("static.jl")
     export static_slice, static_glue
 
 end
@@ -47,6 +50,6 @@ using Requires
     include("lazy.jl")      # LazyCast # this costs about 3s in my test, 3.8s -> 7.7s
 end
 
-include("warm.jl") # was worth 2s in my test
+# include("warm.jl") # was worth 2s in my test
 
 end # module
