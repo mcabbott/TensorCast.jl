@@ -66,7 +66,7 @@ julia&gt; @cast O[i,j] := (M[i,1], M[j,$col])
 3×3 Array{Tuple{Int64,Int64},2}:
  (1, 7)  (1, 8)  (1, 9)
  (2, 7)  (2, 8)  (2, 9)
- (3, 7)  (3, 8)  (3, 9)</code></pre><h2 id="Reshaping-1"><a class="docs-heading-anchor" href="#Reshaping-1">Reshaping</a><a class="docs-heading-anchor-permalink" href="#Reshaping-1" title="Permalink"></a></h2><p>Sometimes it&#39;s useful to combine two (or more) indices into one,  which may be written  either <code>i⊗j</code> or <code>i\j</code> or <code>(i,j)</code>.  The simplest version of this is precisely what the built-in function <code>kron</code> does:</p><pre><code class="language-julia-repl">julia&gt; W = 1 ./ [10,20,30,40];
+ (3, 7)  (3, 8)  (3, 9)</code></pre><h2 id="Reshaping-1"><a class="docs-heading-anchor" href="#Reshaping-1">Reshaping</a><a class="docs-heading-anchor-permalink" href="#Reshaping-1" title="Permalink"></a></h2><p>Sometimes it&#39;s useful to combine two (or more) indices into one,  which may be written  either <code>i⊗j</code> or <code>(i,j)</code>.  The simplest version of this is precisely what the built-in function <code>kron</code> does:</p><pre><code class="language-julia-repl">julia&gt; W = 1 ./ [10,20,30,40];
 
 julia&gt; @cast K[_, i⊗j] := V[i] * W[j]
 1×12 Array{Float64,2}:
@@ -96,18 +96,18 @@ begin
     W = @__dot__(V ^ 2)
 end</code></pre><h2 id="Glue-and-reshape-1"><a class="docs-heading-anchor" href="#Glue-and-reshape-1">Glue &amp; reshape</a><a class="docs-heading-anchor-permalink" href="#Glue-and-reshape-1" title="Permalink"></a></h2><p>As a less trivial example of these combined indices, here is one way to combine a list of matrices into one large grid. Notice that <code>x</code> varies faster than <code>i</code>, and so on – the linear order of index <code>x⊗i</code> agrees with that of two indices <code>x,i</code>. </p><pre><code class="language-julia-repl">julia&gt; list = [ i .* ones(2,2) for i=1:8 ];
 
-julia&gt; @cast mat[x\i, y\j] := Int(list[i\j][x,y])  i:2
+julia&gt; @cast mat[x⊗i, y⊗j] := Int(list[i⊗j][x,y])  i:2
 4×8 Array{Int64,2}:
  1  1  3  3  5  5  7  7
  1  1  3  3  5  5  7  7
  2  2  4  4  6  6  8  8
  2  2  4  4  6  6  8  8
 
-julia&gt; vec(mat) == @cast [xi\yj] := mat[xi, yj]
+julia&gt; vec(mat) == @cast [xi⊗yj] := mat[xi, yj]
 true
 
 julia&gt; mat == Int.(hvcat((4,4), transpose(reshape(list,2,4))...))
-true</code></pre><p>Alternatively, this reshapes each matrix to a vector, and makes them columns of the output:</p><pre><code class="language-julia-repl">julia&gt; @cast colwise[x\y,i] := Int(list[i][x,y])
+true</code></pre><p>Alternatively, this reshapes each matrix to a vector, and makes them columns of the output:</p><pre><code class="language-julia-repl">julia&gt; @cast colwise[x⊗y,i] := Int(list[i][x,y])
 4×8 Array{Int64,2}:
  1  2  3  4  5  6  7  8
  1  2  3  4  5  6  7  8
@@ -164,4 +164,4 @@ julia&gt; D2 = @cast [i,i] := V[i]
 3×3 Diagonal{Int64,Array{Int64,1}}:
  10   ⋅   ⋅
   ⋅  20   ⋅
-  ⋅   ⋅  30</code></pre><p>All indices appearing on the left must also appear on the right.  There is no implicit sum over repeated indices on different tensors. To sum over things, you need <code>@reduce</code> or <code>@matmul</code>. </p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../reduce/">Reduction »</a></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Sunday 31 January 2021 22:11">Sunday 31 January 2021</span>. Using Julia version 1.5.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+  ⋅   ⋅  30</code></pre><p>All indices appearing on the left must also appear on the right.  There is no implicit sum over repeated indices on different tensors. To sum over things, you need <code>@reduce</code> or <code>@matmul</code>. </p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../reduce/">Reduction »</a></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Sunday 7 February 2021 14:10">Sunday 7 February 2021</span>. Using Julia version 1.5.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
