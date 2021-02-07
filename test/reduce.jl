@@ -11,11 +11,11 @@
 
 	using Statistics
 
-	@reduce W[b\d] := Statistics.mean(c,e) bcde[b,c,d,e]
+	@reduce W[b⊗d] := Statistics.mean(c,e) bcde[b,c,d,e]
 	V = vec(mean(bcde, dims=(2,4)))
 	@test V == W
 
-	@reduce Z[e,b,β] := Statistics.std(c,α:2) bcde[b,c,α\β,e] assert
+	@reduce Z[e,b,β] := Statistics.std(c,α:2) bcde[b,c,α⊗β,e] assert
 	@test size(Z) == (5,2,2)
 
 	@reduce A[_,e,_,b] := sum(c) bcde[b,c,3,e]
@@ -46,17 +46,17 @@ end
 end
 @testset "inference" begin
 
-    # inference for a\b\c had an (Any[]...) dots problem at first
+    # inference for a⊗b⊗c had an (Any[]...) dots problem at first
     B = randn(8,24);
-    @reduce A[b,c, y,z] := sum(a:2, x:2) B[a\b\c, x⊗y⊗z]  b:2, y:3, assert
+    @reduce A[b,c, y,z] := sum(a:2, x:2) B[a⊗b⊗c, x⊗y⊗z]  b:2, y:3, assert
     @test size(A) == (2,2, 3,4)
 
     C = similar(A)
-    @reduce C[b,c, y,z] = sum(a, x) B[a\b\c, x⊗y⊗z]  assert
+    @reduce C[b,c, y,z] = sum(a, x) B[a⊗b⊗c, x⊗y⊗z]  assert
     @test C ≈ A
 
     # with a:2 given, it doesn't try product inference, just leaves a :, which is OK.
-    @reduce C[b,c, y,z] = sum(a:2, x) B[a\b\c, x⊗y⊗z]  assert
+    @reduce C[b,c, y,z] = sum(a:2, x) B[a⊗b⊗c, x⊗y⊗z]  assert
     @test C ≈ A
 
 end

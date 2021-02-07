@@ -269,7 +269,7 @@ end
 
     @test size(Z) == (1,7,1,3)
 
-    @cast A[k\i] := W[2,k,4,i] / Z[1,i,_,k]
+    @cast A[k⊗i] := W[2,k,4,i] / Z[1,i,_,k]
     @test all(A .== 1)
 
 end

@@ -19,7 +19,7 @@ Macro for broadcasting, reshaping, and slicing of arrays in index notation.
 Understands the following things:
 * `A[i,j,k]` is a three-tensor with these indices.
 * `B[(i,j),k]` is the same thing, reshaped to a matrix. Its first axis (the bracket) is indexed
-  by `n = i + (j-1) * N` where `i ∈ 1:N`. This may also be written `B[i\\j,k]` or `B[i⊗j,k]`.
+  by `n = i + (j-1) * N` where `i ∈ 1:N`. This may also be written `B[i⊗j,k]`.
 * `C[k][i,j]` is a vector of matrices, either created by slicing (if on the left)
   or implying glueing into (if on the right) a 3-tensor `A[i,j,k]`.
 * `D[j,k]{i}` is an ordinary matrix of `SVector`s, which may be reinterpreted from `A[i,j,k]`.

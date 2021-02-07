@@ -246,8 +246,8 @@ end
 @testset "from todo list" begin
 
     list = [ i .* ones(2,2,1) for i=1:8 ];
-    @cast mat[x\i, y\j] := Int(list[i\j][x,y,1])  i:2
-    @cast mat2[x\i, y\j] := Int(list[i\j][x,y,1])  i:2, lazy # crazy type
+    @cast mat[x⊗i, y⊗j] := Int(list[i⊗j][x,y,1])  i:2
+    @cast mat2[x⊗i, y⊗j] := Int(list[i⊗j][x,y,1])  i:2, lazy # crazy type
     @test mat[3,5] == 6
     @test mat == mat2
 
@@ -356,7 +356,7 @@ end
 
     @test_throws MacroError _macro(:(  A[i] := (B[i], c=3)  ))
 
-    @test_throws MacroError _macro(:( A[h, w\n] := B[n][2,-h,w] )) # can't reverse inner
+    @test_throws MacroError _macro(:( A[h, w⊗n] := B[n][2,-h,w] )) # can't reverse inner
     @test_throws MacroError _macro(:( A[i,j] := B[i][~j] )) # can't shuffle inner
     @test_throws MacroError _macro(:( A[i,-j] := B[i,j] )) # can't reverse left
 

@@ -17,15 +17,15 @@
     imgs = [ rand(8,8) for i=1:16 ];
 
     @cast G[(i,I), (j,J)] := imgs[(I,J)][i,j] J:4
-    @cast G[ i\I,   j\J ] = imgs[ I\J ][i,j] # in-place
+    @cast G[ i⊗I,   j⊗J ] = imgs[ I⊗J ][i,j] # in-place
 
 
     G = rand(16,32);
 
-    @reduce H[a, b] := maximum(α,β)  G[α\a, β\b]  α:2,β:2
+    @reduce H[a, b] := maximum(α,β)  G[α⊗a, β⊗b]  α:2,β:2
     @test size(G) == 2 .* size(H)
 
-    @reduce H4[a, b] := maximum(α:4,β:4)  G[α\a, β\b]
+    @reduce H4[a, b] := maximum(α:4,β:4)  G[α⊗a, β⊗b]
     @test size(G) == 4 .* size(H4)
 
     W = randn(2,3,5,7);
