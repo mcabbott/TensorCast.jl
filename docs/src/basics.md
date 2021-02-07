@@ -278,7 +278,7 @@ julia> C' == @cast _[j,i] := C[i,j]'
 true
 ```
 
-## Arrays of indices or functions
+## Arrays of functions
 
 Besides arrays of numbers (and arrays of arrays) you can also broadcast an array of functions,
 which is done by calling `Core._apply(f, xs...) = f(xs...)`: 
@@ -296,18 +296,6 @@ begin
     local pelican = transmute(V, (nothing, 1))
     applied = @__dot__(_apply(funs, pelican))
 end
-```
-
-You can also index one array using another, this example is just `view(M, :, ind)`:
-
-```jldoctest mylabel
-julia> ind = [1,1,2,2,4];
-
-julia> @cast _[i,j] := M[i,ind[j]]
-3×5 view(::Array{Int64,2}, :, [1, 1, 2, 2, 4]) with eltype Int64:
- 1  1  4  4  10
- 2  2  5  5  11
- 3  3  6  6  12
 ```
 
 ## Repeated indices

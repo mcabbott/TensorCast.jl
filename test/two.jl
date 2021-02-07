@@ -70,28 +70,6 @@ end
     @test C == 1:3
 
 end
-@testset "int/bool indexing" begin
-
-    ind = [1,2,1,2]
-    M = rand(1:99, 3,4)
-
-    N1 = M[1,ind]
-    @cast N2[i] := M[1,ind[i]]
-    @test N1 == N2
-
-    N3 = M[ind,ind]
-    @cast N4[i,j] := M[ind[i],ind[j]]
-    @test N3 == N4
-
-    bool = ind .== 1
-    B1 = M[:,bool]
-    @cast B2[i,j] := M[i,bool[j]]
-    @test B1 == B2
-
-    V1 = M[CartesianIndex.(ind, ind)]
-    # @cast V2[i] := M[ind[i],ind[i]]
-
-end
 @testset "in-place += and *=" begin
 
     A = ones(2,3)

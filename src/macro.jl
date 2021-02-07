@@ -36,8 +36,6 @@ Understands the following things:
 * `M[i,i]` means `diag(M)[i]`, but only for matrices: `N[i,i,k]` is an error.
 * `P[i,i']` is normalised to `P[i,i′]` with unicode \\prime.
 * `R[i,-j,k]` means roughly `reverse(R, dims=2)`, and `Q[i,~j,k]` similar with `shuffle`.
-* `S[i,T[j,k]]` is the 3-tensor `S[:,T]` created by indexing a matrix `S` with `T`,
-  where these integers are `all(1 .<= T .<= size(S,2))`.
 
 The left and right hand sides must have all the same indices,
 and the only repeated index allowed is `M[i,i]`, which is a diagonal not a trace.
@@ -291,31 +289,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
 
     # Nested indices A[i,j,B[k,l,m],n] or worse A[i,B[j,k],C[i,j]]
     if any(i -> @capture(i, B_[klm__]), ijk)
-        newijk, beecolon = [], [] # for simple case
-        # listB, listijk = [], []
-        for i in ijk
-            if @capture(i, B_[klm__])
-                append!(newijk, klm)
-                push!(beecolon, B)
-                # push!(listijk, klm)
-                # push!(listB, B)
-            else
-                push!(newijk, i)
-                push!(beecolon, (:))
-            end
-        end
-        if allunique(newijk) # then we are in simple case
-            ijk = newijk
-            A = :( view($A, $(beecolon...)) )
-        else
-            throw(MacroError("can't handle this indexing yet, sorry", call))
-            # LHS && error("can't do this indexing on LHS sorry")
-            # A = maybepush(A, store, :preget)
-            # target = guesstarget(??)
-            # Bs = [ targetcast(B, target, store, call) for B in listB ]
-            # Aex = getindex.(Ref(A), i)
-            # A = maybepush(Aex, store, :getindex)
-        end
+        throw(MacroError("indexing one array by another is not supported, sorry", call))
     end
 
     # Diagonal extraction A[i,i]
