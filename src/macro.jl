@@ -443,7 +443,7 @@ function standardglue(ex, target, store::NamedTuple, call::CallInfo)
     elseif :lazy in call.flags
         AB = :( TensorCast.stack($B) )
         pop!(call.flags, :collected, :ok)
-    else
+    else # TODO make this the default
         AB = :( TensorCast.stack_iter($B) ) # really from LazyStack
         push!(call.flags, :collected)
     end
@@ -535,14 +535,13 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
     if !isempty(dims)
         perm = ntuple(d -> findfirst(isequal(d), dims), maximum(dims))
         if perm != ntuple(identity, maximum(dims))
-            # if :Strided in Call.flags
-            #     A = :( @strided TensorCast.transmute($A, $perm) )
-            # else
-                A = :( TensorCast.transmute($A, $perm) )
-            # end
-            if increasing_or_zero(perm) # thus likely to be just a reshape
+            if :nolazy in call.flags
+                A = :( TensorCast.transmutedims($A, $perm) )
             else
-                pop!(call.flags, :collected, :ok)
+                A = :( TensorCast.transmute($A, $perm) )
+                if ! increasing_or_zero(perm) # thus not just a reshape
+                    pop!(call.flags, :collected, :ok)
+                end
             end
         end
     end
@@ -960,7 +959,7 @@ function optionparse(opt, store::NamedTuple, call::CallInfo)
     if @capture(opt, i_:s_)
         saveonesize(tensorprimetidy(i), s, store)
         push!(call.flags, :assert)
-    elseif opt in (:assert, :lazy, :nolazy, :cat, :strided, :avx)
+    elseif opt in (:assert, :lazy, :nolazy, :strided, :avx)
         push!(call.flags, opt)
     elseif opt == :(!)
         @warn "please replace option ! with assert" call.string maxlog=1 _id=hash(call.string)

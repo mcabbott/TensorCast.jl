@@ -146,7 +146,7 @@ end
 
     DEbc = [ rand(2,3) for d=1:4, e=1:5 ]
 
-    @cast bcde[b,c,d,e] := DEbc[d,e][b,c];
+    @cast bcde[b,c,d,e] |= DEbc[d,e][b,c];
     @test size(bcde) == (2,3,4,5)
 
     BCde = [ rand(4,5) for d=1:2, e=1:3 ]
@@ -222,7 +222,7 @@ end
 @testset "combined" begin
 
     Bc = [ rand(3) for b=1:2 ] # Bc = [(1:3) .+ 10i for i=1:2]
-    @cast f[(b,c)] := Bc[b][c]
+    @cast f[(b,c)] |= Bc[b][c] # NOT a view of Bc
     @test size(f) == (6,)
     @cast bc[b,c] |= f[(b,c)] b:2 # for in-place to work below, this bc is NOT a view of f
     @test size(bc) == (2,3)
