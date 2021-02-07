@@ -60,14 +60,14 @@ end
 
     ## with output shaping / fixing
     bcde = rand(2,3,4,5);
-    @reduce A[d\c,_,b] := sum(e) bcde[-b,c,d,e]
+    @reduce A[d⊗c,_,b] := sum(e) bcde[-b,c,d,e]
     B = similar(A);
-    @reduce B[d\c,_,b] = sum(e) bcde[-b,c,d,e] assert
+    @reduce B[d⊗c,_,b] = sum(e) bcde[-b,c,d,e] assert
     @test A ≈ B
 
-    @reduce A[_,d\b,_] := sum(e,c) bcde[b,c,d,e]
+    @reduce A[_,d⊗b,_] := sum(e,c) bcde[b,c,d,e]
     B = similar(A);
-    @reduce B[_,d\b,_] = sum(c,e) bcde[b,c,d,e] assert
+    @reduce B[_,d⊗b,_] = sum(c,e) bcde[b,c,d,e] assert
     @test A ≈ B
 
 end
@@ -100,7 +100,7 @@ end
     @test V == V2
 
     # R4 = rand(1:10, 4)
-    # @cast W[i] := R4[i\i]^2 # diag(reshape(R4, (sz_i, sz_i))) with sz_i = (:)
+    # @cast W[i] := R4[i⊗i]^2 # diag(reshape(R4, (sz_i, sz_i))) with sz_i = (:)
     # @test W[1] := R4[1]^2
     # @test W[2] := R4[4]^2
 

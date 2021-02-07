@@ -109,12 +109,12 @@ end
     # W = rand(2,2,2,2); M = rand(2,2,2);
     W = rand(6,7,4,5); M = rand(7,2,3);
 
-    @reduce N[σ, b\a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
-    @matmul N2[σ, b\a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
+    @reduce N[σ, b⊗a, b′⊗a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
+    @matmul N2[σ, b⊗a, b′⊗a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
     @test N ≈ N2
 
-    @reduce R[σ, b,a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  # lazy;
-    @matmul R2[σ, b,a, b′\a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
+    @reduce R[σ, b,a, b′⊗a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  # lazy;
+    @matmul R2[σ, b,a, b′⊗a′] := sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
     @test R ≈ R2
     # invperm((4,2,1,3)) == (3, 2, 4, 1)
 
@@ -125,8 +125,8 @@ end
 
     ## in-place version
     N3 = similar(N); N4 = similar(N);
-    @reduce N3[σ, b\a, b′\a′] = sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  # lazy;
-    @matmul N4[σ, b\a, b′\a′] = sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
+    @reduce N3[σ, b⊗a, b′⊗a′] = sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′]  # lazy;
+    @matmul N4[σ, b⊗a, b′⊗a′] = sum(σ′) W[σ,σ′,b,b′] * M[σ′,a,a′];
     @test N ≈ N3 ≈ N4
     # lazy here causes test errors on Julia 1.0 to 1.4, but not at REPL, wtf?
 
@@ -134,8 +134,8 @@ end
     ## these were OK:
     M = rand(3,3,3);
 
-    @reduce Q[σ, b\a, a′] := sum(σ′) M[σ,σ′,b] * M[σ′,a,a′];
-    @matmul Q2[σ, b\a, a′] := sum(σ′) M[σ,σ′,b] * M[σ′,a,a′];
+    @reduce Q[σ, b⊗a, a′] := sum(σ′) M[σ,σ′,b] * M[σ′,a,a′];
+    @matmul Q2[σ, b⊗a, a′] := sum(σ′) M[σ,σ′,b] * M[σ′,a,a′];
     @test Q ≈ Q2
 
     @reduce Q3[σ, b,a, a′] := sum(σ′) M[σ,σ′,b] * M[σ′,a,a′];

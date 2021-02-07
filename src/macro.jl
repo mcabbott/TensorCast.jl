@@ -94,7 +94,7 @@ Tensor reduction macro:
 * In-place operations `Z[j] = sum(...` will construct the banged version of the given
   function's name, which must work like `sum!(Z, A)`.
 * The tensors can be anything that `@cast` understands, including gluing of slices `B[i,k][j]`
-  and reshaping `B[i\\j,k]`. See `? @cast` for the complete list.
+  and reshaping `B[i⊗j,k]`. See `? @cast` for the complete list.
 * If there is a function of one or more tensors on the right,
   then this is a broadcasting operation.
 * Index ranges may be given afterwards (as for `@cast`) or inside the reduction `sum(i:3, k:4)`.
@@ -1112,8 +1112,8 @@ end
 tensorprimetidy(v::Vector) = Any[ tensorprimetidy(x) for x in v ]
 function tensorprimetidy(ex)
     MacroTools.postwalk(ex) do @nospecialize x
-        @capture(x, ((ij__,) \ k_) ) && return :( ($(ij...),$k) )
-        @capture(x, i_ \ j_ ) && return :( ($i,$j) )
+        @capture(x, ((ij__,) \ k_) ) && throw("i\\j is no longer accepted, please write i⊗j or (i,j)")
+        @capture(x, i_ \ j_ ) && throw("i\\j is no longer accepted, please write i⊗j or (i,j)")
 
         @capture(x, ((ij__,) ⊗ k_) ) && return :( ($(ij...),$k) )
         @capture(x, i_ ⊗ j_ ) && return :( ($i,$j) )
@@ -1153,7 +1153,7 @@ function istensor(ex::Expr)
     @capture(ex, i_' )     && return istensor(i)
     @capture(ex, -(ij__) ) && return length(ij)>1 # TODO maybe reject -(i,j) ... istensor(:( -i⊗j )) is OK without this line
     @capture(ex, i_⊗j_ )   && return true
-    @capture(ex, i_\j_ )   && return true
+    @capture(ex, i_\j_ )   && return throw("i\\j is no longer accepted, please write i⊗j or (i,j)")
     @capture(ex, (ij__,) ) && return length(ij)>1
 end
 istensor(::QuoteNode) = false

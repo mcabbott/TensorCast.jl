@@ -331,9 +331,9 @@ end
 
     ## macro
 
-    # @test_throws ArgumentError @cast a[i] := bc[i,j]
-    # @test_throws ArgumentError @cast a[i,k] := bc[(i,j),k]
-    # @test_throws ArgumentError @cast a[(i,j),k] := bc[(i,k)]
+    @test_throws LoadError @macroexpand @cast a[i] := bc[i,j]
+    @test_throws LoadError @macroexpand @cast a[i,k] := bc[(i,j),k]
+    @test_throws LoadError @macroexpand @cast a[(i,j),k] := bc[(i,k)]
 
     ## runtime
 

@@ -153,7 +153,7 @@ julia> @cast O[i,j] := (M[i,1], M[j,$col])
 ## Reshaping
 
 Sometimes it's useful to combine two (or more) indices into one, 
-which may be written  either `i⊗j` or `i\j` or `(i,j)`. 
+which may be written  either `i⊗j` or `(i,j)`. 
 The simplest version of this is precisely what the built-in function `kron` does:
 
 ```jldoctest mylabel
@@ -216,14 +216,14 @@ agrees with that of two indices `x,i`.
 ```jldoctest mylabel
 julia> list = [ i .* ones(2,2) for i=1:8 ];
 
-julia> @cast mat[x\i, y\j] := Int(list[i\j][x,y])  i:2
+julia> @cast mat[x⊗i, y⊗j] := Int(list[i⊗j][x,y])  i:2
 4×8 Array{Int64,2}:
  1  1  3  3  5  5  7  7
  1  1  3  3  5  5  7  7
  2  2  4  4  6  6  8  8
  2  2  4  4  6  6  8  8
 
-julia> vec(mat) == @cast [xi\yj] := mat[xi, yj]
+julia> vec(mat) == @cast [xi⊗yj] := mat[xi, yj]
 true
 
 julia> mat == Int.(hvcat((4,4), transpose(reshape(list,2,4))...))
@@ -233,7 +233,7 @@ true
 Alternatively, this reshapes each matrix to a vector, and makes them columns of the output:
 
 ```jldoctest mylabel
-julia> @cast colwise[x\y,i] := Int(list[i][x,y])
+julia> @cast colwise[x⊗y,i] := Int(list[i][x,y])
 4×8 Array{Int64,2}:
  1  2  3  4  5  6  7  8
  1  2  3  4  5  6  7  8
