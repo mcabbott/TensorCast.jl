@@ -10,7 +10,12 @@ end
 export @cast, @reduce, @matmul, @pretty
 
 using MacroTools, StaticArrays, LazyStack, Compat
+using LazyStack: stack_iter
 using LinearAlgebra, Random
+
+if VERSION < v"1.5" # not sure!
+    using Compat # takes about 0.5s
+end
 
 include("macro.jl")
 include("pretty.jl")
