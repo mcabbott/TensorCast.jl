@@ -10,33 +10,46 @@ by defining a few macros. The first is `@cast`, which deals both with "casting" 
 new shapes (including going to and from an array-of-arrays) and with broadcasting:
 
 ```julia
-@cast A[row][col] := B[row, col]        # slice a matrix B into its rows, also @cast A[r] := B[r,:]
+@cast A[row][col] := B[row, col]       # slice a matrix B into rows, also @cast A[r] := B[r,:]
 
-@cast C[(i,j), (k,ℓ)] := D.x[i,j,k,ℓ]   # reshape a 4-tensor D.x to give a matrix
+@cast C[(i,j), (k,ℓ)] := D.x[i,j,k,ℓ]  # reshape a 4-tensor D.x to give a matrix
 
-@cast E[φ,γ] = F[φ]^2 * exp(G[γ])       # broadcast E .= F.^2 .* exp.(G') into existing E
+@cast E[φ,γ] = F[φ]^2 * exp(G[γ])      # broadcast E .= F.^2 .* exp.(G') into existing E
 
-@cast T[x,y,n] := outer(M[:,n])[x,y]    # generalised mapslices, vector -> matrix function
+@cast T[x,y,n] := outer(M[:,n])[x,y]   # generalised mapslices, vector -> matrix function
 ```
 
 Second, `@reduce` takes sums (or other reductions) over the indicated directions. Among such sums is 
 matrix multiplication, which can be done more efficiently using `@matmul` instead:
 
 ```julia
-@reduce K[_,b] := prod(a,c) L.field[a,b,c]           # product over dims=(1,3), and drop dims=3
+@reduce K[_,b] := prod(a,c) L.field[a,b,c]           # product over dims=(1,3), drop dims=3
 
 @reduce S[i] = sum(n) -P[i,n] * log(P[i,n]/Q[n])     # sum!(S, @. -P*log(P/Q')) into exising S
 
 @matmul M[i,j] := sum(k,k′) U[i,k,k′] * V[(k,k′),j]  # matrix multiplication, plus reshape
 ```
 
-All of these are converted into simple Julia array commands like `reshape` and `permutedims` 
+This notationn with `@cast` applies a function which takes the `dims` keyword, without reducing:
+
+```julia
+@cast W[i,j,c,n] := cumsum(c) X[c,i,j,n]^2           # permute, broadcast, cumsum(; dims=3)
+```
+
+All of these are converted into array commands like `reshape` and `permutedims` 
 and `eachslice`, plus a [broadcasting expression](https://julialang.org/blog/2017/01/moredots) if needed, 
-and `sum` /  `sum!`, or `*` / `mul!`. This means that they are very generic, and will (mostly) work well 
-with [StaticArrays](https://github.com/JuliaArrays/StaticArrays.jl), on the GPU via 
-[CuArrays](https://github.com/JuliaGPU/CuArrays.jl), and with almost anything else. 
-For operations with arrays of arrays like `mapslices`, this package defines gradients for 
-[Zygote.jl](https://github.com/FluxML/Zygote.jl) (similar to those of [SliceMap.jl](https://github.com/mcabbott/SliceMap.jl)).
+and `sum` /  `sum!`, or `*` / `mul!`. This package just provides a convenient notation.
+
+## Installation
+
+```julia
+] add TensorCast
+```
+
+Needs [Julia](https://julialang.org/downloads/) 1.0 or later. 
+There are a few pages of [documentation](https://mcabbott.github.io/TensorCast.jl/dev).
+
+## Elsewhere
 
 Similar notation is used by some other packages, although all of them use an implicit sum over 
 repeated indices. [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl) performs 
@@ -49,9 +62,10 @@ Einstein-convention contractions and traces:
 
 More general contractions are allowed by 
 [OMEinsum.jl](https://github.com/under-Peter/OMEinsum.jl), but only one term:
+
 ```julia
-@ein W[i,j,k] := X[i,ξ] * Y[j,ξ] * Z[k,ξ]   # star contraction
-W = ein" iξ,jξ,kξ -> ijk "(X,Y,Z)           # numpy-style notation
+@ein Z[i,j,ξ] := X[i,k,ξ] * Y[j,k,ξ]        # batched matrix multiplication
+Z = ein" ikξ,jkξ -> ijξ "(X,Y)              # numpy-style notation
 ```
 
 Instead [Einsum.jl](https://github.com/ahwillia/Einsum.jl) and [Tullio.jl](https://github.com/mcabbott/Tullio.jl) 
@@ -69,19 +83,11 @@ while `@einsum` and `@tullio` simply write the necessary set of nested loops.
 
 For those who speak Python, `@cast` and `@reduce` allow similar operations to 
 [`einops`](https://github.com/arogozhnikov/einops) (minus the cool video, but plus broadcasting)
-while Einsum / TensorOperations map very roughly to [`einsum`](http://numpy-discussion.10968.n7.nabble.com/einsum-td11810.html) 
-/ [`opt_einsum`](https://github.com/dgasmith/opt_einsum).
-
-## Installation
-
-You need [Julia](https://julialang.org/downloads/) 1.0 or later:
-
-```julia
-] add TensorCast
-```
+while `@ein` & `@tensor` are closer to [`einsum`](https://numpy.org/doc/stable/reference/generated/numpy.einsum.html).
 
 ## About
 
 This was a holiday project to learn a bit of metaprogramming, originally `TensorSlice.jl`. 
 But it suffered a little scope creep. 
 
+From version 0.4, it relies on two helper packages: [TransmuteDims.jl](https://github.com/mcabbott/TransmuteDims.jl) handles permutations & reshapes, and [LazyStack.jl](https://github.com/mcabbott/LazyStack.jl) handles slices.
