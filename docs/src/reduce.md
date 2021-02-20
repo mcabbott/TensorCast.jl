@@ -17,7 +17,7 @@ julia> @reduce S[i] := sum(j) M[i,j] + 1000
 
 julia> @pretty @reduce S[i] := sum(j) M[i,j] + 1000
 begin
-    S = dropdims(sum(@__dot__(M + 1000), dims=2), dims=2)
+    S = transmute(sum(@__dot__(M + 1000), dims = 2), (1,))
 end
 ```
 
@@ -25,6 +25,9 @@ Note that:
 * You must always specify the index to be summed over. 
 * The sum applies to the whole right side (including the 1000 here). 
 * And the summed dimensions are always dropped (unless you explicitly say `S[i,_] := ...`).
+
+Here `transmute(..., (1,))` is equivalent to `dropdims(..., dims=2)`, 
+keeping just the first dimension by reshaping.
 
 ## Not just `sum`
 
@@ -47,7 +50,7 @@ If writing into an existing array, then the function must work like `sum!` does:
 ```julia-repl
 julia> @pretty @reduce A[j] = mean(i) M[i,j]^2
 begin
-    local pelican = PermuteDims(M)
+    local pelican = transmute(M, (2, 1))  # pelican = transpose(M)
     mean!(A, @__dot__(pelican ^ 2))
 end
 ```
@@ -59,7 +62,7 @@ and keep the maximum of each set -- equivalent to the maximum of each column bel
 ```jldoctest mylabel
 julia> R = collect(0:5:149);
 
-julia> @reduce Rmax[_,c] := maximum(r) R[r\c]  r:3
+julia> @reduce Rmax[_,c] := maximum(r) R[(r,c)]  r:3
 1×10 LinearAlgebra.Transpose{Int64,Array{Int64,1}}:
  10  25  40  55  70  85  100  115  130  145
 
@@ -71,13 +74,13 @@ julia> reshape(R, 3,:)
 ```
 
 Here `r:3` indicates the range of `r`, implying `c ∈ 1:10`. 
-You may also write `maximum(r:3) R[r\c]`. 
+You may also write `maximum(r:3) R[(r,c)]`.
 
 In the same way, this down-samples an image by a factor of 2, 
 taking the mean of each 2×2 block of pixels, in each colour `c`:
 
 ```julia-repl
-julia> @reduce smaller[I,J,c] := mean(i:2, j:2) orig[i\I, j\J, c]
+julia> @reduce smaller[I,J,c] := mean(i:2, j:2) orig[(i,I), (j,J), c]
 ```
 
 ## Scalar output
@@ -109,10 +112,10 @@ There is no need to name the intermediate array, here `termite[x]`, but you must
 ```julia-repl
 julia> @pretty @reduce sum(x,θ) L[x,θ] * p[θ] * log(L[x,θ] / @reduce [x] := sum(θ′) L[x,θ′] * p[θ′])
 begin
-    local pelican = orient(p, (*, :))
-    termite = dropdims(sum(@__dot__(L * pelican), dims=2), dims=2)
-    local caterpillar = orient(p, (*, :))
-    goat = sum(@__dot__(L * caterpillar * log(L / termite)))
+    local fish = transmute(p, (nothing, 1))
+    termite = transmute(sum(@__dot__(L * fish), dims = 2), (1,))
+    local wallaby = transmute(p, (nothing, 1))
+    rat = sum(@__dot__(L * wallaby * log(L / termite)))
 end
 ```
 
@@ -128,8 +131,8 @@ before summing over one index:
 ```julia-repl
 julia> @pretty @reduce R[i,k] := sum(j) M[i,j] * N[j,k]
 begin
-    local pelican = orient(N, (*, :, :))
-    R = dropdims(sum(@__dot__(M * pelican), dims=2), dims=2)
+    local fish = transmute(N, (nothing, 1, 2))                # fish = reshape(N, 1, size(N)...)
+    R = transmute(sum(@__dot__(M * fish), dims = 2), (1, 3))  # R = dropdims(sum(...), dims=2)
 end
 ```
 

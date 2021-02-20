@@ -30,7 +30,7 @@ matrix multiplication, which can be done more efficiently using `@matmul` instea
 @matmul M[i,j] := sum(k,k′) U[i,k,k′] * V[(k,k′),j]  # matrix multiplication, plus reshape
 ```
 
-This notationn with `@cast` applies a function which takes the `dims` keyword, without reducing:
+This notation with `@cast` applies a function which takes the `dims` keyword, without reducing:
 
 ```julia
 @cast W[i,j,c,n] := cumsum(c) X[c,i,j,n]^2           # permute, broadcast, cumsum(; dims=3)
@@ -46,7 +46,7 @@ and `sum` /  `sum!`, or `*` / `mul!`. This package just provides a convenient no
 ] add TensorCast
 ```
 
-Needs [Julia](https://julialang.org/downloads/) 1.0 or later. 
+Current version requires [Julia](https://julialang.org/downloads/) 1.3 or later.
 There are a few pages of [documentation](https://mcabbott.github.io/TensorCast.jl/dev).
 
 ## Elsewhere
@@ -79,7 +79,7 @@ sum the entire right hand side, but also allow arbitrary (element-wise) function
 
 These produce very different code for actually doing what you request:
 The macros `@tensor` and `@ein` work out a sequence of basic operations (like contraction and traces),
-while `@einsum` and `@tullio` simply write the necessary set of nested loops.
+while `@einsum` and `@tullio` write the necessary set of nested loops directly (plus optimisations).
 
 For those who speak Python, `@cast` and `@reduce` allow similar operations to 
 [`einops`](https://github.com/arogozhnikov/einops) (minus the cool video, but plus broadcasting)
@@ -90,4 +90,4 @@ while `@ein` & `@tensor` are closer to [`einsum`](https://numpy.org/doc/stable/r
 This was a holiday project to learn a bit of metaprogramming, originally `TensorSlice.jl`. 
 But it suffered a little scope creep. 
 
-From version 0.4, it relies on two helper packages: [TransmuteDims.jl](https://github.com/mcabbott/TransmuteDims.jl) handles permutations & reshapes, and [LazyStack.jl](https://github.com/mcabbott/LazyStack.jl) handles slices.
+From version 0.4 (currently `] add TensorCast#master`), it relies on two helper packages: [TransmuteDims.jl](https://github.com/mcabbott/TransmuteDims.jl) handles permutations & reshapes, and [LazyStack.jl](https://github.com/mcabbott/LazyStack.jl) handles slices.
