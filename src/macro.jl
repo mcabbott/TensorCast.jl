@@ -59,8 +59,6 @@ Options specified at the end (if several, separated by `,`) are:
   are allowed, but `i = 1:3` is not.
 * `lazy=false` disables `PermutedDimsArray` in favour of `permutedims`, 
   and `Diagonal` in favour of `diagm` for `Z[i,i]` output.
-* `assert` will turn on explicit dimension checks of the input.
-  (Providing any ranges will also turn these on.)
 
 Some modifications to broadcasting are possible, after loading the corresponding package:
 * `@cast @strided Z[i,j] := ...` uses Strided.jl's macro, for multi-threaded broadcasting.
@@ -1013,11 +1011,8 @@ function optionparse(opt, store::NamedTuple, call::CallInfo)
     elseif opt == :nolazy
         @warn "option `nolazy` is deprecated, please write keyword style `lazy=false` to disable PermutedDimsArray etc."
         push!(call.flags, :lazy_0)
-    elseif opt == :assert
-        push!(call.flags, opt)
-    elseif opt == :(!)
-        @warn "please replace option ! with assert" call.string maxlog=1 _id=hash(call.string)
-        push!(call.flags, :assert)
+    elseif opt in (:assert, :(!))
+        @warn "option 'assert' is no longer needed, this is the default" call.string maxlog=1
     else
         throw(MacroError("don't understand option $opt", call))
     end
@@ -1046,10 +1041,10 @@ end
 
 function findsizes(store::NamedTuple, call::CallInfo)
     out = []
-    if :assert in call.flags
-        append!(out, store.assert)
-        empty!(store.assert)
-    end
+    # if :assert in call.flags
+    append!(out, store.assert)
+    empty!(store.assert)
+    # end
     if length(store.need) > 0
         sizes = sizeinfer(store, call)
         sz_list = map(szwrap, store.need)

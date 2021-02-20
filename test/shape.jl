@@ -41,7 +41,7 @@ end
     oo[1] = 99
     @test bcde[1] != 99 # copy not a view
 
-    @cast oo[d,e,b,c] = bcde[b,c,d,e]  assert;
+    @cast oo[d,e,b,c] = bcde[b,c,d,e];
     oo[1] = 99
     @test bcde[1] != 99 # still not a view
 
@@ -61,7 +61,7 @@ end
     bcd = rand(2,3,4);
     bcde = rand(2,3,4,5);
 
-    @cast Bcd[b][c,d] |= bcd[b,c,d]  assert
+    @cast Bcd[b][c,d] |= bcd[b,c,d]
     @test size(Bcd) == (2,)
     @test size(first(Bcd)) == (3,4)
     @test Bcd[2][3,1] == bcd[2,3,1]
@@ -69,16 +69,16 @@ end
     Bcd[2][3,1] = 99
     @test bcd[2,3,1] != 99 # copy not a view
 
-    @cast Cbd[c][b,d] := bcd[b,c,d]  assert
+    @cast Cbd[c][b,d] := bcd[b,c,d]
     @test size(Cbd) == (3,)
     @test size(first(Cbd)) == (2,4)
     @test Cbd[3][2,1] == bcd[2,3,1]
 
-    @cast BCde[b,c][d,e] := bcde[b,c,d,e]  assert
+    @cast BCde[b,c][d,e] := bcde[b,c,d,e]
     @test size(BCde) == (2,3)
     @test size(BCde[1,1]) == (4,5)
 
-    @cast DBec[d,b][e,c] := bcde[b,c,d,e]  assert
+    @cast DBec[d,b][e,c] := bcde[b,c,d,e]
     @test size(DBec) == (4,2)
     @test size(DBec[1,1]) == (5,3)
 
@@ -131,7 +131,7 @@ end
     bcd = rand(2,3,4)
     Bcd = [ rand(3,4) for b=1:2 ]
 
-    @cast bcd[b,c,d] = Bcd[b][c,d]  assert
+    @cast bcd[b,c,d] = Bcd[b][c,d]
     @test size(bcd) == (2,3,4)
     @test Bcd[2][3,1] == bcd[2,3,1]
 
@@ -148,7 +148,7 @@ end
 
     BCde = [ rand(4,5) for d=1:2, e=1:3 ]
 
-    @cast bcde[b,c,d,e] = BCde[b,c][d,e]  assert;
+    @cast bcde[b,c,d,e] = BCde[b,c][d,e];
     @test size(bcde) == (2,3,4,5)
 
 end
@@ -225,8 +225,8 @@ end
     @test size(bc) == (2,3)
     @test bc[1,2] == Bc[1][2]
 
-    @cast f[(c,b)] = Bc[b][c]  assert  # in-place
-    @cast bc[b,c] = f[(c,b)]   assert  # in-place
+    @cast f[(c,b)] = Bc[b][c]  # in-place
+    @cast bc[b,c] = f[(c,b)]   # in-place
     @test bc[1,2] == Bc[1][2]
 
     Cdaeb = [rand(4,1,5,2) for i=1:3]; # sizes match abcde now
@@ -290,8 +290,7 @@ end
 
     @cast A[i,j,k] = B[i,(j,k)] i in 1:1
 
-    @cast V[(i,j,k)] := B[i,(k,j)]  k in 1:3, assert # was an error for recursive colon reasons
-
+    @cast V[(i,j,k)] := B[i,(k,j)]  k in 1:3 # was an error for recursive colon reasons
 
     A = @cast _[jk,i] := B[i,jk] # without left-hand name
     @test size(A) == (6,1)
@@ -345,7 +344,7 @@ end
 
     ## runtime
 
-    @test_throws DimensionMismatch @cast oo[i,j] := bc[i,j] i in 1:3, assert
-    @test_throws DimensionMismatch @cast cb[i,j] = bc[i,j]  assert
+    @test_throws Exception @cast oo[i,j] := bc[i,j] (i in 1:3)
+    @test_throws Exception @cast cb[i,j] = bc[i,j]
 
 end

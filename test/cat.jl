@@ -85,7 +85,7 @@ end
 
     @cast M[i,i] = A[i,i] + 2 * D[i,i]
     @test M[2,2] == 3 * A[2,2]
-    @cast M[i,i] = A[i,i] + 2 * D[i,i]  nolazy, assert
+    @cast M[i,i] = A[i,i] + 2 * D[i,i]  nolazy
     @test M[2,2] == 3 * A[2,2]
 
     @reduce D[i,i] := sum(k) A[i,k] + 10

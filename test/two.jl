@@ -6,7 +6,7 @@
     @cast C1[i][j] := M[i,j]
     @cast C2[i][j] |= M[i,j]
     @cast C3[i] := M[i,:]
-    @cast C4[i] |= M[i,:4] assert
+    @cast C4[i] |= M[i,:4]
 
     @test first(C1) isa SubArray
     @test first(C2) isa Array
@@ -27,7 +27,7 @@
 
     γ = 3
     @cast R6[j]{i:γ} |= M[i,j] # test both |= and γ
-    @cast R7[j] |= M{:γ,j} assert
+    @cast R7[j] |= M{:γ,j}
 
     @test R5 isa Base.ReinterpretArray
     @test R6 isa Array
