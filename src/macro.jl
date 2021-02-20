@@ -59,9 +59,6 @@ Using `|=` (or broadcasting) will produce a simple `Array`.
 Options can be specified at the end (if several, separated by `,` i.e. `options::Tuple`)
 * `i in 1:3` supplies the range of index `i`. Variables and functions like `j in 1:Nj, k in 1:length(K)`
   are allowed.
-* `assert` will turn on explicit dimension checks of the input.
-  (Providing any ranges will also turn these on.)
-* `lazy` will instead make a `LazyStack.Stacked` container.
 * `nolazy` disables `PermutedDimsArray` and `Reverse` in favour of `permutedims` and `reverse`,
   and `Diagonal` in favour of `diagm` for `Z[i,i]` output.
 * `strided` will place `@strided` in front of broadcasting operations,
@@ -1002,12 +999,10 @@ function optionparse(opt, store::NamedTuple, call::CallInfo)
     elseif @capture(opt, i_:s_)
         @warn "please replace index ranges like `i:3` with `i in 1:3` or `i ∈ 1:3`"
         saveonesize(tensorprimetidy(i), s, store)
-        push!(call.flags, :assert)
-    elseif opt in (:assert, :lazy, :nolazy, :strided, :avx)
+    elseif opt in (:lazy, :nolazy, :strided, :avx)
         push!(call.flags, opt)
-    elseif opt == :(!)
-        @warn "please replace option ! with assert" call.string maxlog=1 _id=hash(call.string)
-        push!(call.flags, :assert)
+    elseif opt in (:assert, :(!))
+        @warn "option 'assert' is no longer needed, this is the default" call.string maxlog=1
     else
         throw(MacroError("don't understand option $opt", call))
     end
@@ -1036,10 +1031,10 @@ end
 
 function findsizes(store::NamedTuple, call::CallInfo)
     out = []
-    if :assert in call.flags
-        append!(out, store.assert)
-        empty!(store.assert)
-    end
+    # if :assert in call.flags
+    append!(out, store.assert)
+    empty!(store.assert)
+    # end
     if length(store.need) > 0
         sizes = sizeinfer(store, call)
         sz_list = map(szwrap, store.need)

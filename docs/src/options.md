@@ -7,18 +7,7 @@ But unlike those packages, sometimes the result of `@cast` is a view of the orig
 `@cast A[i,j] := B[j,i]` gives `A = transpose(B)`. You can forbid this, and insist on a copy, 
 by writing `|=` instead (or passing the option `collect`). 
 
-Various other options can be given after the main expression. `assert` turns on explicit size checks, 
-and ranges like `i ∈ 1:3` specify the size in that direction (sometimes this is necessary to specify the shape).
-Adding these to the example above: 
-```julia
-@pretty @cast A[(i,j)] = B[i,j]  i ∈ 1:3, assert
-# begin
-#     @assert_ ndims(B) == 2 "expected a 2-tensor B[i, j]"
-#     @assert_ 3 == size(B, 1) "range of index i must agree"
-#     @assert_ ndims(A) == 1 "expected a 1-tensor A[(i, j)]"
-#     copyto!(A, B)
-# end
-```
+Various other options can be given after the main expression. 
 
 ## Ways of slicing
 

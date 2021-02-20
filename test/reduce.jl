@@ -6,7 +6,7 @@
 	@reduce C[c] := sum(b) bc[b,c]
 	@test C == vec(sum(bc, dims=1))
 
-	@reduce B[b] := prod(c:3) bc[b,c] assert
+	@reduce B[b] := prod(c:3) bc[b,c]
 	@test B == vec(prod(bc, dims=2))
 
 	using Statistics
@@ -15,7 +15,7 @@
 	V = vec(mean(bcde, dims=(2,4)))
 	@test V == W
 
-	@reduce Z[e,b,β] := Statistics.std(c,α) bcde[b,c,α⊗β,e] assert, α in 1:2
+	@reduce Z[e,b,β] := Statistics.std(c,α) bcde[b,c,α⊗β,e]  (α in 1:2)
 	@test size(Z) == (5,2,2)
 
 	@reduce A[_,e,_,b] := sum(c) bcde[b,c,3,e]
@@ -50,15 +50,15 @@ end
 
     # inference for a⊗b⊗c had an (Any[]...) dots problem at first
     B = randn(8,24);
-    @reduce A[b,c, y,z] := sum(a:2, x:2) B[a⊗b⊗c, x⊗y⊗z]  b in 1:2, y in 1:3, assert
+    @reduce A[b,c, y,z] := sum(a:2, x:2) B[a⊗b⊗c, x⊗y⊗z]  b in 1:2, y in 1:3
     @test size(A) == (2,2, 3,4)
 
     C = similar(A)
-    @reduce C[b,c, y,z] = sum(a, x) B[a⊗b⊗c, x⊗y⊗z]  assert
+    @reduce C[b,c, y,z] = sum(a, x) B[a⊗b⊗c, x⊗y⊗z]
     @test C ≈ A
 
     # with a:2 given, it doesn't try product inference, just leaves a :, which is OK.
-    @reduce C[b,c, y,z] = sum(a:2, x) B[a⊗b⊗c, x⊗y⊗z]  assert
+    @reduce C[b,c, y,z] = sum(a:2, x) B[a⊗b⊗c, x⊗y⊗z]
     @test C ≈ A
 
 end
@@ -83,7 +83,7 @@ end
 
     # this needs size of the result of inner macro, failed at first:
     A = rand(2,3); B = rand(3,4); C = rand(4,5);
-    @reduce W[i,_,l] := sum(j) A[i,j] * (@matmul _[j,l] := sum(k) B[j,k] * C[k,l])  assert
+    @reduce W[i,_,l] := sum(j) A[i,j] * (@matmul _[j,l] := sum(k) B[j,k] * C[k,l])
     @test W ≈ reshape(A * B * C, 2,1,5)
 
 end
