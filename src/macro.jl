@@ -274,7 +274,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     if any(iscolon, ijk)
         code = Tuple(map(i -> iscolon(i) ? (:) : (*), ijk))
         if !static && (:collect in call.flags)
-            A = :( TensorCast.slicecopy($A, $code) )
+            A = :( TensorCast.slicecopy($A, $code) ) # TODO change this to lazy / nolazy?
         elseif !static
             A = :( TensorCast.sliceview($A, $code) )
         else
@@ -537,6 +537,7 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
         if perm != ntuple(identity, maximum(dims))
             if :nolazy in call.flags
                 A = :( TensorCast.transmutedims($A, $perm) )
+                push!(call.flags, :collected)
             else
                 A = :( TensorCast.transmute($A, $perm) )
                 if ! increasing_or_zero(perm) # thus not just a reshape
@@ -707,8 +708,6 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
 
     # Do we make a new array? With or without collecting:
     if @capture(ex, left_ := right_ )
-    elseif @capture(ex, left_ == right_ )
-        @warn "using == no longer does anything" call.string maxlog=1 _id=hash(call.string)
     elseif @capture(ex, left_ |= right_ )
         push!(call.flags, :collect)
 
@@ -1367,11 +1366,10 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         else
             dims = length(parsed.rdims)>1 ? Tuple(parsed.rdims) : parsed.rdims[1]
             perm = Tuple(filter(d -> !(d in parsed.rdims), 1:length(canon)))
-            # ex = :( dropdims($(parsed.redfun)($ex, dims=$dims), dims=$dims) )
             ex = :( TensorCast.transmute($(parsed.redfun)($ex, dims=$dims), $perm) )
-            # if :strided in call.flags
-            #     pop!(call.flags, :collected, :ok) # dropdims makes reshape(stridedview(...
-            # end # ???
+            if :strided in call.flags
+                pop!(call.flags, :collected, :ok) # makes stridedview(...
+            end
         end
         canon = deleteat!(copy(canon), sort(parsed.rdims))
     elseif :dimcast in call.flags
@@ -1415,12 +1413,7 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         if any(istensor, parsed.outer)
             ex = :( reshape($ex, ($(parsed.outsize...),)) )
             append!(store.need, parsed.flat)
-            # push!(call.flags, :reshaped)
         else
-            # code = Tuple(map(i -> isconstant(i) ? (*) : (:), parsed.outer))
-            # ex = :( TensorCast.orient($ex, $code) )
-            # perm = ntuple(d -> isconstant(parsed.outer[d]) ? nothing : d, length(parsed.outer))
-            # perm = Tuple(map(((d,i),) -> isconstant(i) ? nothing : d, enumerate(parsed.outer)))
             _d = 0
             perm = Tuple(map(i -> isconstant(i) ? nothing : (_d+=1), parsed.outer))
             ex = :( TensorCast.transmute($ex, $perm) )
