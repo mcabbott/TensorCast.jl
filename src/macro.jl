@@ -53,8 +53,7 @@ The following actions are possible:
 * `:=` creates a new array. This need not be named: `Z = @cast [i,j,k] := ...` is allowed.
 * `|=` insists that this is a copy, not a view.
 
-Re-ordering of indices `Z[k,j,i]` is done lazily with `PermutedDimsArray(A, ...)`.
-Reversing of an axis `F[i,-j,k]` is also done lazily, by `Reverse{2}(F)` which makes a `view`.
+Re-ordering of indices `Z[k,j,i]`, and reversing of an axis `F[i,-j,k]`, are done lazily.
 Using `|=` (or broadcasting) will produce a simple `Array`.
 
 Options can be specified at the end (if several, separated by `,` i.e. `options::Tuple`)
@@ -62,8 +61,7 @@ Options can be specified at the end (if several, separated by `,` i.e. `options:
   are allowed.
 * `assert` will turn on explicit dimension checks of the input.
   (Providing any ranges will also turn these on.)
-* `cat` will glue slices by things like `hcat(A...)` instead of the default `reduce(hcat, A)`,
-  and `lazy` will instead make a `LazyStack.Stacked` container.
+* `lazy` will instead make a `LazyStack.Stacked` container.
 * `nolazy` disables `PermutedDimsArray` and `Reverse` in favour of `permutedims` and `reverse`,
   and `Diagonal` in favour of `diagm` for `Z[i,i]` output.
 * `strided` will place `@strided` in front of broadcasting operations,
@@ -264,7 +262,9 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
         if needview!(ijcolon)
             A = :( view($A, $(ijcolon...)) ) # TODO nolazy?
         else
-            A = :( TensorCast.rview($A, $(ijcolon...)) )
+            # A = :( TensorCast.rview($A, $(ijcolon...)) )
+            perm = filter(!isnothing, ntuple(d -> ijcolon[d]==(:) ? d : nothing, length(ijcolon)))
+            A = :( TensorCast.transmute($A, $perm) )
         end
         ijk = filter(!isconstant, ijk)              # remove actual constants from list,
         ijk = map(i -> isrange(i) ? :(:) : i, ijk)  # but for A[i,3:5] replace with : symbol, for slicing
@@ -274,7 +274,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     if any(iscolon, ijk)
         code = Tuple(map(i -> iscolon(i) ? (:) : (*), ijk))
         if !static && (:collect in call.flags)
-            A = :( TensorCast.slicecopy($A, $code) )
+            A = :( TensorCast.slicecopy($A, $code) ) # TODO change this to lazy / nolazy?
         elseif !static
             A = :( TensorCast.sliceview($A, $code) )
         else
@@ -420,7 +420,9 @@ function standardglue(ex, target, store::NamedTuple, call::CallInfo)
         if needview!(ijcolon)
             ex = :( $Bsym =  @__dot__ view($B, $(ijcolon...)) ) # TODO nolazy here
         else
-            ex = :( $Bsym = @__dot__ TensorCast.rview($B, $(ijcolon...)) )
+            # ex = :( $Bsym = @__dot__ TensorCast.rview($B, $(ijcolon...)) )
+            perm = filter(!isnothing, ntuple(d -> ijcolon[d]==(:) ? d : nothing, length(ijcolon)))
+            ex = :( $Bsym = TensorCast.transmute.($B, Ref($perm)) )
         end
         push!(store.main, ex)
         B = Bsym
@@ -441,8 +443,8 @@ function standardglue(ex, target, store::NamedTuple, call::CallInfo)
     elseif :lazy in call.flags
         AB = :( TensorCast.stack($B) )
         pop!(call.flags, :collected, :ok)
-    else
-        AB = :( TensorCast.LazyStack.stack_iter($B) )
+    else # TODO make this the default
+        AB = :( TensorCast.stack_iter($B) ) # really from LazyStack
         push!(call.flags, :collected)
     end
 
@@ -529,29 +531,21 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
 
     dims = Int[ findcheck(i, target, call, " on the left") for i in ijk ]
 
-    # Do we need permutedims, or equvalent?
-    perm = sortperm(dims)
-    if perm != 1:length(dims)
-        tupleperm = Tuple(perm)
-        if :strided in call.flags
-            A = :( Strided.@strided permutedims($A, $tupleperm) )
-        elseif :nolazy in call.flags
-            A = :( permutedims($A, $tupleperm) )
-            push!(call.flags, :collected)
-        elseif tupleperm == (2,1)
-            A = :( TensorCast.PermuteDims($A) )
-        else
-            A = :( PermutedDimsArray($A, $tupleperm) )
-            pop!(call.flags, :collected, :ok)
+    # Both orient and permutedims are now rolled into transmute:
+    if !isempty(dims)
+        perm = ntuple(d -> findfirst(isequal(d), dims), maximum(dims))
+        if perm != ntuple(identity, maximum(dims))
+            if :nolazy in call.flags
+                A = :( TensorCast.transmutedims($A, $perm) )
+                push!(call.flags, :collected)
+            else
+                A = :( TensorCast.transmute($A, $perm) )
+                if ! increasing_or_zero(perm) # thus not just a reshape
+                    pop!(call.flags, :collected, :ok)
+                end
+            end
         end
     end
-
-    # Do we need orient()?
-    if length(dims)>0 && maximum(dims) != length(dims)
-        code = Tuple(Any[ d in dims ? (:) : (*) for d=1:maximum(dims) ])
-        A = :( TensorCast.orient($A, $code) )
-    end
-    # Those two steps are what might be replaced with TransmuteDims
 
     # Does A need protecting from @__dot__?
     A = maybepush(A, store, :nobroadcast)
@@ -714,8 +708,6 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
 
     # Do we make a new array? With or without collecting:
     if @capture(ex, left_ := right_ )
-    elseif @capture(ex, left_ == right_ )
-        @warn "using == no longer does anything" call.string maxlog=1 _id=hash(call.string)
     elseif @capture(ex, left_ |= right_ )
         push!(call.flags, :collect)
 
@@ -966,7 +958,7 @@ function optionparse(opt, store::NamedTuple, call::CallInfo)
     if @capture(opt, i_:s_)
         saveonesize(tensorprimetidy(i), s, store)
         push!(call.flags, :assert)
-    elseif opt in (:assert, :lazy, :nolazy, :cat, :strided, :avx)
+    elseif opt in (:assert, :lazy, :nolazy, :strided, :avx)
         push!(call.flags, opt)
     elseif opt == :(!)
         @warn "please replace option ! with assert" call.string maxlog=1 _id=hash(call.string)
@@ -1246,9 +1238,11 @@ function matrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call::C
     # Deal with empty left of V in V'*M, or perhaps V=vec(T) first
     if isempty(left)
         if length(right) == 1
-            return :( TensorCast.PermuteDims($ex) )
+            # return :( TensorCast.PermuteDims($ex) )
+            return :( transpose($ex) )
         else
-            return :( TensorCast.PermuteDims(reshape($ex, :)) )
+            # return :( TensorCast.PermuteDims(reshape($ex, :)) )
+            return :( transpose(reshape($ex, :)) )
         end
     end
 
@@ -1277,7 +1271,8 @@ function unmatrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call:
 
     # For V'*M, you may get a Transpose row-vector, for which this is .parent:
     if length(left) == 0
-        ex = :( TensorCast.rview($ex, 1,:) )
+        # ex = :( TensorCast.rview($ex, 1,:) )
+        ex = :( TensorCast.transmute($ex, (2,)) )
         length(right) == 1 && return ex # literally V'*M done,
         # but for V'*T we should reshape this .parent
     end
@@ -1289,6 +1284,14 @@ function unmatrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call:
     # push!(call.flags, :reshaped)
     return :( reshape($ex, ($(sizes...),)) )
 end
+
+function increasing_or_zero(tup::Tuple, prev=0)  # strictly increasing, allows nothing or 0
+    d = first(tup)
+    d === nothing && return increasing_or_zero(Base.tail(tup), prev)
+    (d != 0) && (d <= prev) && return false
+    return increasing_or_zero(Base.tail(tup), max(d, prev))
+end
+increasing_or_zero(::Tuple{}, prev=0) = true
 
 #==================== Nice Errors ====================#
 
@@ -1362,9 +1365,10 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
             ex = :( $(parsed.redfun)($ex) )
         else
             dims = length(parsed.rdims)>1 ? Tuple(parsed.rdims) : parsed.rdims[1]
-            ex = :( dropdims($(parsed.redfun)($ex, dims=$dims), dims=$dims) )
+            perm = Tuple(filter(d -> !(d in parsed.rdims), 1:length(canon)))
+            ex = :( TensorCast.transmute($(parsed.redfun)($ex, dims=$dims), $perm) )
             if :strided in call.flags
-                pop!(call.flags, :collected, :ok) # dropdims makes reshape(stridedview(...
+                pop!(call.flags, :collected, :ok) # makes stridedview(...
             end
         end
         canon = deleteat!(copy(canon), sort(parsed.rdims))
@@ -1388,27 +1392,35 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         # Now I allow fixing output indices
         if any(isconstant, parsed.inner)
             any(i -> isconstant(i) && !(i == :_ || i == 1), parsed.inner) && throw(MacroError("can't fix output index to something other than 1", call))
-            code = Tuple(map(i -> isconstant(i) ? (*) : (:), parsed.inner))
+            # code = Tuple(map(i -> isconstant(i) ? (*) : (:), parsed.inner))
             Asafe = maybepush(ex, store, :outfix)
-            ex = :(TensorCast.orient.($Asafe, Ref($code)) ) # @. would need a dollar
+            _d = 0
+            perm = Tuple(map(i -> isconstant(i) ? nothing : (_d+=1), parsed.inner))
+            # ex = :(TensorCast.orient.($Asafe, Ref($code)) ) # @. would need a dollar
+            # refperm = maybepush(:( Ref() ), store, :zzz)
+            ex = :(TensorCast.transmute.($Asafe, Ref($perm)) )
         end
     end
 
-    # Must we collect? Do this now, as reshape(PermutedDimsArray(...)) is awful.
-    if :collect in call.flags && !(:collected in call.flags)
-        ex = :( identity.($ex) )
+    # Must we collect? Do this now, as reshape(TransmutedDimsArray(...)) is awful.
+    if :collect in call.flags
+        if :strided in call.flags
+            ex = :( collect($ex) )
+        elseif !(:collected in call.flags)
+            ex = :( identity.($ex) )
+        end
     end
 
-    # Do we need to reshape the container? Using orient() avoids needing sz_i
+    # Do we need to reshape the container? Simple cases done with transmute(), avoiding sz_i
     if any(i -> istensor(i) || isconstant(i), parsed.outer)
         any(i -> isconstant(i) && !(i == :_ || i == 1), parsed.outer) && throw(MacroError("can't fix output index to $i, only to 1", call))
         if any(istensor, parsed.outer)
             ex = :( reshape($ex, ($(parsed.outsize...),)) )
             append!(store.need, parsed.flat)
-            # push!(call.flags, :reshaped)
         else
-            code = Tuple(map(i -> isconstant(i) ? (*) : (:), parsed.outer))
-            ex = :( TensorCast.orient($ex, $code) )
+            _d = 0
+            perm = Tuple(map(i -> isconstant(i) ? nothing : (_d+=1), parsed.outer))
+            ex = :( TensorCast.transmute($ex, $perm) )
         end
     end
 

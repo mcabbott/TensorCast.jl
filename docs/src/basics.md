@@ -42,16 +42,15 @@ to lie in the second dimension. The macro `@pretty` prints out what `@cast` prod
 ```julia
 julia> @pretty @cast A[j,i] := M[i,j] + 10 * V[i]
 begin
-    local pelican = PermuteDims(M)
-    local termite = orient(V, (*, :))
-    A = @__dot__(pelican + 10termite)
+    local panda = transmute(M, (2, 1))
+    local bat = transmute(V, (nothing, 1))
+    A = @__dot__(panda + 10bat)
 end
 ```
 
-Functions like `orient` take a code in which `:` represents an index which varies,
-while `*` is fixed. (Or fixed on a given slice, for `sliceview` below.)
-The reason to do this is that `typeof(:) != typeof(*)`, and so this code is visible to the
-compiler, a trick I borrowed from [JuliennedArrays.jl](https://github.com/bramtayl/JuliennedArrays.jl).
+The function `transmute` is a generalised version of `permutedims`. It transposes `M`,
+and then places `V`'s first dimension to lie along the second dimension -- also a transpose,
+here, it allows for things like `transmute(M, (2,nothing,1))`. This is from [TransmuteDims.jl](https://github.com/mcabbott/TransmuteDims.jl).
 
 Of course `@__dot__` is the full name of the broadcasting macro `@.`, 
 which simply produces `A = pelican .+ 10 .* termite`.
@@ -160,6 +159,10 @@ The simplest version of this is precisely what the built-in function `kron` does
 julia> W = 1 ./ [10,20,30,40];
 
 julia> @cast K[_, i⊗j] := V[i] * W[j]
+1×12 Array{Float64,2}:
+ 1.0  2.0  3.0  0.5  1.0  1.5  0.333333  0.666667  1.0  0.25  0.5  0.75
+
+julia> @cast K[1, (i,j)] := V[i] * W[j]  # identical!
 1×12 Array{Float64,2}:
  1.0  2.0  3.0  0.5  1.0  1.5  0.333333  0.666667  1.0  0.25  0.5  0.75
 
