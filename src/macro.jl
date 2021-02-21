@@ -1402,12 +1402,16 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         end
     end
 
-    # Must we collect? Do this now, as reshape(PermutedDimsArray(...)) is awful.
-    if :collect in call.flags && !(:collected in call.flags)
-        ex = :( identity.($ex) )
+    # Must we collect? Do this now, as reshape(TransmutedDimsArray(...)) is awful.
+    if :collect in call.flags
+        if :strided in call.flags
+            ex = :( collect($ex) )
+        elseif !(:collected in call.flags)
+            ex = :( identity.($ex) )
+        end
     end
 
-    # Do we need to reshape the container? Using orient() avoids needing sz_i
+    # Do we need to reshape the container? Simple cases done with transmute(), avoiding sz_i
     if any(i -> istensor(i) || isconstant(i), parsed.outer)
         any(i -> isconstant(i) && !(i == :_ || i == 1), parsed.outer) && throw(MacroError("can't fix output index to $i, only to 1", call))
         if any(istensor, parsed.outer)
