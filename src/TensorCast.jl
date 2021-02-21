@@ -50,6 +50,6 @@ using Requires
     include("lazy.jl")      # LazyCast # this costs about 3s in my test, 3.8s -> 7.7s
 end
 
-# include("warm.jl") # was worth 2s in my test
+include("warm.jl") # saves 3s in my test
 
 end # module
