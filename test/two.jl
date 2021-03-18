@@ -15,7 +15,7 @@
 
     @cast R1[j]{i} := M[i,j]     # size from M
     @cast R2[j]{i:3} := M[i,j]   # size inside
-    @cast R3[j]{i} := M[i,j] i:3 # size outside
+    @cast R3[j]{i} := M[i,j] i in 1:3 # size outside
     @cast R4[j] := M{:3,j}       # size on the colon
     @cast R5[j] := M{:,j}        # size from M
 
@@ -63,7 +63,7 @@ end
 @testset "fields & sizes" begin
 
     B = [ (scal=i, vect=[1,2,3,4]) for i=1:3 ]
-    @cast A[j,i] := B[i].vect[j]  i:3, j:4
+    @cast A[j,i] := B[i].vect[j]  i in 1:3, j in 1:4
     @test A[4,1] == 4
 
     @cast C[i] := B[i].scal
@@ -246,17 +246,17 @@ end
 @testset "from todo list" begin
 
     list = [ i .* ones(2,2,1) for i=1:8 ];
-    @cast mat[x⊗i, y⊗j] := Int(list[i⊗j][x,y,1])  i:2
-    @cast mat2[x⊗i, y⊗j] := Int(list[i⊗j][x,y,1])  i:2, lazy # crazy type
+    @cast mat[x⊗i, y⊗j] := Int(list[i⊗j][x,y,1])  i in 1:2
+    @cast mat2[x⊗i, y⊗j] := Int(list[i⊗j][x,y,1])  i in 1:2, lazy # crazy type
     @test mat[3,5] == 6
     @test mat == mat2
 
-    @cast C1[i,i',k] := (1:4)[i⊗i′⊗k] + im  (i:2, i′:2)  # two tensor signs
-    @cast C2[i,i',k] := (1:4)[i⊗i'⊗k] + im  (i:2, i′:2)  # more primes
-    @cast C3[i,i',k] := (1:4)[i⊗i'⊗k] + im  (i:2, i':2)
+    @cast C1[i,i',k] := (1:4)[i⊗i′⊗k] + im  (i in 1:2, i′ in 1:2)  # two tensor signs
+    @cast C2[i,i',k] := (1:4)[i⊗i'⊗k] + im  (i in 1:2, i′ in 1:2)  # more primes
+    @cast C3[i,i',k] := (1:4)[i⊗i'⊗k] + im  (i in 1:2, i' in 1:2)
     @test C1[1,2,1] == C2[1,2,1] == C3[1,2,1] == 3+1im
 
-    @cast C4[i,i'⊗k] := (1:4)[i⊗i′⊗k] + im  (i:2, i':2)
+    @cast C4[i,i'⊗k] := (1:4)[i⊗i′⊗k] + im  (i in 1:2, i' in 1:2)
     @test size(C4) == (2,2)
     @test C4[2,1] == 2+im
 
@@ -270,7 +270,7 @@ end
 
     mat = rand(3,4)
     outer(v::AbstractVector) = v * v'
-    @cast out[i⊗i',j] := outer(mat[:,j])[i,i′] i:3, i':3
+    @cast out[i⊗i',j] := outer(mat[:,j])[i,i′] i in 1:3, i' in 1:3
     @test size(out) == (9,4)
 
     yy = rand(3,4)
@@ -330,7 +330,7 @@ end
     oo[1] = 99
     @test bcde[1] != 99 # copy not a view
 
-    @cast g[(y,e),(b,c),x] := bcde[b,c,(x,y),e]  x:1, strided;
+    @cast g[(y,e),(b,c),x] := bcde[b,c,(x,y),e]  x in 1:1, strided;
     @test size(g) == (20, 6, 1)
     @cast bcde2[b,c,(x,y),e] = g[(y,e),(b,c),x]  strided;
     @test all(bcde2 .== bcde) # used to say "fails when using Strided"
@@ -364,13 +364,13 @@ end
 @testset "run-time errors" begin
 
     B = [ (scal=i, vect=[1,2,3,4]) for i=1:3 ]
-    @test_throws DimensionMismatch @cast A[j,i] := B[i].vect[j]  i:99, j:4 # wrong size
-    @test_throws DimensionMismatch @cast A[j,i] := B[i].vect[j]  i:3, j:99
+    @test_throws DimensionMismatch @cast A[j,i] := B[i].vect[j]  i in 1:99, j in 1:4 # wrong size
+    @test_throws DimensionMismatch @cast A[j,i] := B[i].vect[j]  i in 1:3, j in 1:99
 
     M = randn(3,4)
     fun(x) = (sum=sum(x), same=x, one=1)
-    @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:,j]).same[i]  i:3, j:99
-    @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:99,j]).same[i]  j:4
-    # @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:,j]).same[i]  i:99, j:4 # TODO make this check canonical length?
+    @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:,j]).same[i]  i in 1:3, j in 1:99
+    @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:99,j]).same[i]  j in 1:4
+    # @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:,j]).same[i]  i in 1:99, j in 1:4 # TODO make this check canonical length?
 
 end

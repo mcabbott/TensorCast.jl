@@ -9,23 +9,23 @@
 
 
     B = rand(2*5, 3)
-    @cast A[i,j,k] := B[(i,k),j]  i:2
+    @cast A[i,j,k] := B[(i,k),j]  i in 1:2
     @test size(A) == (2,3,5)
     @cast A[i,j,k] = B[(i,k),j];
 
 
     imgs = [ rand(8,8) for i=1:16 ];
 
-    @cast G[(i,I), (j,J)] := imgs[(I,J)][i,j] J:4
+    @cast G[(i,I), (j,J)] := imgs[(I,J)][i,j] J in 1:4
     @cast G[ i⊗I,   j⊗J ] = imgs[ I⊗J ][i,j] # in-place
 
 
     G = rand(16,32);
 
-    @reduce H[a, b] := maximum(α,β)  G[α⊗a, β⊗b]  α:2,β:2
+    @reduce H[a, b] := maximum(α,β)  G[α⊗a, β⊗b]  α in 1:2, β in 1:2
     @test size(G) == 2 .* size(H)
 
-    @reduce H4[a, b] := maximum(α:4,β:4)  G[α⊗a, β⊗b]
+    @reduce H4[a, b] := maximum(α:4,β:4)  G[α⊗a, β⊗b]  # doesn't warn
     @test size(G) == 4 .* size(H4)
 
     W = randn(2,3,5,7);
@@ -73,16 +73,16 @@ end
 
 
     B = rand(2*5, 3);
-    @cast A[i,j,k] := B[(i,k),j]  i:2  # could give (i:2, j:3, k:5)
+    @cast A[i,j,k] := B[(i,k),j]  i in 1:2  # could give (i:2, j:3, k:5)
     @test size(A) == (2,3,5)
 
-    @cast A[i,j,k] := B[(i,k),j]  (i:2, j:3, k:5)
+    @cast A[i,j,k] := B[(i,k),j]  (i in 1:2, j in 1:3, k in 1:5)
     @test size(A) == (2,3,5)
 
 
     @pretty @cast A[(i,j)] = B[i,j]
 
-    @pretty @cast A[k][i,j] := B[i,(j,k)]  k:length(C)
+    @pretty @cast A[k][i,j] := B[i,(j,k)]  k in 1:length(C)
 
 
     M = rand(3,4)
@@ -98,7 +98,7 @@ end
     using StaticArrays
     M = rand(1:99, 2,3)
 
-    @cast S[k]{i} := M[i,k]  i:2  # S = reinterpret(SVector{2,Int}, vec(M)) needs the 2
+    @cast S[k]{i} := M[i,k]  i in 1:2  # S = reinterpret(SVector{2,Int}, vec(M)) needs the 2
     @cast N[k,i] := S[k]{i}       # such slices can be reinterpreted back again
 
     M[1,2]=42; N[2,1]==42          # all views of the original matrix

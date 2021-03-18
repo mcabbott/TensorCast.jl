@@ -1,8 +1,11 @@
 
 using TensorCast
+
 using Test
 using LinearAlgebra
 using StaticArrays
+using Logging
+
 using OffsetArrays
 using Einsum
 using Strided
