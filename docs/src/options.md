@@ -37,7 +37,6 @@ But there are other options, controlled by keywords after the expression:
 
 ```julia
 @cast A[i,k] := S[k][i]             # A = reduce(hcat, B)
-@cast A[i,k] := S[k][i]  cat        # A = hcat(B...); often slow
 @cast A[i,k] := S[k][i]  lazy       # A = LazyStack.stack(B)
 
 size(A) == (3, 4) # true
@@ -72,21 +71,6 @@ mapslices(cumsum, M10, dims=1)          # 630 μs using @btime
 
 ## Better broadcasting
 
-When broadcasting and then summing over some directions, it can be faster to avoid creating the 
-entire array, then throwing it away. This can be done with the package 
-[LazyArrays.jl](https://github.com/JuliaArrays/LazyArrays.jl) which has a lazy `BroadcastArray`. 
-In the following example, the product `V .* V' .* V3` contains about 1GB of data, 
-the writing of which is avoided by giving the option `lazy`: 
-
-```julia
-using LazyArrays # you must now load this package
-V = rand(500); V3 = reshape(V,1,1,:);
-
-@time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k];        # 0.6 seconds, 950 MB
-@time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k]  lazy;  # 0.025 s, 5 KB
-```
-However, right now this gives `3.7 s (250 M allocations, 9 GB)`, something is broken!
-
 The package [Strided.jl](https://github.com/Jutho/Strided.jl) can apply multi-threading to 
 broadcasting, and some other magic. You can enable it like this: 
 
@@ -111,16 +95,32 @@ D′ = @btime @cast @avx [i,j] := exp($C[i,j]);   #  3 μs
 D ≈ D′
 ```
 
+When broadcasting and then summing over some directions, it can be faster to avoid creating the 
+entire array, then throwing it away. This can be done with the package 
+[LazyArrays.jl](https://github.com/JuliaArrays/LazyArrays.jl) which has a lazy `BroadcastArray`. 
+In the following example, the product `V .* V' .* V3` contains about 1GB of data, 
+the writing of which is avoided by giving the option `lazy`: 
+
+```julia
+using LazyArrays
+V = rand(500); V3 = reshape(V,1,1,:);
+
+@time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k];        # 0.6 seconds, 950 MB
+@time @reduce @lazy W[i] := sum(j,k) V[i]*V[j]*V[k];  # 0.025 s, 5 KB
+```
+
+However, right now this gives `3.7 s (250 M allocations, 9 GB)`, something is broken!
+
 ## Less lazy
 
 To disable the default use of `PermutedDimsArray` etc, give the option `nolazy`: 
 
 ```julia
 @pretty @cast Z[y,x] := M[x,-y]  nolazy
-# Z = reverse(permutedims(M), dims=1)
+# Z = transmutedims(reverse(M, dims = 2), (2, 1))
 
 @pretty @cast Z[y,x] := M[x,-y] 
-# Z = Reverse{1}(PermuteDims(M))
+# Z = transmute(Reverse{2}(M), (2, 1))
 ```
 
 This also controls how the extraction of diagonal elements
@@ -134,12 +134,12 @@ and creation of diagonal matrices are done:
 # D = Diagonal(diagview(A))
 
 @pretty @cast M[i,i] = A[i,i]  nolazy  # into diagonal of existing matrix M
-# copyto!(diagview(M), diag(A)); M
+# diagview(M) .= diag(A); M
 ```
 
-Here `TensorCast.Reverse{1}(B)` creates a view with `reverse(axes(B,1))`. 
-`TensorCast.PermuteDims(M)` is `transpose(M)` on a matrix of numbers, else `PermutedDimsArray`.
-And `TensorCast.diagview(A)` is just `view(A, diagind(A))`.
+Here `TensorCast.Reverse{1}(B)` creates a view with `reverse(axes(B,1))`, 
+and `TensorCast.diagview(A)` is just `view(A, diagind(A))`.
+`TransmuteDims.transmute(M)` is `transpose(M)` on a matrix of numbers.
 
 ## Gradients
 
