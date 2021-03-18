@@ -963,7 +963,17 @@ function optionparse(opt, store::NamedTuple, call::CallInfo)
         return
     end
 
-    if @capture(opt, i_:s_)
+    if @capture(opt, i_ in ax_) || @capture(opt, i_ ∈ ax_)
+        if @capture(ax, 1:s_)
+            saveonesize(tensorprimetidy(i), s, store)
+        else
+            ax isa Number && @warn "did you mean `$i in $ax`, not `$i in 1:$ax`?"
+            # ax1 = maybepush(ax, store, :axis) # this pushes to main, too late!
+            saveonesize(tensorprimetidy(i), :(TensorCast.onetolength($ax)), store)
+        end
+        push!(call.flags, :assert)
+    elseif @capture(opt, i_:s_)
+        @warn "please replace index ranges like `i:3` with `i in 1:3` or `i ∈ 1:3`"
         saveonesize(tensorprimetidy(i), s, store)
         push!(call.flags, :assert)
     elseif opt in (:assert, :lazy, :nolazy, :strided, :avx)
