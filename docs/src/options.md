@@ -88,27 +88,26 @@ V = rand(500); V3 = reshape(V,1,1,:);
 However, right now this gives `3.7 s (250 M allocations, 9 GB)`, something is broken!
 
 The package [Strided.jl](https://github.com/Jutho/Strided.jl) can apply multi-threading to 
-broadcasting, and some other magic. You can enable it with the option `strided`, like this: 
+broadcasting, and some other magic. You can enable it like this: 
 
 ```julia
 using Strided # and export JULIA_NUM_THREADS = 4 before starting
 A = randn(4000,4000); B = similar(A);
 
 @time @cast B[i,j] = (A[i,j] + A[j,i])/2;             # 0.12 seconds
-@time @cast B[i,j] = (A[i,j] + A[j,i])/2 strided;     # 0.025 seconds
+@time @cast @strided B[i,j] = (A[i,j] + A[j,i])/2;    # 0.025 seconds
 ```
 
 The package [LoopVectorization.jl](https://github.com/chriselrod/LoopVectorization.jl) provides 
 a macro `@avx` which modifies broadcasting to use vectorised instructions. 
-This is new and does not work for all broadcasting operations! 
-But it can be used via the option `avx`:
+This can be used as follows:
 
 ```julia
 using LoopVectorization, BenchmarkTools
 C = randn(40,40); 
 
-D = @btime @cast [i,j] := exp($C[i,j]);        # 13 μs
-D′ = @btime @cast [i,j] := exp($C[i,j]) avx;   #  3 μs
+D = @btime @cast [i,j] := exp($C[i,j]);         # 13 μs
+D′ = @btime @cast @avx [i,j] := exp($C[i,j]);   #  3 μs
 D ≈ D′
 ```
 

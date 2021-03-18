@@ -165,6 +165,12 @@ function _macro(exone, extwo=nothing, exthree=nothing; call::CallInfo=CallInfo()
     store = (dict=dict, assert=[], mustassert=[], seen=[], need=[], top=[], main=[])
     # TODO use OrderedDict() for main? To allow duplicate removal
 
+    if Meta.isexpr(exone, :macrocall)
+        # New style @cast @avx A[i] := B[i]
+        push!(call.flags, Symbol(string(exone.args[1])[2:end]), :premacro)
+        return _macro(exone.args[3:end]...; call=call, dict=dict)
+    end
+
     if (:reduce in call.flags) || (:matmul in call.flags)
         # First the options:
         optionparse(exthree, store, call)
@@ -476,8 +482,10 @@ function targetcast(ex, target, store::NamedTuple, call::CallInfo)
         push!(call.flags, :collected)
     end
     if :strided in call.flags
+        :premacro in call.flags || @warn "postfix option strided is deprecated, please write @cast @strided A[i] := ..."
         ex = :( Strided.@strided @__dot__($ex) )
     elseif :avx in call.flags
+        :premacro in call.flags || @warn "postfix option avx is deprecated, please write @cast @avx A[i] := ..."
         ex = :( LoopVectorization.@avx @__dot__($ex) )
     else
         ex = :( @__dot__($ex) )
