@@ -8,10 +8,10 @@ But unlike those packages, sometimes the result of `@cast` is a view of the orig
 by writing `|=` instead (or passing the option `collect`). 
 
 Various other options can be given after the main expression. `assert` turns on explicit size checks, 
-and ranges like `i:3` specify the size in that direction (sometimes this is necessary to specify the shape).
+and ranges like `i ∈ 1:3` specify the size in that direction (sometimes this is necessary to specify the shape).
 Adding these to the example above: 
 ```julia
-@pretty @cast A[(i,j)] = B[i,j]  i:3, assert
+@pretty @cast A[(i,j)] = B[i,j]  i ∈ 1:3, assert
 # begin
 #     @assert_ ndims(B) == 2 "expected a 2-tensor B[i, j]"
 #     @assert_ 3 == size(B, 1) "range of index i must agree"
@@ -50,7 +50,7 @@ in which a Vector of SVectors is just a different interpretation of the same mem
 By another slight abuse of notation, such slices are written here as curly brackets:
 
 ```julia
-@cast S[k]{i} := M[i,k]  i:3        # S = reinterpret(SVector{3,Int}, vec(M)) 
+@cast S[k]{i} := M[i,k]  i in 1:3   # S = reinterpret(SVector{3,Int}, vec(M)) 
 @cast S[k] := M{:3, k}              # equivalent
 
 @cast R[k,i] := S[k]{i}             # such slices can be reinterpreted back again
