@@ -522,6 +522,9 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
         else
             return :( tuple($(args...)) )
         end
+    # ternary operator
+    @capture(ex, cond_ ? yes_ : no_ ) &&
+        return :( TensorCast.if_then_else($cond, $yes, $no) )
     # and arrays of functions, using apply:
     @capture(ex, funs_[ijk__](args__) ) &&
         return :( Core._apply($funs[$(ijk...)], $(args...) ) )
