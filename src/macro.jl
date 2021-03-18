@@ -455,7 +455,7 @@ end
     targetcast(A[i] + B[j], [i,j]) -> @__dot__(A + B')
     targetcast(A[j,i], [i,j]) -> transpose(A)
 
-This beings the expression to have target indices,
+This brings the expression to have target indices,
 by permutedims and if necessary broadcasting, always using `readycast()`.
 """
 function targetcast(ex, target, store::NamedTuple, call::CallInfo)
@@ -524,7 +524,7 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
         end
     # ternary operator
     @capture(ex, cond_ ? yes_ : no_ ) &&
-        return :( TensorCast.if_then_else($cond, $yes, $no) )
+        return ternarycast(cond, yes, no, target, store, call)
     # and arrays of functions, using apply:
     @capture(ex, funs_[ijk__](args__) ) &&
         return :( Core._apply($funs[$(ijk...)], $(args...) ) )
@@ -554,6 +554,21 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
     A = maybepush(A, store, :nobroadcast)
 
     return A
+end
+
+function ternarycast(cond, yes, no, target, store::NamedTuple, call::CallInfo)
+    args = []
+    cond, yes, no = map((cond, yes, no)) do expr
+        MacroTools.prewalk(expr) do ex
+            rex = readycast(ex, target, store, call)
+            @capture(ex, A_[ijk__]) && push!(args, rex)
+            rex
+        end
+    end
+    unique!(args)
+    fun = gensym(:ternary)
+    push!(store.main, :( local $fun($(args...)) = $cond ? $yes : $no ))
+    :($fun($(args...)))
 end
 
 """

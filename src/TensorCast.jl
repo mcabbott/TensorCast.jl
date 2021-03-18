@@ -40,8 +40,6 @@ module Fast # shield non-macro code from @optlevel 1
     include("static.jl")
     export static_slice, static_glue
 
-    if_then_else(cond, yes, no) = cond ? yes : no
-    export if_then_else
 end
 using .Fast
 const mul! = Fast.mul!
