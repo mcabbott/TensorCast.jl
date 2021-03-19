@@ -15,7 +15,7 @@
 	V = vec(mean(bcde, dims=(2,4)))
 	@test V == W
 
-	@reduce Z[e,b,β] := Statistics.std(c,α:2) bcde[b,c,α⊗β,e] assert
+	@reduce Z[e,b,β] := Statistics.std(c,α) bcde[b,c,α⊗β,e] assert, α in 1:2
 	@test size(Z) == (5,2,2)
 
 	@reduce A[_,e,_,b] := sum(c) bcde[b,c,3,e]
@@ -28,10 +28,12 @@
 
 	@reduce D[b][c] := sum(d,e) bcde[b,c,d,e] + 1
 	@reduce E[b][c] := sum(e,d) bcde[b,c,d,e] + 1
-	@reduce F[c][b] := sum(d:4,e:5) bcde[b,c,d,e] + 1
+	@reduce F[c][b] := sum(d:4,e:5) bcde[b,c,d,e] + 1 # doesn't warn
+    @reduce F′[c][b] := sum(d,e) bcde[b,c,d,e] + 1  d in 1:4, e in 1:5
 
 	@test D[1][2] ≈ sum(bcde, dims=(3,4))[1,2, 1,1] + 4*5
 	@test D[1][2] ≈ E[1][2] ≈ F[2][1]
+    @test F′ ≈ F
 
 end
 @testset "scalar" begin
@@ -48,7 +50,7 @@ end
 
     # inference for a⊗b⊗c had an (Any[]...) dots problem at first
     B = randn(8,24);
-    @reduce A[b,c, y,z] := sum(a:2, x:2) B[a⊗b⊗c, x⊗y⊗z]  b:2, y:3, assert
+    @reduce A[b,c, y,z] := sum(a:2, x:2) B[a⊗b⊗c, x⊗y⊗z]  b in 1:2, y in 1:3, assert
     @test size(A) == (2,2, 3,4)
 
     C = similar(A)
@@ -65,7 +67,7 @@ end
     # from readme
     A = rand(4);
     B = randn(4,4);
-    R = @reduce sum(i) A[i] * log( @reduce [i] := sum(j) A[j] * exp(B[i,j]) )
+    R = @reduce sum(i) A[i] * log( @reduce _[i] := sum(j) A[j] * exp(B[i,j]) )
     @reduce inner[i] := sum(j) A[j] * exp(B[i,j])
     S = @reduce sum(i) A[i] * log(inner[i])
     @test S == R
@@ -81,7 +83,7 @@ end
 
     # this needs size of the result of inner macro, failed at first:
     A = rand(2,3); B = rand(3,4); C = rand(4,5);
-    @reduce W[i,_,l] := sum(j) A[i,j] * (@matmul [j,l] := sum(k) B[j,k] * C[k,l])  assert
+    @reduce W[i,_,l] := sum(j) A[i,j] * (@matmul _[j,l] := sum(k) B[j,k] * C[k,l])  assert
     @test W ≈ reshape(A * B * C, 2,1,5)
 
 end

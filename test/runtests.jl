@@ -1,8 +1,11 @@
 
 using TensorCast
+
 using Test
 using LinearAlgebra
 using StaticArrays
+using Logging
+
 using OffsetArrays
 using Einsum
 using Strided
@@ -20,3 +23,4 @@ end
 @testset "slice/view"  begin include("cat.jl") end
 @testset "old readmes" begin include("old.jl") end
 @testset "new in 0.2"  begin include("two.jl") end
+@testset "new in 0.4" begin include("four.jl") end

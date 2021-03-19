@@ -8,10 +8,10 @@ But unlike those packages, sometimes the result of `@cast` is a view of the orig
 by writing `|=` instead (or passing the option `collect`). 
 
 Various other options can be given after the main expression. `assert` turns on explicit size checks, 
-and ranges like `i:3` specify the size in that direction (sometimes this is necessary to specify the shape).
+and ranges like `i ∈ 1:3` specify the size in that direction (sometimes this is necessary to specify the shape).
 Adding these to the example above: 
 ```julia
-@pretty @cast A[(i,j)] = B[i,j]  i:3, assert
+@pretty @cast A[(i,j)] = B[i,j]  i ∈ 1:3, assert
 # begin
 #     @assert_ ndims(B) == 2 "expected a 2-tensor B[i, j]"
 #     @assert_ 3 == size(B, 1) "range of index i must agree"
@@ -37,7 +37,6 @@ But there are other options, controlled by keywords after the expression:
 
 ```julia
 @cast A[i,k] := S[k][i]             # A = reduce(hcat, B)
-@cast A[i,k] := S[k][i]  cat        # A = hcat(B...); often slow
 @cast A[i,k] := S[k][i]  lazy       # A = LazyStack.stack(B)
 
 size(A) == (3, 4) # true
@@ -51,7 +50,7 @@ in which a Vector of SVectors is just a different interpretation of the same mem
 By another slight abuse of notation, such slices are written here as curly brackets:
 
 ```julia
-@cast S[k]{i} := M[i,k]  i:3        # S = reinterpret(SVector{3,Int}, vec(M)) 
+@cast S[k]{i} := M[i,k]  i in 1:3   # S = reinterpret(SVector{3,Int}, vec(M)) 
 @cast S[k] := M{:3, k}              # equivalent
 
 @cast R[k,i] := S[k]{i}             # such slices can be reinterpreted back again
@@ -72,6 +71,30 @@ mapslices(cumsum, M10, dims=1)          # 630 μs using @btime
 
 ## Better broadcasting
 
+The package [Strided.jl](https://github.com/Jutho/Strided.jl) can apply multi-threading to 
+broadcasting, and some other magic. You can enable it like this: 
+
+```julia
+using Strided # and export JULIA_NUM_THREADS = 4 before starting
+A = randn(4000,4000); B = similar(A);
+
+@time @cast B[i,j] = (A[i,j] + A[j,i])/2;             # 0.12 seconds
+@time @cast @strided B[i,j] = (A[i,j] + A[j,i])/2;    # 0.025 seconds
+```
+
+The package [LoopVectorization.jl](https://github.com/chriselrod/LoopVectorization.jl) provides 
+a macro `@avx` which modifies broadcasting to use vectorised instructions. 
+This can be used as follows:
+
+```julia
+using LoopVectorization, BenchmarkTools
+C = randn(40,40); 
+
+D = @btime @cast [i,j] := exp($C[i,j]);         # 13 μs
+D′ = @btime @cast @avx [i,j] := exp($C[i,j]);   #  3 μs
+D ≈ D′
+```
+
 When broadcasting and then summing over some directions, it can be faster to avoid creating the 
 entire array, then throwing it away. This can be done with the package 
 [LazyArrays.jl](https://github.com/JuliaArrays/LazyArrays.jl) which has a lazy `BroadcastArray`. 
@@ -79,38 +102,14 @@ In the following example, the product `V .* V' .* V3` contains about 1GB of data
 the writing of which is avoided by giving the option `lazy`: 
 
 ```julia
-using LazyArrays # you must now load this package
+using LazyArrays
 V = rand(500); V3 = reshape(V,1,1,:);
 
 @time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k];        # 0.6 seconds, 950 MB
-@time @reduce W[i] := sum(j,k) V[i]*V[j]*V[k]  lazy;  # 0.025 s, 5 KB
+@time @reduce @lazy W[i] := sum(j,k) V[i]*V[j]*V[k];  # 0.025 s, 5 KB
 ```
+
 However, right now this gives `3.7 s (250 M allocations, 9 GB)`, something is broken!
-
-The package [Strided.jl](https://github.com/Jutho/Strided.jl) can apply multi-threading to 
-broadcasting, and some other magic. You can enable it with the option `strided`, like this: 
-
-```julia
-using Strided # and export JULIA_NUM_THREADS = 4 before starting
-A = randn(4000,4000); B = similar(A);
-
-@time @cast B[i,j] = (A[i,j] + A[j,i])/2;             # 0.12 seconds
-@time @cast B[i,j] = (A[i,j] + A[j,i])/2 strided;     # 0.025 seconds
-```
-
-The package [LoopVectorization.jl](https://github.com/chriselrod/LoopVectorization.jl) provides 
-a macro `@avx` which modifies broadcasting to use vectorised instructions. 
-This is new and does not work for all broadcasting operations! 
-But it can be used via the option `avx`:
-
-```julia
-using LoopVectorization, BenchmarkTools
-C = randn(40,40); 
-
-D = @btime @cast [i,j] := exp($C[i,j]);        # 13 μs
-D′ = @btime @cast [i,j] := exp($C[i,j]) avx;   #  3 μs
-D ≈ D′
-```
 
 ## Less lazy
 
@@ -118,10 +117,10 @@ To disable the default use of `PermutedDimsArray` etc, give the option `nolazy`:
 
 ```julia
 @pretty @cast Z[y,x] := M[x,-y]  nolazy
-# Z = reverse(permutedims(M), dims=1)
+# Z = transmutedims(reverse(M, dims = 2), (2, 1))
 
 @pretty @cast Z[y,x] := M[x,-y] 
-# Z = Reverse{1}(PermuteDims(M))
+# Z = transmute(Reverse{2}(M), (2, 1))
 ```
 
 This also controls how the extraction of diagonal elements
@@ -135,12 +134,12 @@ and creation of diagonal matrices are done:
 # D = Diagonal(diagview(A))
 
 @pretty @cast M[i,i] = A[i,i]  nolazy  # into diagonal of existing matrix M
-# copyto!(diagview(M), diag(A)); M
+# diagview(M) .= diag(A); M
 ```
 
-Here `TensorCast.Reverse{1}(B)` creates a view with `reverse(axes(B,1))`. 
-`TensorCast.PermuteDims(M)` is `transpose(M)` on a matrix of numbers, else `PermutedDimsArray`.
-And `TensorCast.diagview(A)` is just `view(A, diagind(A))`.
+Here `TensorCast.Reverse{1}(B)` creates a view with `reverse(axes(B,1))`, 
+and `TensorCast.diagview(A)` is just `view(A, diagind(A))`.
+`TransmuteDims.transmute(M)` is `transpose(M)` on a matrix of numbers.
 
 ## Gradients
 

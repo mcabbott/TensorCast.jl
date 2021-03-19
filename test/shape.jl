@@ -11,17 +11,17 @@ usingstatic =   isdefined(TensorCast, :StaticArray)
     @test β == 99
     @test all(cb .== transpose(bc))
 
-    @cast cb[c,b] = bc[b,c] c:3 # in-place
+    @cast cb[c,b] = bc[b,c] c in 1:3 # in-place
 
     β = 2
-    @cast f[(c,b)] := bc[b,c] b:β, c:3 # @assert uses β
+    @cast f[(c,b)] := bc[b,c] (b in 1:β, c in 1:3)
     @test size(f) == (6,)
-    @cast cb2[c,b] := f[(c,b)] b:β # can't not use this
+    @cast cb2[c,b] := f[(c,b)] b in 1:β # can't not use this
     @test size(cb2) == (3,2)
     @test all(cb2 .== transpose(bc))
 
     oo = [1,1]
-    @cast cb3[c,b] := f[(c,b)] b:sum(oo) # with an expression
+    @cast cb3[c,b] := f[(c,b)] (b in 1:sum(oo)) # with an expression
     @test size(cb3) == (3,2)
 
     β = 2
@@ -97,7 +97,7 @@ end
 
     M = rand(Int, 2,3)
     S1 = reinterpret(SVector{2,Int}, vec(M)) # as in readme
-    @cast S2[k]{i} := M[i,k]  i:2
+    @cast S2[k]{i} := M[i,k]  i in 1:2
     M[end]=42
     @test S1[3][2]==42 # is a view
     @test S2[3][2]==42
@@ -106,25 +106,25 @@ end
     @test size(first(S1)) == (2,)
     @test size(first(S2)) == (2,)
 
-    @cast S3[k]{i} := M[k,i]  i:3 # this has a permutedims
+    @cast S3[k]{i} := M[k,i]  i in 1:3 # this has a permutedims
     @test first(S3) isa StaticArray
     @test size(first(S3)) == (3,)
 
     bcd = rand(2,3,4);
     bcde = rand(2,3,4,5);
 
-    @cast DBec[d,b]{e,c} := bcde[b,c,d,e] e:5, c:3
+    @cast DBec[d,b]{e,c} := bcde[b,c,d,e] e in 1:5, c in 1:3
     @test size(DBec) == (4,2)
     @test size(first(DBec)) == (5,3)
     @test first(DBec) isa StaticArray
 
-    @cast DEbc[d,e]{b,c} := bcde[b,c,d,e] b:2, c:3
+    @cast DEbc[d,e]{b,c} := bcde[b,c,d,e] b in 1:2, c in 1:3
     @test size(DEbc) == (4,5)
     @test size(first(DEbc)) == (2,3)
     @test first(DEbc) isa StaticArray
 
     A = rand(3,3,4)
-    @cast B[k]{i,j} := A[i,j,k]  i:3, j:3
+    @cast B[k]{i,j} := A[i,j,k]  i in 1:3, j in 1:3
     @cast C[(j,k),i] := B[k][i,j]
     @test C[1,2] == B[1][2,1] ==  A[2,1,1]
 
@@ -159,14 +159,14 @@ end
 
     B = [ SVector{3}(rand(3)) for i=1:2]
 
-    @cast A[j,i] := B[i]{j} i:2, j:3 # view is impossible without Static slices
+    @cast A[j,i] := B[i]{j} i in 1:2, j in 1:3 # view is impossible without Static slices
     @test size(A) == (3,2)
     @test !isa(A, Array)
 
     A[1,2] = 33
     @test B[2][1] == 33 # mutating B illegally?
 
-    @cast A[i,j] := B[i]{j} j:3
+    @cast A[i,j] := B[i]{j} j in 1:3
     @test size(A) == (2,3)
     @test !isa(A, StaticArray)
 
@@ -174,11 +174,11 @@ end
 
     C = [ SMatrix{2,3}(rand(2,3)) for i=1:4, j=1:5 ];
 
-    @cast A[l,k,j,i] := C[i,j]{k,l} k:2, l:3
+    @cast A[l,k,j,i] := C[i,j]{k,l} k in 1:2, l in 1:3
     @test A[1,2,3,4] == C[4,3][2,1]
     @test size(A) == (3,2,5,4)
 @test_skip begin
-    @cast A[l,k,j,i] = C[i,j]{k,l} k:2, l:3 # now in-place -- fails!
+    @cast A[l,k,j,i] = C[i,j]{k,l} k in 1:2, l in 1:3 # now in-place -- fails!
     @test A[1,2,3,4] == C[4,3][2,1]
 
     @cast A[l,k,j,i] = C[i,j][k,l] # now without static glue
@@ -203,17 +203,17 @@ end
     bcde2 = similar(bcde)
 
     @cast v[(b,zc,d)] := bcd[b,zc,d]
-    @cast w[d,(zc,b)] := v[(b,zc,d)] b:2, zc:3 # add z sometimes to mess with alphabetisation
-    @cast dbc[d,b,c] := w[d,(c,b)] c:3
+    @cast w[d,(zc,b)] := v[(b,zc,d)] b in 1:2, zc in 1:3 # add z sometimes to mess with alphabetisation
+    @cast dbc[d,b,c] := w[d,(c,b)] c in 1:3
 
     @test size(w) == (4,6)
     @test size(dbc) == (4,2,3)
     @test dbc[1,2,3] == bcd[2,3,1]
 
-    @cast g[(b,c),x,y,e] := bcde[b,c,(x,y),e] x:2;
+    @cast g[(b,c),x,y,e] := bcde[b,c,(x,y),e] x in 1:2;
     @test size(g) == (6,2,2,5)
 
-    @cast g[(y,e),(b,c),x] := bcde[b,c,(x,y),e] x:1;
+    @cast g[(y,e),(b,c),x] := bcde[b,c,(x,y),e] x in 1:1;
     @test size(g) == (20, 6, 1)
     @cast bcde2[b,c,(x,y),e] = g[(y,e),(b,c),x];
     @test all(bcde2 .== bcde)
@@ -224,7 +224,7 @@ end
     Bc = [ rand(3) for b=1:2 ] # Bc = [(1:3) .+ 10i for i=1:2]
     @cast f[(b,c)] |= Bc[b][c] # NOT a view of Bc
     @test size(f) == (6,)
-    @cast bc[b,c] |= f[(b,c)] b:2 # for in-place to work below, this bc is NOT a view of f
+    @cast bc[b,c] |= f[(b,c)] (b in 1:2) # for in-place to work below, this bc is NOT a view of f
     @test size(bc) == (2,3)
     @test bc[1,2] == Bc[1][2]
 
@@ -233,7 +233,7 @@ end
     @test bc[1,2] == Bc[1][2]
 
     Cdaeb = [rand(4,1,5,2) for i=1:3]; # sizes match abcde now
-    Z = @cast [(c,d),e][a,b] := Cdaeb[c][d,a,e,b] # alphabetical = canonical
+    Z = @cast _[(c,d),e][a,b] := Cdaeb[c][d,a,e,b] # alphabetical = canonical
     @test size(Z) == (3*4, 5)
     @test size(first(Z)) == (1,2)
     @test Z[2*1,4][1,2] == Cdaeb[2][1,1,4,2]
@@ -291,37 +291,37 @@ end
 
     @cast A[i,j,k] = B[i,(k,j)] # errored on push_checks for a while
 
-    @cast A[i,j,k] = B[i,(j,k)] i:1
+    @cast A[i,j,k] = B[i,(j,k)] i in 1:1
 
-    @cast V[(i,j,k)] := B[i,(k,j)]  k:3, assert # was an error for recursive colon reasons
+    @cast V[(i,j,k)] := B[i,(k,j)]  k in 1:3, assert # was an error for recursive colon reasons
 
 
-    A = @cast [jk,i] := B[i,jk] # without left-hand name
+    A = @cast _[jk,i] := B[i,jk] # without left-hand name
     @test size(A) == (6,1)
 
-    A = @cast [k,j,i] := B[i,(j,k)] k:3 # without left-hand name
+    A = @cast _[k,j,i] := B[i,(j,k)] k in 1:3 # without left-hand name
     @test size(A) == (3,2,1)
 
-    C = @cast [k][i,j] := B[i,(j,k)]  k:3 # without left-hand name
-    C = @cast [k][i,j] := B[i,(j,k)]  j:2, k:3
+    C = @cast _[k][i,j] := B[i,(j,k)]  k in 1:3 # without left-hand name
+    C = @cast _[k][i,j] := B[i,(j,k)]  (j in 1:2, k in 1:3)
 
     @test size(C) == (3,)
     @test size(first(C)) == (1,2)
 
 
-    @cast A[k][i,j] := B[i,(j,k)]  k:length(C) # with an expression
+    @cast A[k][i,j] := B[i,(j,k)]  k in 1:length(C) # with an expression
 
     @test size(A) == (3,)
 
     D = randn(1*2*3, 4)
     # these two both result in a product of sizes like ((sz[2] * :) * s[4]) with : on 2nd level.
-    @cast C[i,(j,k,l)] := D[(i,j,k),l] i:1, j:2 # gets sz... from colonise! too
-    @cast E[i,(k,j,l)] := D[(i,j,k),l] i:1, j:2 # does not
+    @cast C[i,(j,k,l)] := D[(i,j,k),l] i in 1:1, j in 1:2 # gets sz... from colonise! too
+    @cast E[i,(k,j,l)] := D[(i,j,k),l] i in 1:1, j in 1:2 # does not
 
     @test size(C) == (1, 2*3*4)
     @test size(E) == (1, 2*3*4)
 
-    B = [rand(2) for i=1:3 ]
+    B = [rand(2) for i=1:3]
     A2 = @cast A[(i,j)] := B[i][j]
     A3 = @cast A[(i,j)] = B[i][j] # for a while this in-place thing returned the wrong shape
     @test size(A) == size(A2) == size(A3) == (6,)
@@ -329,7 +329,7 @@ end
     # This was broken above for a while:
     Bc = [(1:3) .+ 10i for i=1:2]
     @cast f[(b,c)] := Bc[b][c]
-    @cast bc[b,c] := f[(b,c)] b:2 # this bc is a view of f, NB
+    @cast bc[b,c] := f[(b,c)] b in 1:2 # this bc is a view of f, NB
     @cast f[(c,b)] = Bc[b][c]
     @cast bc[b,c] = f[(c,b)]  # thus this copyto! is confusing
     @test_broken bc[1,2] != Bc[1][2] # and in fact leads to duplicates here
@@ -348,7 +348,7 @@ end
 
     ## runtime
 
-    @test_throws DimensionMismatch @cast oo[i,j] := bc[i,j] i:3, assert
+    @test_throws DimensionMismatch @cast oo[i,j] := bc[i,j] i in 1:3, assert
     @test_throws DimensionMismatch @cast cb[i,j] = bc[i,j]  assert
 
 end

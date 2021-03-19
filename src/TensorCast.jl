@@ -35,7 +35,7 @@ module Fast # shield non-macro code from @optlevel 1
     export sliceview, slicecopy, copy_glue, glue!, iscodesorted, countcolons
 
     include("view.jl")
-    export diagview, mul!, rview, star, Reverse, Shuffle
+    export diagview, mul!, rview, star, onetolength, Reverse, Shuffle
 
     include("static.jl")
     export static_slice, static_glue

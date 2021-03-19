@@ -40,6 +40,14 @@ All of these are converted into array commands like `reshape` and `permutedims`
 and `eachslice`, plus a [broadcasting expression](https://julialang.org/blog/2017/01/moredots) if needed, 
 and `sum` /  `sum!`, or `*` / `mul!`. This package just provides a convenient notation.
 
+It can be used with some other packages which modify broadcasting, including:
+
+```julia
+using Strided, LoopVectorization
+@cast @strided E[φ,γ] = F[φ]^2 * exp(G[γ])           # multi-threaded
+@reduce @avx S[i] := sum(n) -P[i,n] * log(P[i,n])    # SIMD-enhanced
+```
+
 ## Installation
 
 ```julia

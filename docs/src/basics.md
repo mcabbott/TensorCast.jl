@@ -98,7 +98,7 @@ as it does not have to infer what shape the function produces:
 ```julia-repl
 julia> using BenchmarkTools
 
-julia> f(M) = @cast [i,j] := cumsum(M[:,j])[i];
+julia> f(M) = @cast _[i,j] := cumsum(M[:,j])[i];
 
 julia> M10 = rand(10,1000);
 
@@ -173,18 +173,18 @@ julia> all(K[i + 3(j-1)] == V[i] * W[j] for i=1:3, j=1:4)
 true
 
 julia> Base.kron(A::Array{T,3}, X::Array{T′,3}) where {T,T′} =    # extend kron to 3-tensors
-           @cast [x⊗a, y⊗b, z⊗c] := A[a,b,c] * X[x,y,z]
+           @cast _[x⊗a, y⊗b, z⊗c] := A[a,b,c] * X[x,y,z]
 ```
 
 If an array on the right has a combined index, then it may be ambiguous how to divide up its range. You can resolve this by providing explicit ranges, after the main expression: 
 
 ```jldoctest mylabel
-julia> @cast A[i,j] := collect(1:12)[i⊗j]  i:2
+julia> @cast A[i,j] := collect(1:12)[i⊗j]  i in 1:2
 2×6 Array{Int64,2}:
  1  3  5  7   9  11
  2  4  6  8  10  12
 
-julia> @cast A[i,j] := collect(1:12)[i⊗j]  i:4, j:3
+julia> @cast A[i,j] := collect(1:12)[i⊗j]  i ∈ 1:4, j ∈ 1:3
 4×3 Array{Int64,2}:
  1  5   9
  2  6  10
@@ -202,7 +202,7 @@ julia> @cast A[i,j] = 10 * collect(1:12)[i⊗j];
 Aside, note that providing explicit ranges will also turn on checks of the input, for example:
 
 ```julia
-julia> @pretty @cast W[i] := V[i]^2  i:3 
+julia> @pretty @cast W[i] := V[i]^2  i ∈ 1:3 
 begin
     @assert_ 3 == size(V, 1) "range of index i must agree"
     @assert_ ndims(V) == 1 "expected a 1-tensor V[i]"
@@ -219,14 +219,14 @@ agrees with that of two indices `x,i`.
 ```jldoctest mylabel
 julia> list = [ i .* ones(2,2) for i=1:8 ];
 
-julia> @cast mat[x⊗i, y⊗j] := Int(list[i⊗j][x,y])  i:2
+julia> @cast mat[x⊗i, y⊗j] := Int(list[i⊗j][x,y])  i in 1:2
 4×8 Array{Int64,2}:
  1  1  3  3  5  5  7  7
  1  1  3  3  5  5  7  7
  2  2  4  4  6  6  8  8
  2  2  4  4  6  6  8  8
 
-julia> vec(mat) == @cast [xi⊗yj] := mat[xi, yj]
+julia> vec(mat) == @cast _[xi⊗yj] := mat[xi, yj]
 true
 
 julia> mat == Int.(hvcat((4,4), transpose(reshape(list,2,4))...))
@@ -275,17 +275,17 @@ Acting on elements, `C[i,j]'` means `adjoint.(C)`, elementwise complex conjugate
 If the elements are matrices, as in `C[:,:,k]'`, then  `adjoint` is conjugate transpose.
 
 ```jldoctest mylabel
-julia> @cast C[i,i'] := (1:4)[i⊗i′] + im  (i:2, i′:2)
+julia> @cast C[i,i'] := (1:4)[i⊗i′] + im  (i ∈ 1:2, i′ ∈ 1:2)
 2×2 Array{Complex{Int64},2}:
  1+1im  3+1im
  2+1im  4+1im
 
-julia> @cast [i,j] := C[i,j]'
+julia> @cast _[i,j] := C[i,j]'
 2×2 Array{Complex{Int64},2}:
  1-1im  3-1im
  2-1im  4-1im
 
-julia> C' == @cast [j,i] := C[i,j]'
+julia> C' == @cast _[j,i] := C[i,j]'
 true
 ```
 
@@ -314,7 +314,7 @@ You can also index one array using another, this example is just `view(M, :, ind
 ```jldoctest mylabel
 julia> ind = [1,1,2,2,4];
 
-julia> @cast [i,j] := M[i,ind[j]]
+julia> @cast _[i,j] := M[i,ind[j]]
 3×5 view(::Array{Int64,2}, :, [1, 1, 2, 2, 4]) with eltype Int64:
  1  1  4  4  10
  2  2  5  5  11
@@ -332,7 +332,7 @@ julia> @cast D[i] |= C[i,i]
  1 + 1im
  4 + 1im
 
-julia> D2 = @cast [i,i] := V[i]
+julia> D2 = @cast _[i,i] := V[i]
 3×3 Diagonal{Int64,Array{Int64,1}}:
  10   ⋅   ⋅
   ⋅  20   ⋅

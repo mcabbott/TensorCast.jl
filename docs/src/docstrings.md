@@ -37,16 +37,6 @@ These provide an alternative... but don't cover quite everything:
 These are not exported, but are called by the macros above, 
 and visible in what `@pretty` prints out. 
 
-## Reshaping & views
-
-```@docs
-TensorCast.orient
-```
-
-```@docs
-TensorCast.PermuteDims
-```
-
 ```@docs
 TensorCast.rview
 ```
@@ -55,13 +45,6 @@ TensorCast.rview
 TensorCast.diagview
 ```
 
-## Slicing & glueing
-
 ```@docs
 TensorCast.sliceview
 ```
-
-```@docs
-TensorCast.glue
-```
-
