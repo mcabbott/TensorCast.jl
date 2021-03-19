@@ -36,17 +36,17 @@ TensorCast.sliceview
 These are from helper packages:
 
 ```@docs
-LazyStack.stack
+TensorCast.stack
 ```
 
 ```@docs
-TransmuteDims.TransmutedDimsArray
+TensorCast.TransmutedDimsArray
 ```
 
 ```@docs
-TransmuteDims.transmute
+TensorCast.transmute
 ```
 
 ```@docs
-TransmuteDims.transmutedims
+TensorCast.transmutedims
 ```
