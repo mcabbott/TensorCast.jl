@@ -14,14 +14,14 @@ usingstatic =   isdefined(TensorCast, :StaticArray)
     @cast cb[c,b] = bc[b,c] c in 1:3 # in-place
 
     β = 2
-    @cast f[(c,b)] := bc[b,c] b:β, c in 1:3 # @assert uses β
+    @cast f[(c,b)] := bc[b,c] (b in 1:β, c in 1:3)
     @test size(f) == (6,)
-    @cast cb2[c,b] := f[(c,b)] b:β # can't not use this
+    @cast cb2[c,b] := f[(c,b)] b in 1:β # can't not use this
     @test size(cb2) == (3,2)
     @test all(cb2 .== transpose(bc))
 
     oo = [1,1]
-    @cast cb3[c,b] := f[(c,b)] b:sum(oo) # with an expression
+    @cast cb3[c,b] := f[(c,b)] (b in 1:sum(oo)) # with an expression
     @test size(cb3) == (3,2)
 
     β = 2
@@ -113,12 +113,12 @@ end
     bcd = rand(2,3,4);
     bcde = rand(2,3,4,5);
 
-    @cast DBec[d,b]{e,c} := bcde[b,c,d,e] e:5, c in 1:3
+    @cast DBec[d,b]{e,c} := bcde[b,c,d,e] e in 1:5, c in 1:3
     @test size(DBec) == (4,2)
     @test size(first(DBec)) == (5,3)
     @test first(DBec) isa StaticArray
 
-    @cast DEbc[d,e]{b,c} := bcde[b,c,d,e] b:2, c in 1:3
+    @cast DEbc[d,e]{b,c} := bcde[b,c,d,e] b in 1:2, c in 1:3
     @test size(DEbc) == (4,5)
     @test size(first(DEbc)) == (2,3)
     @test first(DEbc) isa StaticArray
@@ -213,7 +213,7 @@ end
     @cast g[(b,c),x,y,e] := bcde[b,c,(x,y),e] x in 1:2;
     @test size(g) == (6,2,2,5)
 
-    @cast g[(y,e),(b,c),x] := bcde[b,c,(x,y),e] x:1;
+    @cast g[(y,e),(b,c),x] := bcde[b,c,(x,y),e] x in 1:1;
     @test size(g) == (20, 6, 1)
     @cast bcde2[b,c,(x,y),e] = g[(y,e),(b,c),x];
     @test all(bcde2 .== bcde)
@@ -224,7 +224,7 @@ end
     Bc = [ rand(3) for b=1:2 ] # Bc = [(1:3) .+ 10i for i=1:2]
     @cast f[(b,c)] |= Bc[b][c] # NOT a view of Bc
     @test size(f) == (6,)
-    @cast bc[b,c] |= f[(b,c)] b in 1:2 # for in-place to work below, this bc is NOT a view of f
+    @cast bc[b,c] |= f[(b,c)] (b in 1:2) # for in-place to work below, this bc is NOT a view of f
     @test size(bc) == (2,3)
     @test bc[1,2] == Bc[1][2]
 
@@ -233,7 +233,7 @@ end
     @test bc[1,2] == Bc[1][2]
 
     Cdaeb = [rand(4,1,5,2) for i=1:3]; # sizes match abcde now
-    Z = @cast [(c,d),e][a,b] := Cdaeb[c][d,a,e,b] # alphabetical = canonical
+    Z = @cast _[(c,d),e][a,b] := Cdaeb[c][d,a,e,b] # alphabetical = canonical
     @test size(Z) == (3*4, 5)
     @test size(first(Z)) == (1,2)
     @test Z[2*1,4][1,2] == Cdaeb[2][1,1,4,2]
@@ -303,13 +303,13 @@ end
     @test size(A) == (3,2,1)
 
     C = @cast _[k][i,j] := B[i,(j,k)]  k in 1:3 # without left-hand name
-    C = @cast _[k][i,j] := B[i,(j,k)]  j in 1:2, k in 1:3
+    C = @cast _[k][i,j] := B[i,(j,k)]  (j in 1:2, k in 1:3)
 
     @test size(C) == (3,)
     @test size(first(C)) == (1,2)
 
 
-    @cast A[k][i,j] := B[i,(j,k)]  k:length(C) # with an expression
+    @cast A[k][i,j] := B[i,(j,k)]  k in 1:length(C) # with an expression
 
     @test size(A) == (3,)
 

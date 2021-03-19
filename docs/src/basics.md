@@ -98,7 +98,7 @@ as it does not have to infer what shape the function produces:
 ```julia-repl
 julia> using BenchmarkTools
 
-julia> f(M) = @cast [i,j] := cumsum(M[:,j])[i];
+julia> f(M) = @cast _[i,j] := cumsum(M[:,j])[i];
 
 julia> M10 = rand(10,1000);
 
@@ -173,7 +173,7 @@ julia> all(K[i + 3(j-1)] == V[i] * W[j] for i=1:3, j=1:4)
 true
 
 julia> Base.kron(A::Array{T,3}, X::Array{T′,3}) where {T,T′} =    # extend kron to 3-tensors
-           @cast [x⊗a, y⊗b, z⊗c] := A[a,b,c] * X[x,y,z]
+           @cast _[x⊗a, y⊗b, z⊗c] := A[a,b,c] * X[x,y,z]
 ```
 
 If an array on the right has a combined index, then it may be ambiguous how to divide up its range. You can resolve this by providing explicit ranges, after the main expression: 
@@ -226,7 +226,7 @@ julia> @cast mat[x⊗i, y⊗j] := Int(list[i⊗j][x,y])  i in 1:2
  2  2  4  4  6  6  8  8
  2  2  4  4  6  6  8  8
 
-julia> vec(mat) == @cast [xi⊗yj] := mat[xi, yj]
+julia> vec(mat) == @cast _[xi⊗yj] := mat[xi, yj]
 true
 
 julia> mat == Int.(hvcat((4,4), transpose(reshape(list,2,4))...))
@@ -280,12 +280,12 @@ julia> @cast C[i,i'] := (1:4)[i⊗i′] + im  (i ∈ 1:2, i′ ∈ 1:2)
  1+1im  3+1im
  2+1im  4+1im
 
-julia> @cast [i,j] := C[i,j]'
+julia> @cast _[i,j] := C[i,j]'
 2×2 Array{Complex{Int64},2}:
  1-1im  3-1im
  2-1im  4-1im
 
-julia> C' == @cast [j,i] := C[i,j]'
+julia> C' == @cast _[j,i] := C[i,j]'
 true
 ```
 
@@ -314,7 +314,7 @@ You can also index one array using another, this example is just `view(M, :, ind
 ```jldoctest mylabel
 julia> ind = [1,1,2,2,4];
 
-julia> @cast [i,j] := M[i,ind[j]]
+julia> @cast _[i,j] := M[i,ind[j]]
 3×5 view(::Array{Int64,2}, :, [1, 1, 2, 2, 4]) with eltype Int64:
  1  1  4  4  10
  2  2  5  5  11
@@ -332,7 +332,7 @@ julia> @cast D[i] |= C[i,i]
  1 + 1im
  4 + 1im
 
-julia> D2 = @cast [i,i] := V[i]
+julia> D2 = @cast _[i,i] := V[i]
 3×3 Diagonal{Int64,Array{Int64,1}}:
  10   ⋅   ⋅
   ⋅  20   ⋅

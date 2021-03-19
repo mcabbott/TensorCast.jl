@@ -294,10 +294,10 @@ end
     using LoopVectorization
 
     A = rand(4,5)
-    @test exp.(A) ≈ @cast B[i,j] := exp(A[i,j]) avx
+    @test exp.(A) ≈ @cast @avx B[i,j] := exp(A[i,j])
 
-    @test exp.(A') ≈ @cast B[i,j] := exp(A[j,i]) avx
-    @test exp.(A.+1) ≈ @cast B[i,j] := exp(A[i,j]+1) avx
+    @test exp.(A') ≈ @cast @avx B[i,j] := exp(A[j,i])
+    @test exp.(A.+1) ≈ @cast @avx B[i,j] := exp(A[i,j]+1)
 
 end
 end
@@ -323,23 +323,23 @@ end
     bcde = rand(2,3,4,5);
     bcde2 = similar(bcde);
 
-    @cast oo[d,e,b,c] |= bcde[b,c,d,e] strided;
+    @cast @strided oo[d,e,b,c] |= bcde[b,c,d,e];
     @test size(oo) == (4,5,2,3)
     @test oo[1,3,1,3] == bcde[1,3,1,3]
 
     oo[1] = 99
     @test bcde[1] != 99 # copy not a view
 
-    @cast g[(y,e),(b,c),x] := bcde[b,c,(x,y),e]  x in 1:1, strided;
+    @cast @strided g[(y,e),(b,c),x] := bcde[b,c,(x,y),e]  x in 1:1;
     @test size(g) == (20, 6, 1)
-    @cast bcde2[b,c,(x,y),e] = g[(y,e),(b,c),x]  strided;
+    @cast @strided bcde2[b,c,(x,y),e] = g[(y,e),(b,c),x];
     @test all(bcde2 .== bcde) # used to say "fails when using Strided"
 
     # https://github.com/mcabbott/TensorCast.jl/issues/2
     A = rand(3,3); B = rand(3,5);
-    @reduce C[i, j] := sum(l) A[i, l] * B[l, j] strided
+    @reduce @strided C[i, j] := sum(l) A[i, l] * B[l, j]
     @test C ≈ A * B
-    @reduce D[i, j] |= sum(l) A[i, l] * B[l, j] strided
+    @reduce @strided D[i, j] |= sum(l) A[i, l] * B[l, j]
     @test D isa Array
 
 end

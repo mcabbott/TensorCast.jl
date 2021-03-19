@@ -62,8 +62,8 @@ and keep the maximum of each set -- equivalent to the maximum of each column bel
 ```jldoctest mylabel
 julia> R = collect(0:5:149);
 
-julia> @reduce Rmax[_,c] := maximum(r) R[(r,c)]  r:3
-1×10 LinearAlgebra.Transpose{Int64,Array{Int64,1}}:
+julia> @reduce Rmax[_,c] := maximum(r) R[(r,c)]  r in 1:3
+1×10 Array{Int64,2}:
  10  25  40  55  70  85  100  115  130  145
 
 julia> reshape(R, 3,:)
@@ -73,7 +73,7 @@ julia> reshape(R, 3,:)
  10  25  40  55  70  85  100  115  130  145
 ```
 
-Here `r:3` indicates the range of `r`, implying `c ∈ 1:10`. 
+Here `r in 1:3` indicates the range of `r`, implying `c ∈ 1:10`.
 You may also write `maximum(r:3) R[(r,c)]`.
 
 In the same way, this down-samples an image by a factor of 2, 
@@ -110,7 +110,7 @@ then you can place a complete `@reduce` expression inside `@cast` or `@reduce`.
 There is no need to name the intermediate array, here `termite[x]`, but you must show its indices:
 
 ```julia-repl
-julia> @pretty @reduce sum(x,θ) L[x,θ] * p[θ] * log(L[x,θ] / @reduce [x] := sum(θ′) L[x,θ′] * p[θ′])
+julia> @pretty @reduce sum(x,θ) L[x,θ] * p[θ] * log(L[x,θ] / @reduce _[x] := sum(θ′) L[x,θ′] * p[θ′])
 begin
     local fish = transmute(p, (nothing, 1))
     termite = transmute(sum(@__dot__(L * fish), dims = 2), (1,))
