@@ -14,7 +14,7 @@ CurrentModule = TensorCast
 
 ```@docs
 @matmul(ex)
-``` 
+```
 
 ```@docs
 @pretty(ex)

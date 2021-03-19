@@ -106,13 +106,14 @@ Tensor reduction macro:
 Complete reduction to a scalar output `F`, or a zero-dim array `G`.
 `G[]` involves `sum(A, dims=(1,2))` rather than `sum(A)`.
 
-    @reduce Z[k] := sum(i,j) A[i] * B[j] * C[k]  lazy, i:N, j:N, k:N
+    @reduce @lazy Z[k] := sum(i,j) A[i] * B[j] * C[k]  (i in 1:N, j in 1:N, k in 1:N)
 
-The option `lazy` replaces the broadcast expression with a `BroadcastArray`,
+The option `@lazy` replaces the broadcast expression with a `BroadcastArray`,
 to avoid `materialize`ing the entire array before summing. In the example this is of size `N^3`.
+This needs `using LazyArrays` to work.
 
-The option `strided` will place `@strided` in front of the broadcasting operation.
-You need `using Strided` for this to work.
+The options `@strided` and `@avx` will alter broadcasting operations, 
+and need `using Strided` or `using LoopVectorization` to work.
 
     @reduce sum(i) A[i] * log(@reduce [i] := sum(j) A[j] * exp(B[i,j]))
     @cast W[i] := A[i] * exp(- @reduce S[i] = sum(j) exp(B[i,j]) lazy)
