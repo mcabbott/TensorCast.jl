@@ -67,7 +67,7 @@ end
     # from readme
     A = rand(4);
     B = randn(4,4);
-    R = @reduce sum(i) A[i] * log( @reduce [i] := sum(j) A[j] * exp(B[i,j]) )
+    R = @reduce sum(i) A[i] * log( @reduce _[i] := sum(j) A[j] * exp(B[i,j]) )
     @reduce inner[i] := sum(j) A[j] * exp(B[i,j])
     S = @reduce sum(i) A[i] * log(inner[i])
     @test S == R
@@ -83,7 +83,7 @@ end
 
     # this needs size of the result of inner macro, failed at first:
     A = rand(2,3); B = rand(3,4); C = rand(4,5);
-    @reduce W[i,_,l] := sum(j) A[i,j] * (@matmul [j,l] := sum(k) B[j,k] * C[k,l])  assert
+    @reduce W[i,_,l] := sum(j) A[i,j] * (@matmul _[j,l] := sum(k) B[j,k] * C[k,l])  assert
     @test W ≈ reshape(A * B * C, 2,1,5)
 
 end

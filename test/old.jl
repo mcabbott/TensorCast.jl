@@ -64,11 +64,11 @@ end
 
 
     B = [rand(3) for i=1:4];
-    A = @cast [(i,j)] := B[j][i]  # vcat a vector of vectors
+    A = @cast _[(i,j)] := B[j][i]  # vcat a vector of vectors
     @test size(A) == (12,)
 
     B = [rand(3,4,5,6) for i=1:7];
-    A = @cast [(i,j),l][k,m] := B[i][j,k,l,m]; # glue then slice then reshape
+    A = @cast _[(i,j),l][k,m] := B[i][j,k,l,m]; # glue then slice then reshape
     @test size(A) == (21,5)
 
 

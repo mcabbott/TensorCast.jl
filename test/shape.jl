@@ -296,14 +296,14 @@ end
     @cast V[(i,j,k)] := B[i,(k,j)]  k in 1:3, assert # was an error for recursive colon reasons
 
 
-    A = @cast [jk,i] := B[i,jk] # without left-hand name
+    A = @cast _[jk,i] := B[i,jk] # without left-hand name
     @test size(A) == (6,1)
 
-    A = @cast [k,j,i] := B[i,(j,k)] k in 1:3 # without left-hand name
+    A = @cast _[k,j,i] := B[i,(j,k)] k in 1:3 # without left-hand name
     @test size(A) == (3,2,1)
 
-    C = @cast [k][i,j] := B[i,(j,k)]  k in 1:3 # without left-hand name
-    C = @cast [k][i,j] := B[i,(j,k)]  j in 1:2, k in 1:3
+    C = @cast _[k][i,j] := B[i,(j,k)]  k in 1:3 # without left-hand name
+    C = @cast _[k][i,j] := B[i,(j,k)]  j in 1:2, k in 1:3
 
     @test size(C) == (3,)
     @test size(first(C)) == (1,2)

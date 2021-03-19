@@ -57,7 +57,7 @@ Re-ordering of indices `Z[k,j,i]`, and reversing of an axis `F[i,-j,k]`, are don
 Using `|=` (or broadcasting) will produce a simple `Array`.
 
 Options can be specified at the end (if several, separated by `,` i.e. `options::Tuple`)
-* `i:3` supplies the range of index `i`. Variables and functions like `j:Nj, k:length(K)`
+* `i in 1:3` supplies the range of index `i`. Variables and functions like `j in 1:Nj, k in 1:length(K)`
   are allowed.
 * `assert` will turn on explicit dimension checks of the input.
   (Providing any ranges will also turn these on.)
@@ -66,7 +66,8 @@ Options can be specified at the end (if several, separated by `,` i.e. `options:
   and `Diagonal` in favour of `diagm` for `Z[i,i]` output.
 * `strided` will place `@strided` in front of broadcasting operations,
   and use `@strided permutedims(A, ...)` instead of `PermutedDimsArray(A, ...)`.
-  For this you need `using Strided` to load that package.
+  The preferred notation is now `@cast @strided Z[i] := ...`.
+  (You need `using Strided` to load that package.)
 * `avx` will place `@avx` in front of broadcasting operations,
   which needs `using LoopVectorization` to load that package.
 
@@ -750,16 +751,24 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
     static = @capture(left, ZZ_{ii__})
 
     if @capture(left, Z_[outer__][inner__] | [outer__][inner__] | Z_[outer__]{inner__} | [outer__]{inner__} )
-        isnothing(Z) && (:inplace in call.flags) && throw(MacroError("can't write into a nameless tensor", call))
-        Z = isnothing(Z) ? gensym(:output) : Z
+        if isnothing(Z)
+            (:inplace in call.flags) && throw(MacroError("can't write into a nameless tensor", call))
+            @warn "please write `@cast _[i][k] := ...` to omit a name, instead of `@cast [i][k] := ...`"
+            Z = :_ # gensym(:output)
+        end
+        Z = (Z == :_) ? gensym(:output) : Z
         parsed = indexparse(Z, outer, store, call, save=(:inplace in call.flags))
         innerflat = innerparse(:(first($Z)), inner, store, call, save=(:inplace in call.flags))
         canon = vcat(innerflat, parsed.flat)
         checknorepeats(canon, call, " on the left")
 
     elseif @capture(left, Z_[outer__] | [outer__] )
-        isnothing(Z) && (:inplace in call.flags) && throw(MacroError("can't write into a nameless tensor", call))
-        Z = isnothing(Z) ? gensym(:output) : Z
+        if isnothing(Z)
+            (:inplace in call.flags) && throw(MacroError("can't write into a nameless tensor", call))
+            @warn "please write `@cast _[i] := ...` to omit a name, instead of `@cast [i] := ...`"
+            Z = :_ # gensym(:output)
+        end
+        Z = (Z == :_) ? gensym(:output) : Z
         parsed = indexparse(Z, outer, store, call, save=(:inplace in call.flags))
         canon = parsed.flat
         inner, innerflat = [], []
@@ -849,7 +858,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
     for (d,i) in enumerate(ijk)
 
         if iscolon(i) || isrange(i)
-            if i isa QuoteNode
+            if i isa QuoteNode && A != :_
                 str = "fixed size in $A[" * join(ijk, ", ") * "]" # DimensionMismatch("fixed size in M[i, \$(QuoteNode(5))]: size(M, 2) == 5") TODO print more nicely
                 push!(store.mustassert, :( TensorCast.@assert_ size($A,$d)==$(i.value) $str) )
             end
@@ -858,7 +867,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
 
         if isconstant(i)
             push!(outsize, 1)
-            if i == :_ && save
+            if i == :_ && A != :_ && save
                 str = "underscore in $A[" * join(ijk, ", ") * "]"
                 push!(store.mustassert, :( TensorCast.@assert_ size($A,$d)==1 $str) )
             end
@@ -869,7 +878,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
             stripminustilde!(ii, reversed, shuffled)
             append!(flat, ii)
             push!(outsize, szwrap(ii))
-            save && saveonesize(ii, :(size($A, $d)), store)
+            save && A != :_ && saveonesize(ii, :(size($A, $d)), store)
 
         elseif @capture(i, B_[klm__])
             innerparse(B, klm, store, call) # called just for error on tensor/colon/constant
@@ -879,14 +888,14 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
         elseif i isa Symbol
             push!(flat, i)
             push!(outsize, szwrap(i))
-            save && saveonesize(i, :(size($A, $d)), store)
+            save && A != :_ && saveonesize(i, :(size($A, $d)), store)
 
         else
             throw(MacroError("don't understand index $i", call))
         end
     end
 
-    if save && length(ijk)>0
+    if save && length(ijk)>0 && A != :_
         N = length(ijk)
         str = "expected a $N-tensor $A[" * join(ijk, ", ") * "]"
         push!(store.assert, :( TensorCast.@assert_ ndims($A)==$N $str) )

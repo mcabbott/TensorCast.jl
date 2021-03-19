@@ -171,9 +171,9 @@ end
     @einsum V[i,l] := A[i,j] * B[j,k] * C[k,l]
     @reduce V2[i,l] := sum(j,k) A[i,j] * B[j,k] * C[k,l]
 
-    @reduce W[i,l] := sum(j) A[i,j] * @matmul [j,l] := sum(k) B[j,k] * C[k,l]
+    @reduce W[i,l] := sum(j) A[i,j] * @matmul _[j,l] := sum(k) B[j,k] * C[k,l]
 
-    # @matmul W2[i,l] := sum(j) A[i,j] * @matmul [j,l] := B[j,k] * C[k,l]
+    # @matmul W2[i,l] := sum(j) A[i,j] * @matmul _[j,l] := B[j,k] * C[k,l]
     # maybe I decided not to allow this for now.
 
     @test V ≈ V2 ≈ W #≈ W2
