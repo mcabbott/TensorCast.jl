@@ -120,7 +120,7 @@ To disable the default use of `PermutedDimsArray` etc, give the option `nolazy`:
 # Z = transmutedims(reverse(M, dims = 2), (2, 1))
 
 @pretty @cast Z[y,x] := M[x,-y] 
-# Z = transmute(Reverse{2}(M), (2, 1))
+# Z = transmute(Reverse{2}(M), (2, 1))  # transpose(@view M[:, end:-1:begin])
 ```
 
 This also controls how the extraction of diagonal elements

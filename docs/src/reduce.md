@@ -164,13 +164,18 @@ But that has bugs! -->
 
 To use the more flexible `@reduce` in cases like this, 
 when creating the large intermediate tensor will be expensive,
-the option `lazy` which creates a `LazyArrays.BroadcastArray` instead can help: 
+the option `@lazy` which creates a `LazyArrays.BroadcastArray` instead can help: 
 
 ```julia-repl
-julia> lazyred(A,B) = @reduce R[i,k] := sum(j) A[i,j] * B[j,k]  lazy;
+julia> using LazyArrays
+
+julia> lazyred(A,B) = @reduce @lazy R[i,k] := sum(j) A[i,j] * B[j,k];
 
 julia> @btime lazyred($A, $B);
-  223.172 μs (26 allocations: 78.95 KiB) 
+  223.172 μs (26 allocations: 78.95 KiB)
+
+julia> red(A, B) ≈ mul(A, B) ≈ lazyred(A,B)
+true
 ```
 
 More details on the next page. 
