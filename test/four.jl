@@ -26,11 +26,12 @@ end
     CNT = Ref(0)
     add(x) = begin CNT[] += 1; x+1 end
     xs = collect(1:12)
+
     @cast ys[i] := iseven(xs[i]) ? add(xs[i]) : 0
     @test CNT[] == 6
     @test ys[1:6] == [0, 3, 0, 5, 0, 7]
 
-    @cast zs[i,j] := iseven(xs[i⊗j]) ? add(ys[j⊗i]) : (1:3)[i]
+    @cast zs[i,j] := iseven(xs[i⊗j]+1) ? add(ys[j⊗i] / 2) : ((1:3)[i] + 100)
     @test CNT[] == 12
     @test size(zs) == (3, 4)
 end
