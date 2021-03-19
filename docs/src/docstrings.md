@@ -20,26 +20,10 @@ CurrentModule = TensorCast
 @pretty(ex)
 ```
 
-## String macros
-
-These provide an alternative... but don't cover quite everything:
-
-```@docs
-@cast_str
-```
-
-```@docs
-@reduce_str
-```
-
 # Functions
 
 These are not exported, but are called by the macros above, 
 and visible in what `@pretty` prints out. 
-
-```@docs
-TensorCast.rview
-```
 
 ```@docs
 TensorCast.diagview
@@ -47,4 +31,22 @@ TensorCast.diagview
 
 ```@docs
 TensorCast.sliceview
+```
+
+These are from helper packages:
+
+```@docs
+LazyStack.stack
+```
+
+```@docs
+TransmuteDims.TransmutedDimsArray
+```
+
+```@docs
+TransmuteDims.transmute
+```
+
+```@docs
+TransmuteDims.transmutedims
 ```
