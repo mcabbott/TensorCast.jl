@@ -23,15 +23,15 @@ begin
     mean!(A, @__dot__(pelican ^ 2))
 end</code></pre><p>Otherwise all the same notation as <code>@cast</code> works.  Here&#39;s a max-pooling trick with combined indices, in which we group the numbers in <code>R</code> into tiplets and keep the maximum of each set – equivalent to the maximum of each column below.  </p><pre><code class="language-julia-repl">julia&gt; R = collect(0:5:149);
 
-julia&gt; @reduce Rmax[_,c] := maximum(r) R[(r,c)]  r:3
-1×10 LinearAlgebra.Transpose{Int64,Array{Int64,1}}:
+julia&gt; @reduce Rmax[_,c] := maximum(r) R[(r,c)]  r in 1:3
+1×10 Array{Int64,2}:
  10  25  40  55  70  85  100  115  130  145
 
 julia&gt; reshape(R, 3,:)
 3×10 Array{Int64,2}:
   0  15  30  45  60  75   90  105  120  135
   5  20  35  50  65  80   95  110  125  140
- 10  25  40  55  70  85  100  115  130  145</code></pre><p>Here <code>r:3</code> indicates the range of <code>r</code>, implying <code>c ∈ 1:10</code>.  You may also write <code>maximum(r:3) R[(r,c)]</code>.</p><p>In the same way, this down-samples an image by a factor of 2,  taking the mean of each 2×2 block of pixels, in each colour <code>c</code>:</p><pre><code class="language-julia-repl">julia&gt; @reduce smaller[I,J,c] := mean(i:2, j:2) orig[(i,I), (j,J), c]</code></pre><h2 id="Scalar-output-1"><a class="docs-heading-anchor" href="#Scalar-output-1">Scalar output</a><a class="docs-heading-anchor-permalink" href="#Scalar-output-1" title="Permalink"></a></h2><p>Here are different ways to write complete reduction:</p><pre><code class="language-julia-repl">julia&gt; @reduce Z := sum(i,j) M[i,j]      # Z = sum(M)
+ 10  25  40  55  70  85  100  115  130  145</code></pre><p>Here <code>r in 1:3</code> indicates the range of <code>r</code>, implying <code>c ∈ 1:10</code>. You may also write <code>maximum(r:3) R[(r,c)]</code>.</p><p>In the same way, this down-samples an image by a factor of 2,  taking the mean of each 2×2 block of pixels, in each colour <code>c</code>:</p><pre><code class="language-julia-repl">julia&gt; @reduce smaller[I,J,c] := mean(i:2, j:2) orig[(i,I), (j,J), c]</code></pre><h2 id="Scalar-output-1"><a class="docs-heading-anchor" href="#Scalar-output-1">Scalar output</a><a class="docs-heading-anchor-permalink" href="#Scalar-output-1" title="Permalink"></a></h2><p>Here are different ways to write complete reduction:</p><pre><code class="language-julia-repl">julia&gt; @reduce Z := sum(i,j) M[i,j]      # Z = sum(M)
 78
 
 julia&gt; Z = @reduce sum(i,j) M[i,j]
@@ -43,7 +43,7 @@ julia&gt; @reduce Z0[] := sum(i,j) M[i,j]   # Z0 = dropdims(sum(M, dims=(1, 2)),
 
 julia&gt; @reduce Z1[_] := sum(i,j) M[i,j]
 1-element Array{Int64,1}:
- 78</code></pre><h2 id="Recursion-1"><a class="docs-heading-anchor" href="#Recursion-1">Recursion</a><a class="docs-heading-anchor-permalink" href="#Recursion-1" title="Permalink"></a></h2><p>If you want to sum only part of an expression, or have one sum inside another,  then you can place a complete <code>@reduce</code> expression inside <code>@cast</code> or <code>@reduce</code>. There is no need to name the intermediate array, here <code>termite[x]</code>, but you must show its indices:</p><pre><code class="language-julia-repl">julia&gt; @pretty @reduce sum(x,θ) L[x,θ] * p[θ] * log(L[x,θ] / @reduce [x] := sum(θ′) L[x,θ′] * p[θ′])
+ 78</code></pre><h2 id="Recursion-1"><a class="docs-heading-anchor" href="#Recursion-1">Recursion</a><a class="docs-heading-anchor-permalink" href="#Recursion-1" title="Permalink"></a></h2><p>If you want to sum only part of an expression, or have one sum inside another,  then you can place a complete <code>@reduce</code> expression inside <code>@cast</code> or <code>@reduce</code>. There is no need to name the intermediate array, here <code>termite[x]</code>, but you must show its indices:</p><pre><code class="language-julia-repl">julia&gt; @pretty @reduce sum(x,θ) L[x,θ] * p[θ] * log(L[x,θ] / @reduce _[x] := sum(θ′) L[x,θ′] * p[θ′])
 begin
     local fish = transmute(p, (nothing, 1))
     termite = transmute(sum(@__dot__(L * fish), dims = 2), (1,))
@@ -74,4 +74,4 @@ julia&gt; @cast N[x,y] := normalise(x) M[x,y]
 3×4 Array{Float64,2}:
  0.166667  0.266667  0.291667  0.30303
  0.333333  0.333333  0.333333  0.333333
- 0.5       0.4       0.375     0.363636</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../basics/">« Basics</a><a class="docs-footer-nextpage" href="../options/">Options »</a></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Thursday 18 March 2021 21:59">Thursday 18 March 2021</span>. Using Julia version 1.5.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+ 0.5       0.4       0.375     0.363636</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../basics/">« Basics</a><a class="docs-footer-nextpage" href="../options/">Options »</a></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Friday 19 March 2021 03:29">Friday 19 March 2021</span>. Using Julia version 1.5.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

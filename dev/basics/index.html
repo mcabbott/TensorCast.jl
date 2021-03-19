@@ -42,7 +42,7 @@ true</code></pre><p>We can glue slices back together with the same notation, <co
 julia&gt; C == mapslices(cumsum, M, dims=1)
 true</code></pre><p>This is both faster and more general than <code>mapslices</code>,  as it does not have to infer what shape the function produces:</p><pre><code class="language-julia-repl">julia&gt; using BenchmarkTools
 
-julia&gt; f(M) = @cast [i,j] := cumsum(M[:,j])[i];
+julia&gt; f(M) = @cast _[i,j] := cumsum(M[:,j])[i];
 
 julia&gt; M10 = rand(10,1000);
 
@@ -83,31 +83,31 @@ julia&gt; all(K[i + 3(j-1)] == V[i] * W[j] for i=1:3, j=1:4)
 true
 
 julia&gt; Base.kron(A::Array{T,3}, X::Array{T′,3}) where {T,T′} =    # extend kron to 3-tensors
-           @cast [x⊗a, y⊗b, z⊗c] := A[a,b,c] * X[x,y,z]</code></pre><p>If an array on the right has a combined index, then it may be ambiguous how to divide up its range. You can resolve this by providing explicit ranges, after the main expression: </p><pre><code class="language-julia-repl">julia&gt; @cast A[i,j] := collect(1:12)[i⊗j]  i:2
+           @cast _[x⊗a, y⊗b, z⊗c] := A[a,b,c] * X[x,y,z]</code></pre><p>If an array on the right has a combined index, then it may be ambiguous how to divide up its range. You can resolve this by providing explicit ranges, after the main expression: </p><pre><code class="language-julia-repl">julia&gt; @cast A[i,j] := collect(1:12)[i⊗j]  i in 1:2
 2×6 Array{Int64,2}:
  1  3  5  7   9  11
  2  4  6  8  10  12
 
-julia&gt; @cast A[i,j] := collect(1:12)[i⊗j]  i:4, j:3
+julia&gt; @cast A[i,j] := collect(1:12)[i⊗j]  i ∈ 1:4, j ∈ 1:3
 4×3 Array{Int64,2}:
  1  5   9
  2  6  10
  3  7  11
- 4  8  12</code></pre><p>Writing into a given array with <code>=</code> instead of <code>:=</code> will also remove ambiguities,  as <code>size(A)</code> is known:</p><pre><code class="language-julia-repl">julia&gt; @cast A[i,j] = 10 * collect(1:12)[i⊗j];</code></pre><p>Aside, note that providing explicit ranges will also turn on checks of the input, for example:</p><pre><code class="language-julia">julia&gt; @pretty @cast W[i] := V[i]^2  i:3 
+ 4  8  12</code></pre><p>Writing into a given array with <code>=</code> instead of <code>:=</code> will also remove ambiguities,  as <code>size(A)</code> is known:</p><pre><code class="language-julia-repl">julia&gt; @cast A[i,j] = 10 * collect(1:12)[i⊗j];</code></pre><p>Aside, note that providing explicit ranges will also turn on checks of the input, for example:</p><pre><code class="language-julia">julia&gt; @pretty @cast W[i] := V[i]^2  i ∈ 1:3 
 begin
     @assert_ 3 == size(V, 1) &quot;range of index i must agree&quot;
     @assert_ ndims(V) == 1 &quot;expected a 1-tensor V[i]&quot;
     W = @__dot__(V ^ 2)
 end</code></pre><h2 id="Glue-and-reshape-1"><a class="docs-heading-anchor" href="#Glue-and-reshape-1">Glue &amp; reshape</a><a class="docs-heading-anchor-permalink" href="#Glue-and-reshape-1" title="Permalink"></a></h2><p>As a less trivial example of these combined indices, here is one way to combine a list of matrices into one large grid. Notice that <code>x</code> varies faster than <code>i</code>, and so on – the linear order of index <code>x⊗i</code> agrees with that of two indices <code>x,i</code>. </p><pre><code class="language-julia-repl">julia&gt; list = [ i .* ones(2,2) for i=1:8 ];
 
-julia&gt; @cast mat[x⊗i, y⊗j] := Int(list[i⊗j][x,y])  i:2
+julia&gt; @cast mat[x⊗i, y⊗j] := Int(list[i⊗j][x,y])  i in 1:2
 4×8 Array{Int64,2}:
  1  1  3  3  5  5  7  7
  1  1  3  3  5  5  7  7
  2  2  4  4  6  6  8  8
  2  2  4  4  6  6  8  8
 
-julia&gt; vec(mat) == @cast [xi⊗yj] := mat[xi, yj]
+julia&gt; vec(mat) == @cast _[xi⊗yj] := mat[xi, yj]
 true
 
 julia&gt; mat == Int.(hvcat((4,4), transpose(reshape(list,2,4))...))
@@ -131,17 +131,17 @@ julia&gt; @cast M3[i,j] |= M[i,~j]
 3×4 Array{Int64,2}:
  7  4  1  10
  8  5  2  11
- 9  6  3  12</code></pre><h2 id="Primes-&#39;-1"><a class="docs-heading-anchor" href="#Primes-&#39;-1">Primes <code>&#39;</code></a><a class="docs-heading-anchor-permalink" href="#Primes-&#39;-1" title="Permalink"></a></h2><p>Acting on indices, <code>A[i&#39;]</code> is normalised to <code>A[i′]</code> unicode \prime (which looks identical in some fonts). Acting on elements, <code>C[i,j]&#39;</code> means <code>adjoint.(C)</code>, elementwise complex conjugate, equivalent to <code>(C&#39;)[j,i]</code>. If the elements are matrices, as in <code>C[:,:,k]&#39;</code>, then  <code>adjoint</code> is conjugate transpose.</p><pre><code class="language-julia-repl">julia&gt; @cast C[i,i&#39;] := (1:4)[i⊗i′] + im  (i:2, i′:2)
+ 9  6  3  12</code></pre><h2 id="Primes-&#39;-1"><a class="docs-heading-anchor" href="#Primes-&#39;-1">Primes <code>&#39;</code></a><a class="docs-heading-anchor-permalink" href="#Primes-&#39;-1" title="Permalink"></a></h2><p>Acting on indices, <code>A[i&#39;]</code> is normalised to <code>A[i′]</code> unicode \prime (which looks identical in some fonts). Acting on elements, <code>C[i,j]&#39;</code> means <code>adjoint.(C)</code>, elementwise complex conjugate, equivalent to <code>(C&#39;)[j,i]</code>. If the elements are matrices, as in <code>C[:,:,k]&#39;</code>, then  <code>adjoint</code> is conjugate transpose.</p><pre><code class="language-julia-repl">julia&gt; @cast C[i,i&#39;] := (1:4)[i⊗i′] + im  (i ∈ 1:2, i′ ∈ 1:2)
 2×2 Array{Complex{Int64},2}:
  1+1im  3+1im
  2+1im  4+1im
 
-julia&gt; @cast [i,j] := C[i,j]&#39;
+julia&gt; @cast _[i,j] := C[i,j]&#39;
 2×2 Array{Complex{Int64},2}:
  1-1im  3-1im
  2-1im  4-1im
 
-julia&gt; C&#39; == @cast [j,i] := C[i,j]&#39;
+julia&gt; C&#39; == @cast _[j,i] := C[i,j]&#39;
 true</code></pre><h2 id="Arrays-of-indices-or-functions-1"><a class="docs-heading-anchor" href="#Arrays-of-indices-or-functions-1">Arrays of indices or functions</a><a class="docs-heading-anchor-permalink" href="#Arrays-of-indices-or-functions-1" title="Permalink"></a></h2><p>Besides arrays of numbers (and arrays of arrays) you can also broadcast an array of functions, which is done by calling <code>apply(f,xs...) = f(xs...)</code>: </p><pre><code class="language-julia-repl">julia&gt; funs = [identity, sqrt];
 
 julia&gt; @cast applied[i,j] := funs[i](V[j])
@@ -155,7 +155,7 @@ begin
     applied = @__dot__(apply(funs, pelican))
 end</code></pre><p>You can also index one array using another, this example is just <code>view(M, :, ind)</code>:</p><pre><code class="language-julia-repl">julia&gt; ind = [1,1,2,2,4];
 
-julia&gt; @cast [i,j] := M[i,ind[j]]
+julia&gt; @cast _[i,j] := M[i,ind[j]]
 3×5 view(::Array{Int64,2}, :, [1, 1, 2, 2, 4]) with eltype Int64:
  1  1  4  4  10
  2  2  5  5  11
@@ -164,8 +164,8 @@ julia&gt; @cast [i,j] := M[i,ind[j]]
  1 + 1im
  4 + 1im
 
-julia&gt; D2 = @cast [i,i] := V[i]
+julia&gt; D2 = @cast _[i,i] := V[i]
 3×3 Diagonal{Int64,Array{Int64,1}}:
  10   ⋅   ⋅
   ⋅  20   ⋅
-  ⋅   ⋅  30</code></pre><p>All indices appearing on the left must also appear on the right.  There is no implicit sum over repeated indices on different tensors. To sum over things, you need <code>@reduce</code> or <code>@matmul</code>. </p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../reduce/">Reduction »</a></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Thursday 18 March 2021 21:59">Thursday 18 March 2021</span>. Using Julia version 1.5.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+  ⋅   ⋅  30</code></pre><p>All indices appearing on the left must also appear on the right.  There is no implicit sum over repeated indices on different tensors. To sum over things, you need <code>@reduce</code> or <code>@matmul</code>. </p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../reduce/">Reduction »</a></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Friday 19 March 2021 03:29">Friday 19 March 2021</span>. Using Julia version 1.5.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
