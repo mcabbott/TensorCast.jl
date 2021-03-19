@@ -25,7 +25,6 @@ using LazyStack: stack_iter
 
 include("macro.jl")
 include("pretty.jl")
-include("string.jl")
 
 module Fast # shield non-macro code from @optlevel 1
     using ..TensorCast: pretty

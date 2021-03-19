@@ -235,14 +235,6 @@ end
 
 end
 =#
-@testset "string macros" begin
-
-    A = rand(2,10); B = rand(10,10);
-
-    reduce" C_ii := sum_k A_1k * log(A_2i * B_ik) "
-    @test C isa Diagonal
-
-end
 @testset "from todo list" begin
 
     list = [ i .* ones(2,2,1) for i=1:8 ];

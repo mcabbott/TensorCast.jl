@@ -136,7 +136,7 @@ end
     B = rand(-1000:1000:1000, 2,1,4)
     CM = rand(2,3)
     C = eachcol(CM) |> collect
-    cast" Y_ijk := ff(A_j:k)_i + B_i_k + (C_j)_i"
+    @cast Y[i,j,k] := ff(A[j,:,k])[i] + B[i,_,k] + C[j][i]
     Y2 = permutedims(A, (2,1,3)) .^2 .+ B .+ CM
     @test Y ≈ Y2
 
