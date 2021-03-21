@@ -5,7 +5,7 @@
 [![Latest Docs](https://img.shields.io/badge/docs-latest-blue.svg?logo=github)](https://mcabbott.github.io/TensorCast.jl/dev)
 [![Build Status](https://github.com/mcabbott/TensorCast.jl/workflows/CI/badge.svg)](https://github.com/mcabbott/TensorCast.jl/actions?query=workflow%3ACI)
 
-This package lets you work with many-dimensional arrays in index notation, 
+This package lets you work with multi-dimensional arrays in index notation, 
 by defining a few macros. The first is `@cast`, which deals both with "casting" into 
 new shapes (including going to and from an array-of-arrays) and with broadcasting:
 
@@ -40,12 +40,13 @@ All of these are converted into array commands like `reshape` and `permutedims`
 and `eachslice`, plus a [broadcasting expression](https://julialang.org/blog/2017/01/moredots) if needed, 
 and `sum` /  `sum!`, or `*` / `mul!`. This package just provides a convenient notation.
 
-It can be used with some other packages which modify broadcasting, including:
+It can be used with some other packages which modify broadcasting:
 
 ```julia
-using Strided, LoopVectorization
+using Strided, LoopVectorization, LazyArrays
 @cast @strided E[φ,γ] = F[φ]^2 * exp(G[γ])           # multi-threaded
 @reduce @avx S[i] := sum(n) -P[i,n] * log(P[i,n])    # SIMD-enhanced
+@reduce @lazy M[i,j] := sum(k) U[i,k] * V[j,k]       # non-materialised
 ```
 
 ## Installation
