@@ -16,7 +16,7 @@
 
     imgs = [ rand(8,8) for i=1:16 ];
 
-    @cast G[(i,I), (j,J)] := imgs[(I,J)][i,j] J in 1:4
+    @cast G[(i,I), (j,J)] := imgs[(I,J)][i,j] (J in 1:4, lazy=false)
     @cast G[ i⊗I,   j⊗J ] = imgs[ I⊗J ][i,j] # in-place
 
 
