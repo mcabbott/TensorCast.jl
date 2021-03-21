@@ -93,7 +93,7 @@ end
 
     R = rand(2,2)
     @cast V[i] := R[i,i]
-    @cast V2[i] := R[i,i] nolazy
+    @cast V2[i] := R[i,i] lazy=false
 
     @test V[1] == R[1,1]
     @test V[2] == R[2,2]

@@ -292,7 +292,7 @@ true
 ## Arrays of indices or functions
 
 Besides arrays of numbers (and arrays of arrays) you can also broadcast an array of functions,
-which is done by calling `apply(f,xs...) = f(xs...)`: 
+which is done by calling `Core._apply(f, xs...) = f(xs...)`: 
 
 ```jldoctest mylabel; filter = r"begin\n.*\n.*\nend"
 julia> funs = [identity, sqrt];
@@ -304,8 +304,8 @@ julia> @cast applied[i,j] := funs[i](V[j])
 
 julia> @pretty @cast applied[i,j] := funs[i](V[j])
 begin
-    local pelican = orient(V, (*, :))
-    applied = @__dot__(apply(funs, pelican))
+    local pelican = transmute(V, (nothing, 1))
+    applied = @__dot__(_apply(funs, pelican))
 end
 ```
 
@@ -341,6 +341,5 @@ julia> D2 = @cast _[i,i] := V[i]
 
 All indices appearing on the left must also appear on the right. 
 There is no implicit sum over repeated indices on different tensors.
-To sum over things, you need `@reduce` or `@matmul`. 
-
+To sum over things, you need `@reduce` or `@matmul`, described on the next page.
 

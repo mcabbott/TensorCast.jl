@@ -74,7 +74,7 @@ end
 
     A = collect(reshape(1:16,4,4))
 
-    @cast M[i,i] := A[i,i]  nolazy
+    @cast M[i,i] := A[i,i]  lazy=false
     @test M isa Matrix
     @test M[3,3] == A[3,3]
     @test M[1,4] == 0

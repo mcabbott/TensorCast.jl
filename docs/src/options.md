@@ -23,27 +23,26 @@ Adding these to the example above:
 ## Ways of slicing
 
 The default way of slicing creates an array of views, 
-but if you use `|=` instead then you get copies: 
+but if you use `|=`, or the option `lazy=false`, then instead then you get copies: 
 
 ```julia
 M = rand(1:99, 3,4)
 
-@cast S[k][i] := M[i,k]             # collect(eachcol(M)) ≈ [ view(M,:,k) for k=1:4 ]
-@cast S[k][i] |= M[i,k]             # [ M[:,k] for k=1:4 ]; using |= demands a copy
+@cast S[k][i] := M[i,k]             # collect(eachcol(M)) ≈ [view(M,:,k) for k in 1:4]
+@cast S[k][i] |= M[i,k]             # [M[:,k] for k in 1:4]
+@cast S[k][i] := M[i,k] lazy=false  # the same
 ```
 
 The default way of un-slicing is `reduce(hcat, ...)`, which creates a new array. 
 But there are other options, controlled by keywords after the expression:
 
 ```julia
-@cast A[i,k] := S[k][i]             # A = reduce(hcat, B)
-@cast A[i,k] := S[k][i]  lazy       # A = LazyStack.stack(B)
+@cast A[i,k] := S[k][i] lazy=false  # A = reduce(hcat, B)
+@cast A[i,k] := S[k][i]             # A = LazyStack.stack(B)
 
 size(A) == (3, 4) # true
 ```
 
-The option `lazy` uses [LazyStack.jl](https://github.com/mcabbott/LazyStack.jl)
-to create a view of the original vectors. 
 
 Another kind of slices are provided by [StaticArrays.jl](https://github.com/JuliaArrays/StaticArrays.jl),
 in which a Vector of SVectors is just a different interpretation of the same memory as a Matrix. 
@@ -75,7 +74,7 @@ The package [Strided.jl](https://github.com/Jutho/Strided.jl) can apply multi-th
 broadcasting, and some other magic. You can enable it like this: 
 
 ```julia
-using Strided # and export JULIA_NUM_THREADS = 4 before starting
+using Strided  # and export JULIA_NUM_THREADS = 4 before starting
 A = randn(4000,4000); B = similar(A);
 
 @time @cast B[i,j] = (A[i,j] + A[j,i])/2;             # 0.12 seconds
@@ -116,24 +115,24 @@ However, right now this gives `3.7 s (250 M allocations, 9 GB)`, something is br
 To disable the default use of `PermutedDimsArray` etc, give the option `nolazy`: 
 
 ```julia
-@pretty @cast Z[y,x] := M[x,-y]  nolazy
+@pretty @cast Z[y,x] := M[x,-y]  lazy=false
 # Z = transmutedims(reverse(M, dims = 2), (2, 1))
 
 @pretty @cast Z[y,x] := M[x,-y] 
-# Z = transmute(Reverse{2}(M), (2, 1))
+# Z = transmute(Reverse{2}(M), (2, 1))  # transpose(@view M[:, end:-1:begin])
 ```
 
 This also controls how the extraction of diagonal elements
 and creation of diagonal matrices are done:
 
 ```julia
-@pretty @cast M[i,i] := A[i,i]  nolazy
+@pretty @cast M[i,i] := A[i,i]  lazy=false
 # M = diagm(0 => diag(A))
 
 @pretty @cast D[i,i] := A[i,i]
 # D = Diagonal(diagview(A))
 
-@pretty @cast M[i,i] = A[i,i]  nolazy  # into diagonal of existing matrix M
+@pretty @cast M[i,i] = A[i,i]  lazy=false  # into diagonal of existing matrix M
 # diagview(M) .= diag(A); M
 ```
 

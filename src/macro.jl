@@ -50,26 +50,22 @@ and the necessary re-orientations of axes are automatically inserted.
 The following actions are possible:
 * `=` writes into an existing array, overwriting its contents,
   while `+=` adds (precisely `Z .= Z .+ ...`) and `*=` multiplies.
-* `:=` creates a new array. This need not be named: `Z = @cast [i,j,k] := ...` is allowed.
-* `|=` insists that this is a copy, not a view.
+* `:=` creates a new array. To omit the name, write `Z = @cast _[i,j,k] := ...`.
+* `|=` insists that the result is an `Array` not a view, or some other lazy wapper.
+  (This may still be a `reshape` of the input, it does not guarantee a copy.)
 
-Re-ordering of indices `Z[k,j,i]`, and reversing of an axis `F[i,-j,k]`, are done lazily.
-Using `|=` (or broadcasting) will produce a simple `Array`.
-
-Options can be specified at the end (if several, separated by `,` i.e. `options::Tuple`)
-* `i in 1:3` supplies the range of index `i`. Variables and functions like `j in 1:Nj, k in 1:length(K)`
-  are allowed.
+Options specified at the end (if several, separated by `,`) are:
+* `i in 1:3` or `i ∈ 1:3` supplies the range of index `i`. Variables and functions like `j in 1:Nj, k in 1:length(K)`
+  are allowed, but `i = 1:3` is not.
+* `lazy=false` disables `PermutedDimsArray` in favour of `permutedims`, 
+  and `Diagonal` in favour of `diagm` for `Z[i,i]` output.
 * `assert` will turn on explicit dimension checks of the input.
   (Providing any ranges will also turn these on.)
-* `lazy` will instead make a `LazyStack.Stacked` container.
-* `nolazy` disables `PermutedDimsArray` and `Reverse` in favour of `permutedims` and `reverse`,
-  and `Diagonal` in favour of `diagm` for `Z[i,i]` output.
-* `strided` will place `@strided` in front of broadcasting operations,
-  and use `@strided permutedims(A, ...)` instead of `PermutedDimsArray(A, ...)`.
-  The preferred notation is now `@cast @strided Z[i] := ...`.
-  (You need `using Strided` to load that package.)
-* `avx` will place `@avx` in front of broadcasting operations,
-  which needs `using LoopVectorization` to load that package.
+
+Some modifications to broadcasting are possible, after loading the corresponding package:
+* `@cast @strided Z[i,j] := ...` uses Strided.jl's macro, for multi-threaded broadcasting.
+* `@cast @avx Z[i,j] := ...` uses LoopVectorization.jl's macro, for SIMD acceleration.
+* `@cast @lazy Z[i,j] := ...` uses LazyArrays.jl's BroadcastArray type, although there is no such macro.
 
 To create static slices `D[k]{i,j}` you should give all slice dimensions explicitly.
 You may write `D[k]{i:2,j:2}` to specify `Size(2,2)` slices.
@@ -115,11 +111,11 @@ This needs `using LazyArrays` to work.
 The options `@strided` and `@avx` will alter broadcasting operations, 
 and need `using Strided` or `using LoopVectorization` to work.
 
-    @reduce sum(i) A[i] * log(@reduce [i] := sum(j) A[j] * exp(B[i,j]))
+    @reduce sum(i) A[i] * log(@reduce _[i] := sum(j) A[j] * exp(B[i,j]))
     @cast W[i] := A[i] * exp(- @reduce S[i] = sum(j) exp(B[i,j]) lazy)
 
 Recursion like this is allowed, inside either `@cast` or `@reduce`.
-The intermediate array need not have a name, like `[i]`,
+The intermediate array need not have a name, like `_[i]`,
 unless writing into an existing array, like `S[i]` here.
 """
 macro reduce(exs...)
@@ -150,13 +146,13 @@ here glueing slices of `D` together, reshaping `E`, and taking a view of `F`.
 Once this is done, the right hand side must be of the form `(tensor) * (tensor) * ...`,
 which becomes `mul!(ZZ, (DD * EE), FF)`.
 
-    @reduce V[i] := sum(k) W[k] * exp(@matmul [i,k] := sum(j) A[i,j] * B[j,k])
+    @reduce V[i] := sum(k) W[k] * exp(@matmul _[i,k] := sum(j) A[i,j] * B[j,k])
 
 You should be able to use this within the other macros, as shown.
 """
 macro matmul(exs...)
     call = CallInfo(__module__, __source__, TensorCast.unparse("@matmul", exs...),
-        Set([:matmul, :nolazy]))
+        Set([:matmul, :lazy_0]))
     _macro(exs...; call=call)
 end
 
@@ -169,6 +165,8 @@ function _macro(exone, extwo=nothing, exthree=nothing; call::CallInfo=CallInfo()
 
     if Meta.isexpr(exone, :macrocall)
         # New style @cast @avx A[i] := B[i]
+        string(exone.args[1]) in ("@lazy", "@strided", "@avx", "@avxt") || throw(MacroError(
+            "the macro $(exone.args[1]) isn't one of the ones this understands", call))
         push!(call.flags, Symbol(string(exone.args[1])[2:end]), :premacro)
         return _macro(exone.args[3:end]...; call=call, dict=dict)
     end
@@ -268,7 +266,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     elseif any(isCorR, ijk)
         ijcolon = map(i -> isCorR(i) ? i : (:), ijk)
         if needview!(ijcolon)
-            A = :( view($A, $(ijcolon...)) ) # TODO nolazy?
+            A = :( view($A, $(ijcolon...)) ) # TODO lazy_0?
         else
             # A = :( TensorCast.rview($A, $(ijcolon...)) )
             perm = filter(!isnothing, ntuple(d -> ijcolon[d]==(:) ? d : nothing, length(ijcolon)))
@@ -281,13 +279,13 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     # Slicing operations A[i,:,j], and A[i,3:5] after the above treatment
     if any(iscolon, ijk)
         code = Tuple(map(i -> iscolon(i) ? (:) : (*), ijk))
-        if !static && (:collect in call.flags)
-            A = :( TensorCast.slicecopy($A, $code) ) # TODO change this to lazy / nolazy?
-        elseif !static
-            A = :( TensorCast.sliceview($A, $code) )
-        else
+        if static 
             sizeorcode = maybestaticsizes(ijk, code, call)
             A = :( TensorCast.static_slice($A, $sizeorcode) )
+        elseif (:lazy_0 in call.flags) || (:collect in call.flags)
+            A = :( TensorCast.slicecopy($A, $code) )
+        else
+            A = :( TensorCast.sliceview($A, $code) )
         end
         ijk = filter(!iscolon, ijk)
     elseif static
@@ -325,7 +323,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
 
     # Diagonal extraction A[i,i]
     if length(ijk)==2 && ijk[1]==ijk[2]
-        if (:nolazy in call.flags) && !LHS # don't do this for in-place output
+        if (:lazy_0 in call.flags) && !LHS # don't do this for in-place output
             A = :( TensorCast.diag($A) ) # LinearAlgebra really
         else
             A = :( TensorCast.diagview($A) )
@@ -348,7 +346,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     # Reversed A[-i,j] and shuffled A[i,~j]
     for i in reversed
         di = findfirst(isequal(i), flat)
-        if (:nolazy in call.flags) && !LHS
+        if (:lazy_0 in call.flags) && !LHS
             A = :( reverse($A, dims=$di) )
         else
             A = :( TensorCast.Reverse{$di}($A) )
@@ -356,7 +354,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     end
 
     if length(shuffled) > 0
-        if (:nolazy in call.flags) && !LHS
+        if (:lazy_0 in call.flags) && !LHS
             if length(flat) == 1
                 A = :( TensorCast.shuffle(A) )
             else # sadly shuffle(A, dims=...) doesn't exist!
@@ -426,7 +424,7 @@ function standardglue(ex, target, store::NamedTuple, call::CallInfo)
         B = maybepush(B, store, :preconst)
         ijcolon = map(i -> isconstant(i) ? i : (:), inner)
         if needview!(ijcolon)
-            ex = :( $Bsym =  @__dot__ view($B, $(ijcolon...)) ) # TODO nolazy here
+            ex = :( $Bsym =  @__dot__ view($B, $(ijcolon...)) ) # TODO lazy_0 here
         else
             # ex = :( $Bsym = @__dot__ TensorCast.rview($B, $(ijcolon...)) )
             perm = filter(!isnothing, ntuple(d -> ijcolon[d]==(:) ? d : nothing, length(ijcolon)))
@@ -448,12 +446,12 @@ function standardglue(ex, target, store::NamedTuple, call::CallInfo)
     if static
         AB = :( TensorCast.static_glue($B) )
         pop!(call.flags, :collected, :ok)
-    elseif :lazy in call.flags
-        AB = :( TensorCast.stack($B) )
-        pop!(call.flags, :collected, :ok)
-    else # TODO make this the default
+    elseif :lazy_0 in call.flags
         AB = :( TensorCast.stack_iter($B) ) # really from LazyStack
         push!(call.flags, :collected)
+    else # if :lazy in call.flags
+        AB = :( TensorCast.stack($B) )
+        pop!(call.flags, :collected, :ok)
     end
 
     return :( $AB[$(ijk...)] )
@@ -484,10 +482,8 @@ function targetcast(ex, target, store::NamedTuple, call::CallInfo)
         push!(call.flags, :collected)
     end
     if :strided in call.flags
-        :premacro in call.flags || @warn "postfix option strided is deprecated, please write @cast @strided A[i] := ..."
         ex = :( Strided.@strided @__dot__($ex) )
     elseif :avx in call.flags
-        :premacro in call.flags || @warn "postfix option avx is deprecated, please write @cast @avx A[i] := ..."
         ex = :( LoopVectorization.@avx @__dot__($ex) )
     else
         ex = :( @__dot__($ex) )
@@ -548,7 +544,7 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
     if !isempty(dims)
         perm = ntuple(d -> findfirst(isequal(d), dims), maximum(dims))
         if perm != ntuple(identity, maximum(dims))
-            if :nolazy in call.flags
+            if :lazy_0 in call.flags
                 A = :( TensorCast.transmutedims($A, $perm) )
                 push!(call.flags, :collected)
             else
@@ -1000,11 +996,24 @@ function optionparse(opt, store::NamedTuple, call::CallInfo)
             saveonesize(tensorprimetidy(i), :(TensorCast.onetolength($ax)), store)
         end
         push!(call.flags, :assert)
+    elseif @capture(opt, lazy = val_Number) && 0 <= val <= 2
+        push!(call.flags, Symbol(:lazy_, Int(val)))
     elseif @capture(opt, i_:s_)
         @warn "please replace index ranges like `i:3` with `i in 1:3` or `i ∈ 1:3`"
         saveonesize(tensorprimetidy(i), s, store)
         push!(call.flags, :assert)
-    elseif opt in (:assert, :lazy, :nolazy, :strided, :avx)
+    elseif opt in (:strided, :avx)
+        @warn "postfix option $opt is deprecated, please write @cast @$opt A[i] := ..."
+        push!(call.flags, opt)
+    elseif opt == :lazy
+        @warn "postfix option lazy is deprecated, please write " * 
+            "@lazy A[i] := ... for LazyArrays broadcasting, or " * 
+            "lazy=true to use for PermutedDimsArray etc. (the default)"
+        push!(call.flags, :lazy, :lazy_1)
+    elseif opt == :nolazy
+        @warn "option `nolazy` is deprecated, please write keyword style `lazy=false` to disable PermutedDimsArray etc."
+        push!(call.flags, :lazy_0)
+    elseif opt == :assert
         push!(call.flags, opt)
     elseif opt == :(!)
         @warn "please replace option ! with assert" call.string maxlog=1 _id=hash(call.string)
@@ -1472,7 +1481,7 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
 
     # Is the result Diagonal or friends? Doesn't allow Z[i,i,1] or Z[i,-i] but that's OK
     if length(parsed.outer)==2 && parsed.outer[1]==parsed.outer[2]
-        if :nolazy in call.flags
+        if :lazy_0 in call.flags
             ex = :( TensorCast.diagm(0 => $ex) )
         else
             ex = :( TensorCast.Diagonal($ex) )
@@ -1492,7 +1501,7 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
     Zsym = gensym(:reverse)
 
     # We can re-use exactly the same "standardise" function as for RHS terms:
-    pop!(call.flags, :nolazy, :ok) # ensure we use diagview(), Reverse{}, etc, not a copy
+    pop!(call.flags, :lazy_0, :ok) # ensure we use diagview(), Reverse{}, etc, not a copy
 
     if @capture(parsed.left, zed_[]) # special case Z[] = ... else allconst pulls it out
         zed isa Symbol || @capture(zed, ZZ_.field_) || error("wtf")

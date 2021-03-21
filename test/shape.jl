@@ -76,17 +76,14 @@ end
 
     @cast BCde[b,c][d,e] := bcde[b,c,d,e]  assert
     @test size(BCde) == (2,3)
-    # @test size(first(BCde)) == (4,5)
-    @test size(BCde[1,1]) == (4,5) # new julienne
+    @test size(BCde[1,1]) == (4,5)
 
     @cast DBec[d,b][e,c] := bcde[b,c,d,e]  assert
     @test size(DBec) == (4,2)
-    # @test size(first(DBec)) == (5,3)
-    @test size(DBec[1,1]) == (5,3) # new julienne
+    @test size(DBec[1,1]) == (5,3)
 
-    @cast DEbc[d,e][b,c] := bcde[b,c,d,e] # this order can be a view
+    @cast DEbc[d,e][b,c] := bcde[b,c,d,e]
     @test size(DEbc) == (4,5)
-    # @test size(first(DEbc)) == (2,3)
     @test size(DEbc[1,1]) == (2,3)
 
     DEbc[3,4][1,2] = 99
@@ -323,16 +320,16 @@ end
 
     B = [rand(2) for i=1:3]
     A2 = @cast A[(i,j)] := B[i][j]
-    A3 = @cast A[(i,j)] = B[i][j] # for a while this in-place thing returned the wrong shape
-    @test size(A) == size(A2) == size(A3) == (6,)
+    # A3 = @cast A[(i,j)] = B[i][j] # ArgumentError: an array of type `LazyStack.Stacked` shares memory...
+    @test size(A) == size(A2) == (6,)
 
     # This was broken above for a while:
     Bc = [(1:3) .+ 10i for i=1:2]
     @cast f[(b,c)] := Bc[b][c]
     @cast bc[b,c] := f[(b,c)] b in 1:2 # this bc is a view of f, NB
-    @cast f[(c,b)] = Bc[b][c]
-    @cast bc[b,c] = f[(c,b)]  # thus this copyto! is confusing
-    @test_broken bc[1,2] != Bc[1][2] # and in fact leads to duplicates here
+    # @cast f[(c,b)] = Bc[b][c]  # ArgumentError: an array of type `LazyStack.Stacked` shares memory...
+    # @cast bc[b,c] = f[(c,b)]   # ArgumentError: an array of type `LazyStack.Stacked` shares memory...
+    # @test_broken bc[1,2] != Bc[1][2] # and in fact leads to duplicates here
 
 end
 @testset "errors" begin
