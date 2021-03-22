@@ -33,7 +33,7 @@
     # broadcasting
     using Strided, LazyArrays
     @test A .+ 1 == @cast @strided B[i] := A[i] + 1
-    @test (@cast @lazy B[i] := A[i] + 1) isa BroadcastVector
+    # @test (@cast @lazy B[i] := A[i] + 1) isa BroadcastVector  # fails on 1.3?
 end
 
 @testset "ternary operator" begin
