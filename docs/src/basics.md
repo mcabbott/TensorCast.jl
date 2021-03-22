@@ -199,17 +199,6 @@ as `size(A)` is known:
 julia> @cast A[i,j] = 10 * collect(1:12)[i⊗j];
 ```
 
-Aside, note that providing explicit ranges will also turn on checks of the input, for example:
-
-```julia
-julia> @pretty @cast W[i] := V[i]^2  i ∈ 1:3 
-begin
-    @assert_ 3 == size(V, 1) "range of index i must agree"
-    @assert_ ndims(V) == 1 "expected a 1-tensor V[i]"
-    W = @__dot__(V ^ 2)
-end
-```
-
 ## Glue & reshape
 
 As a less trivial example of these combined indices, here is one way to combine a list of matrices

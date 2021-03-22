@@ -12,7 +12,7 @@
     @test A ==B == Z
 
     Z1 = zeros(3,2,1)
-    @cast Z1[j,i] = bc[i,j] .+ b[i] .* c[j]^3
+    @cast Z1[j,i,1] = bc[i,j] .+ b[i] .* c[j]^3
     @test A == Z1[:,:,1]
 
     A = @. exp(-bc + 2*c') / sqrt(b)
@@ -62,12 +62,12 @@ end
     bcde = rand(2,3,4,5);
     @reduce A[d⊗c,_,b] := sum(e) bcde[-b,c,d,e]
     B = similar(A);
-    @reduce B[d⊗c,_,b] = sum(e) bcde[-b,c,d,e] assert
+    @reduce B[d⊗c,_,b] = sum(e) bcde[-b,c,d,e]
     @test A ≈ B
 
     @reduce A[_,d⊗b,_] := sum(e,c) bcde[b,c,d,e]
     B = similar(A);
-    @reduce B[_,d⊗b,_] = sum(c,e) bcde[b,c,d,e] assert
+    @reduce B[_,d⊗b,_] = sum(c,e) bcde[b,c,d,e]
     @test A ≈ B
 
 end

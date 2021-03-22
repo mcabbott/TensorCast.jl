@@ -59,8 +59,6 @@ Options specified at the end (if several, separated by `,`) are:
   are allowed, but `i = 1:3` is not.
 * `lazy=false` disables `PermutedDimsArray` in favour of `permutedims`, 
   and `Diagonal` in favour of `diagm` for `Z[i,i]` output.
-* `assert` will turn on explicit dimension checks of the input.
-  (Providing any ranges will also turn these on.)
 
 Some modifications to broadcasting are possible, after loading the corresponding package:
 * `@cast @strided Z[i,j] := ...` uses Strided.jl's macro, for multi-threaded broadcasting.
@@ -369,6 +367,8 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
             end
         end
     end
+
+    A = maybepush(A, store, :standardise)
 
     # Construct final expression
     return :( $A[$(flat...)] )
@@ -875,7 +875,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
         if iscolon(i) || isrange(i)
             if i isa QuoteNode && A != :_
                 str = "fixed size in $A[" * join(ijk, ", ") * "]" # DimensionMismatch("fixed size in M[i, \$(QuoteNode(5))]: size(M, 2) == 5") TODO print more nicely
-                push!(store.mustassert, :( TensorCast.@assert_ size($A,$d)==$(i.value) $str) )
+                push!(store.mustassert, :( size($A,$d)==$(i.value) || throw(ArgumentError($str))) )
             end
             continue
         end
@@ -884,7 +884,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
             push!(outsize, 1)
             if i == :_ && A != :_ && save
                 str = "underscore in $A[" * join(ijk, ", ") * "]"
-                push!(store.mustassert, :( TensorCast.@assert_ size($A,$d)==1 $str) )
+                push!(store.mustassert, :( size($A,$d)==1 || throw(ArgumentError($str))) )
             end
             continue
         end
@@ -913,7 +913,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
     if save && length(ijk)>0 && A != :_
         N = length(ijk)
         str = "expected a $N-tensor $A[" * join(ijk, ", ") * "]"
-        push!(store.assert, :( TensorCast.@assert_ ndims($A)==$N $str) )
+        push!(store.assert, :( ndims($A)==$N || throw(ArgumentError($str))) )
     end
 
     if length(flat)==2 && flat[1]==flat[2] # allow for diag, A[i,i]
@@ -967,7 +967,7 @@ function innerparse(firstA, ijk, store::NamedTuple, call::CallInfo; save=false)
             push!(innerflat, j)
             saveonesize(j, s, store) # save=true on LHS only for in-place, save this anyway
         elseif isconstant(i)
-            i == :_ && save && push!(store.mustassert, :(TensorCast.@assert_ size($firstA, $d)==1 "inner underscore") )
+            i == :_ && save && push!(store.mustassert, :(size($firstA, $d)==1 || throw(ArgumentError("inner underscore"))) )
         else
             push!(innerflat, i)
         end
@@ -1013,11 +1013,8 @@ function optionparse(opt, store::NamedTuple, call::CallInfo)
     elseif opt == :nolazy
         @warn "option `nolazy` is deprecated, please write keyword style `lazy=false` to disable PermutedDimsArray etc."
         push!(call.flags, :lazy_0)
-    elseif opt == :assert
-        push!(call.flags, opt)
-    elseif opt == :(!)
-        @warn "please replace option ! with assert" call.string maxlog=1 _id=hash(call.string)
-        push!(call.flags, :assert)
+    elseif opt in (:assert, :(!))
+        @warn "option 'assert' is no longer needed, this is the default" call.string maxlog=1
     else
         throw(MacroError("don't understand option $opt", call))
     end
@@ -1038,7 +1035,7 @@ function saveonesize(ind, long, store::NamedTuple)
     else
         if isa(ind, Symbol)
             str = "range of index $ind must agree"
-            push!(store.assert, :(TensorCast.@assert_ $(store.dict[ind]) == $long $str) )
+            push!(store.assert, :( $(store.dict[ind]) == $long || throw(ArgumentError($str))) )
         end
     end
     ind
@@ -1046,10 +1043,10 @@ end
 
 function findsizes(store::NamedTuple, call::CallInfo)
     out = []
-    if :assert in call.flags
-        append!(out, store.assert)
-        empty!(store.assert)
-    end
+    # if :assert in call.flags
+    append!(out, store.assert)
+    empty!(store.assert)
+    # end
     if length(store.need) > 0
         sizes = sizeinfer(store, call)
         sz_list = map(szwrap, store.need)
@@ -1096,7 +1093,7 @@ function sizeinfer(store::NamedTuple, call::CallInfo)
                 d != nothing && (sizes[d] = rat)
 
                 str = "inferring range of $i from range of $(join(pair.first, " ⊗ "))"
-                push!(store.mustassert, :( TensorCast.@assert_ rem($num, $den)==0 $str) )
+                push!(store.mustassert, :( rem($num, $den)==0 || throw(ArgumentError($str))) )
             end
         end
     end
@@ -1216,7 +1213,7 @@ function containsindexing(ex::Expr)
     # MacroTools.postwalk(x -> @capture(x, A_[ijk__]) && (flag=true), ex)
     MacroTools.postwalk(ex) do @nospecialize x
         # @capture(x, A_[ijk__]) && !(all(isconstant, ijk)) && (flag=true)
-        if @capture(x, A_[ijk__])
+        if @capture(x, A_[ijk__]) || @capture(x, A_{ijk__})
             # @show x ijk # TODO this is a bit broken?  @pretty @cast Z[i,j] := W[i] * exp(X[1][i] - X[2][j])
             flag=true
         end
@@ -1349,21 +1346,6 @@ end
 increasing_or_zero(::Tuple{}, prev=0) = true
 
 #==================== Nice Errors ====================#
-
-"""
-    @assert_ cond str
-
-Like `@assert`, but prints both the given string and the condition.
-Throws a `DimensionMismatch` error if `cond` is false.
-"""
-macro assert_(ex, str)
-    msg = str * ": " * string(ex)
-    return esc(:($ex || throw(DimensionMismatch($msg))))
-end
-
-# m_error(str::String) = @error str
-# m_error(str::String, call::CallInfo) =
-#     @error str  input=call.str _module=call.mod  _line=call.src.line  _file=string(call.src.file)
 
 struct MacroError <: Exception
     msg::String
@@ -1507,7 +1489,7 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         zed isa Symbol || @capture(zed, ZZ_.field_) || error("wtf")
         newleft = parsed.left
         str = "expected a 0-tensor $zed[]"
-        push!(store.mustassert, :( TensorCast.@assert_ ndims($zed)==0 $str) )
+        push!(store.mustassert, :( ndims($zed)==0 || throw(ArgumentError($str))) )
     else
         newleft = standardise(parsed.left, store, call)
         @capture(newleft, zed_[ijk__]) || throw(MacroError("failed to parse LHS correctly, $(parsed.left) -> $newleft"))

@@ -6,7 +6,7 @@
     @cast C1[i][j] := M[i,j]
     @cast C2[i][j] |= M[i,j]
     @cast C3[i] := M[i,:]
-    @cast C4[i] |= M[i,:4] assert
+    @cast C4[i] |= M[i,:4]
 
     @test first(C1) isa SubArray
     @test first(C2) isa Array
@@ -27,7 +27,7 @@
 
     γ = 3
     @cast R6[j]{i:γ} |= M[i,j] # test both |= and γ
-    @cast R7[j] |= M{:γ,j} assert
+    @cast R7[j] |= M{:γ,j}
 
     @test R5 isa Base.ReinterpretArray
     @test R6 isa Array
@@ -356,13 +356,13 @@ end
 @testset "run-time errors" begin
 
     B = [ (scal=i, vect=[1,2,3,4]) for i=1:3 ]
-    @test_throws DimensionMismatch @cast A[j,i] := B[i].vect[j]  i in 1:99, j in 1:4 # wrong size
-    @test_throws DimensionMismatch @cast A[j,i] := B[i].vect[j]  i in 1:3, j in 1:99
+    @test_throws Exception @cast A[j,i] := B[i].vect[j]  i in 1:99, j in 1:4 # wrong size
+    @test_throws Exception @cast A[j,i] := B[i].vect[j]  i in 1:3, j in 1:99
 
     M = randn(3,4)
     fun(x) = (sum=sum(x), same=x, one=1)
-    @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:,j]).same[i]  i in 1:3, j in 1:99
-    @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:99,j]).same[i]  j in 1:4
-    # @test_throws DimensionMismatch  @cast M5[i,j] := fun(M[:,j]).same[i]  i in 1:99, j in 1:4 # TODO make this check canonical length?
+    @test_throws Exception  @cast M5[i,j] := fun(M[:,j]).same[i]  i in 1:3, j in 1:99
+    @test_throws Exception  @cast M5[i,j] := fun(M[:99,j]).same[i]  j in 1:4
+    # @test_throws Exception  @cast M5[i,j] := fun(M[:,j]).same[i]  i in 1:99, j in 1:4 # TODO make this check canonical length?
 
 end
