@@ -2,15 +2,13 @@
 @testset "new macro notation" begin
     A = [i^2 for i in 1:12]
 
-    # @strided broadcasting
-    @test A .+ 1 == @cast @strided B[i] := A[i] + 1
-
     # index ranges
     @test reshape(A,3,4) == @cast C[i,j] := A[(i,j)]  i in 1:3
-    @test_logs min_level=Logging.Warn @reduce D[i] := sum(j:4) A[i⊗j]
+    @test_logs min_level=Logging.Warn @reduce D[i] := sum(j:4) A[i⊗j]  # no warning for this
 
     # underscores 
     @test A' == @cast _[_,i] := A[i]
+    @test (@cast _[_,i] := A[i]) isa Matrix  # transmute is reshape here
 
     # ... use in recursion, reads from the _ just written to:
     A = rand(4);
@@ -20,6 +18,22 @@
     @reduce inner[i] := sum(j) A[j] * exp(B[i,j])
     S = @reduce sum(i) A[i] * log(inner[i])
     @test S == R1 == R2
+
+    # lazier
+    Cs = [fill(i^2,7) for i in 1:12]
+    using LazyStack
+    @test (@cast _[i,o] := Cs[o][i]) isa LazyStack.Stacked
+    @test (@cast _[i,o] |= Cs[o][i]) isa Matrix  # collects afterwards
+    @test (@cast _[i,o] := Cs[o][i] lazy=false) isa Matrix  # uses stack_iter
+
+    using LinearAlgebra, TransmuteDims
+    @test (@cast _[o,i] := Cs[o][i]) isa Transpose{Int, <:LazyStack.Stacked}
+    @test (@cast _[o,_,i] := Cs[o][i]) isa TransmutedDimsArray
+
+    # broadcasting
+    using Strided, LazyArrays
+    @test A .+ 1 == @cast @strided B[i] := A[i] + 1
+    @test (@cast @lazy B[i] := A[i] + 1) isa BroadcastVector
 end
 
 @testset "ternary operator" begin
