@@ -3,7 +3,7 @@
 Install and set up:
 
 ```julia-repl
-(v1.1) pkg> add TensorCast
+(v1.5) pkg> add TensorCast
 ```
 
 ```jldoctest mylabel
@@ -32,7 +32,7 @@ julia> @cast A[j,i] := M[i,j] + 10 * V[i]
  107  208  309
  110  211  312
 
-julia> all(A[j,i] == M[i,j] + 10 * V[i] for i=1:3, j=1:4)
+julia> all(A[j,i] == M[i,j] + 10 * V[i] for i in 1:3, j in 1:4)
 true
 ```
 
@@ -69,7 +69,7 @@ julia> @cast S[j][i] := M[i,j]
  [7, 8, 9]   
  [10, 11, 12]
 
-julia> all(S[j][i] == M[i,j] for i=1:3, j=1:4)
+julia> all(S[j][i] == M[i,j] for i in 1:3, j in 1:4)
 true
 
 julia> @cast S2[j] := M[:,j]; 
@@ -169,7 +169,7 @@ julia> @cast K[1, (i,j)] := V[i] * W[j]  # identical!
 julia> K == kron(W, V)'
 true
 
-julia> all(K[i + 3(j-1)] == V[i] * W[j] for i=1:3, j=1:4)
+julia> all(K[i + 3(j-1)] == V[i] * W[j] for i in 1:3, j in 1:4)
 true
 
 julia> Base.kron(A::Array{T,3}, X::Array{T′,3}) where {T,T′} =    # extend kron to 3-tensors
