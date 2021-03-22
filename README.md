@@ -55,7 +55,7 @@ using Strided, LoopVectorization, LazyArrays
 ] add TensorCast
 ```
 
-The current version requires [Julia 1.3](https://julialang.org/downloads/) or later.
+The current version requires [Julia 1.4](https://julialang.org/downloads/) or later.
 There are a few pages of [documentation](https://mcabbott.github.io/TensorCast.jl/dev).
 
 ## Elsewhere

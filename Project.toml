@@ -4,7 +4,6 @@ authors = ["Michael Abbott"]
 version = "0.4.0"
 
 [deps]
-Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"
 LazyStack = "1fad7336-0346-5a1a-a56f-a06ba010965b"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
@@ -14,7 +13,6 @@ TransmuteDims = "24ddb15e-299a-5cc3-8414-dbddc482d9ca"
 ZygoteRules = "700de1a5-db45-46bc-99cf-38207098b444"
 
 [compat]
-Compat = "3"
 LazyArrays = "0.18, 0.19, 0.20, 0.21"
 LazyStack = "0.0.7, 0.0.8"
 MacroTools = "0.5"

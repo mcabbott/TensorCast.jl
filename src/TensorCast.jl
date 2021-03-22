@@ -16,19 +16,12 @@ using MacroTools, StaticArrays
 using TransmuteDims, LazyStack
 using LazyStack: stack_iter
 
-if VERSION < v"1.5" # not sure!
-    using Compat # takes about 0.5s
-end
-
-using TransmuteDims, LazyStack
-using LazyStack: stack_iter
-
 include("macro.jl")
 include("pretty.jl")
 
 module Fast # shield non-macro code from @optlevel 1
     using ..TensorCast: pretty
-    using LinearAlgebra, StaticArrays, Compat
+    using LinearAlgebra, StaticArrays
 
     include("slice.jl")
     export sliceview, slicecopy, copy_glue, glue!, iscodesorted, countcolons
