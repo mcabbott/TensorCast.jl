@@ -43,12 +43,6 @@ end
 using .Fast
 const mul! = Fast.mul!
 
-using Requires
-
-@init @require LazyArrays = "5078a376-72f3-5289-bfd5-ec5146d43c02" begin
-    include("lazy.jl")      # LazyCast # this costs about 3s in my test, 3.8s -> 7.7s
-end
-
 include("warm.jl") # saves 3s in my test
 
 end # module

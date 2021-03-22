@@ -488,21 +488,26 @@ function targetcast(ex, target, store::NamedTuple, call::CallInfo)
 
     # But for anything more complicated, we do:
     ex = MacroTools.prewalk(x -> readycast(x, target, store, call), ex)
+
     if :lazy in call.flags
-        ex = :( TensorCast.lazy($ex) )
+        ex = :( LazyArrays.BroadcastArray(@__dot__ LazyArrays.lazy($ex)) )
         pop!(call.flags, :collected, :ok)
-    else
-        push!(call.flags, :collected)
-    end
-    if :strided in call.flags
+        #=
+        Eventually it will be OK not to materialize the BroadcastArray before summing,
+        this PR does it for complete sum(): https://github.com/JuliaLang/julia/pull/31020
+        =#
+    elseif :strided in call.flags
         ex = :( Strided.@strided @__dot__($ex) )
+        push!(call.flags, :collected)
     elseif :avx in call.flags
         ex = :( LoopVectorization.@avx @__dot__($ex) )
+        push!(call.flags, :collected)
     else
         ex = :( @__dot__($ex) )
+        push!(call.flags, :collected)
     end
-    return ex
 
+    return ex
 end
 
 """
