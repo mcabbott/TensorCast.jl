@@ -108,11 +108,12 @@ V = rand(500); V3 = reshape(V,1,1,:);
 @time @reduce @lazy W[i] := sum(j,k) V[i]*V[j]*V[k];  # 0.025 s, 5 KB
 ```
 
-However, right now this gives `3.7 s (250 M allocations, 9 GB)`, something is broken!
+However, right now this gives `2.1 seconds (16 allocations: 4.656 KiB)`, 
+so it seems to be saving memory but not time. Something is broken!
 
 ## Less lazy
 
-To disable the default use of `PermutedDimsArray` etc, give the option `nolazy`: 
+To disable the default use of `PermutedDimsArray`-like wrappers, etc, give the option `lazy=false`: 
 
 ```julia
 @pretty @cast Z[y,x] := M[x,-y]  lazy=false
@@ -130,15 +131,11 @@ and creation of diagonal matrices are done:
 # M = diagm(0 => diag(A))
 
 @pretty @cast D[i,i] := A[i,i]
-# D = Diagonal(diagview(A))
+# D = Diagonal(diagview(A))  # Diagonal(view(A, diagind(A)))
 
 @pretty @cast M[i,i] = A[i,i]  lazy=false  # into diagonal of existing matrix M
 # diagview(M) .= diag(A); M
 ```
-
-Here `TensorCast.Reverse{1}(B)` creates a view with `reverse(axes(B,1))`, 
-and `TensorCast.diagview(A)` is just `view(A, diagind(A))`.
-`TransmuteDims.transmute(M)` is `transpose(M)` on a matrix of numbers.
 
 ## Gradients
 

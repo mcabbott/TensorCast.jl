@@ -158,9 +158,6 @@ Of course you may just write `A * B` yourself, but in general `@matmul` will han
 reshaping, transposing, fixed indices, etc. steps as `@reduce` does. 
 Once all of that is done, however, the result must be a product like `A * B` in which the indices
 being summed over appear on both tensors. 
-<!-- If there are more than two factors,
-then multiplication proceeds from the left, `(A * B) * C`. 
-But that has bugs! -->
 
 To use the more flexible `@reduce` in cases like this, 
 when creating the large intermediate tensor will be expensive,
