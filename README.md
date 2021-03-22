@@ -55,7 +55,7 @@ using Strided, LoopVectorization, LazyArrays
 ] add TensorCast
 ```
 
-Current version requires [Julia](https://julialang.org/downloads/) 1.3 or later.
+The current version requires [Julia 1.3](https://julialang.org/downloads/) or later.
 There are a few pages of [documentation](https://mcabbott.github.io/TensorCast.jl/dev).
 
 ## Elsewhere
@@ -99,4 +99,4 @@ while `@ein` & `@tensor` are closer to [`einsum`](https://numpy.org/doc/stable/r
 This was a holiday project to learn a bit of metaprogramming, originally `TensorSlice.jl`. 
 But it suffered a little scope creep. 
 
-From version 0.4 (currently `] add TensorCast#master`), it relies on two helper packages: [TransmuteDims.jl](https://github.com/mcabbott/TransmuteDims.jl) handles permutations & reshapes, and [LazyStack.jl](https://github.com/mcabbott/LazyStack.jl) handles slices.
+From version 0.4, it relies on two helper packages: [TransmuteDims.jl](https://github.com/mcabbott/TransmuteDims.jl) handles permutations & reshapes, and [LazyStack.jl](https://github.com/mcabbott/LazyStack.jl) handles slices.

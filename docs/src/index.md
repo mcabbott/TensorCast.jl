@@ -16,7 +16,7 @@ Version 0.4 has significant changes:
 - To return an array without naming it, write an underscore `@cast _[i] := ...` rather than omitting it entirely.
 - It uses [LazyStack.jl](https://github.com/mcabbott/LazyStack.jl) to combine handles slices, simplifying earlier code. This is lazier by default, write `@cast A[i,k] := log(B[k][i]) lazy=false` (with a new keyword option) to glue into an `Array` before broadcasting.
 - It uses [TransmuteDims.jl](https://github.com/mcabbott/TransmuteDims.jl) to handle all permutations & many reshapes. This is lazier by default -- the earlier code sometimes copied to avoid reshaping a `PermutedDimsArray`. This isn't always faster, and can be disabled by `lazy=false`.
-- It inserts some dimension checks by default, previously the option `assert` did this. (Not yet merged.)
+- It inserts some dimension checks by default, previously the option `assert` did this.
 
 ## Pages
 
