@@ -34,7 +34,7 @@ module Fast # shield non-macro code from @optlevel 1
     export sliceview, slicecopy, copy_glue, glue!, iscodesorted, countcolons
 
     include("view.jl")
-    export diagview, mul!, rview, star, onetolength, Reverse, Shuffle
+    export diagview, mul!, rview, star, onetolength
 
     include("static.jl")
     export static_slice, static_glue
@@ -49,6 +49,6 @@ using Requires
     include("lazy.jl")      # LazyCast # this costs about 3s in my test, 3.8s -> 7.7s
 end
 
-include("warm.jl") # saves 3s in my test
+# include("warm.jl") # saves 3s in my test
 
 end # module

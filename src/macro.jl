@@ -342,33 +342,46 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     end
 
     # Reversed A[-i,j] and shuffled A[i,~j]
-    for i in reversed
-        di = findfirst(isequal(i), flat)
+    if !isempty(reversed)
+        A = maybepush(A, store, :prereverse)
+        rind = map(1:length(flat)) do d
+            flat[d] in reversed ? :($reverse($axes($A,$d))) : (:)
+        end
+        rdims = Tuple(indexin(reversed, flat))
         if (:lazy_0 in call.flags) && !LHS
-            A = :( reverse($A, dims=$di) )
+            if length(rdims) == 1
+                A = :( reverse($A, dims=$(rdims[1])) )
+            elseif VERSION >= v"1.6-"
+                A = :( reverse($A, dims=$rdims) )
+            else
+                A = :( A[$(rind...)] )
+            end
+            push!(call.flags, :collected)
         else
-            A = :( TensorCast.Reverse{$di}($A) )
+            A = :( @view($A[$(rind...)]) )
+            pop!(call.flags, :collected, :ok)
         end
     end
-
-    if length(shuffled) > 0
+  
+    if !isempty(shuffled)
+        A = maybepush(A, store, :preshuffle)
+        sind = map(1:length(flat)) do d
+            flat[d] in shuffled ? :($shuffle($axes($A,$d))) : (:)
+        end
         if (:lazy_0 in call.flags) && !LHS
             if length(flat) == 1
-                A = :( TensorCast.shuffle(A) )
-            else # sadly shuffle(A, dims=...) doesn't exist!
-                code = Tuple(Any[ i in shuffled ? (*) : (:) for i in flat ])
-                A = :( TensorCast.red_glue(TensorCast.shuffle(
-                    TensorCast.slicecopy($A, $code)),$code) )
+                A = :( $shuffle($A) )
+            else
+                A = :( A[$(sind...)] )
             end
+            push!(call.flags, :collected)
         else
-            for i in shuffled
-                di = findfirst(isequal(i), flat)
-                A = :( TensorCast.Shuffle{$di}($A) )
-            end
+            A = :( @view($A[$(sind...)]) )
+            pop!(call.flags, :collected, :ok)
         end
     end
 
-    A = maybepush(A, store, :standardise)
+    A = maybepush(A, store, :standardise)  # else A may be seen to contain indexing, causing confusion
 
     # Construct final expression
     return :( $A[$(flat...)] )
