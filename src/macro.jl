@@ -368,6 +368,8 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
         end
     end
 
+    A = maybepush(A, store, :standardise)
+
     # Construct final expression
     return :( $A[$(flat...)] )
 end
@@ -1211,7 +1213,7 @@ function containsindexing(ex::Expr)
     # MacroTools.postwalk(x -> @capture(x, A_[ijk__]) && (flag=true), ex)
     MacroTools.postwalk(ex) do @nospecialize x
         # @capture(x, A_[ijk__]) && !(all(isconstant, ijk)) && (flag=true)
-        if @capture(x, A_[ijk__])
+        if @capture(x, A_[ijk__]) || @capture(x, A_{ijk__})
             # @show x ijk # TODO this is a bit broken?  @pretty @cast Z[i,j] := W[i] * exp(X[1][i] - X[2][j])
             flag=true
         end
