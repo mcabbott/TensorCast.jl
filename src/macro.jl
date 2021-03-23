@@ -36,8 +36,6 @@ Understands the following things:
 * `M[i,i]` means `diag(M)[i]`, but only for matrices: `N[i,i,k]` is an error.
 * `P[i,i']` is normalised to `P[i,i′]` with unicode \\prime.
 * `R[i,-j,k]` means roughly `reverse(R, dims=2)`, and `Q[i,~j,k]` similar with `shuffle`.
-* `S[i,T[j,k]]` is the 3-tensor `S[:,T]` created by indexing a matrix `S` with `T`,
-  where these integers are `all(1 .<= T .<= size(S,2))`.
 
 The left and right hand sides must have all the same indices,
 and the only repeated index allowed is `M[i,i]`, which is a diagonal not a trace.
@@ -254,15 +252,15 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
         A = Asym
     end
 
-    # Constant indices A[i,3], A[i,_], A[i,$c], and also A[i,3:5]
+    # Constant indices A[i,3], A[i,_], A[i,$c]
     if isempty(ijk)
         # empty indices do not count as constant - this fixes some issues with 0d CuArrays
-    elseif all(isCorR, ijk)
+    elseif all(isconstant, ijk)
         needview!(ijk)                                         # replace _ with 1, if any
         Asym = maybepush(:( $A[$(ijk...)] ), store, :allconst) # protect from later processing
         return Asym                                            # and nothing more to do here
-    elseif any(isCorR, ijk)
-        ijcolon = map(i -> isCorR(i) ? i : (:), ijk)
+    elseif any(isconstant, ijk)
+        ijcolon = map(i -> isconstant(i) ? i : (:), ijk)
         if needview!(ijcolon)
             A = :( view($A, $(ijcolon...)) ) # TODO lazy_0?
         else
@@ -271,7 +269,6 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
             A = :( TensorCast.transmute($A, $perm) )
         end
         ijk = filter(!isconstant, ijk)              # remove actual constants from list,
-        ijk = map(i -> isrange(i) ? :(:) : i, ijk)  # but for A[i,3:5] replace with : symbol, for slicing
     end
 
     # Slicing operations A[i,:,j], and A[i,3:5] after the above treatment
@@ -292,31 +289,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
 
     # Nested indices A[i,j,B[k,l,m],n] or worse A[i,B[j,k],C[i,j]]
     if any(i -> @capture(i, B_[klm__]), ijk)
-        newijk, beecolon = [], [] # for simple case
-        # listB, listijk = [], []
-        for i in ijk
-            if @capture(i, B_[klm__])
-                append!(newijk, klm)
-                push!(beecolon, B)
-                # push!(listijk, klm)
-                # push!(listB, B)
-            else
-                push!(newijk, i)
-                push!(beecolon, (:))
-            end
-        end
-        if allunique(newijk) # then we are in simple case
-            ijk = newijk
-            A = :( view($A, $(beecolon...)) )
-        else
-            throw(MacroError("can't handle this indexing yet, sorry", call))
-            # LHS && error("can't do this indexing on LHS sorry")
-            # A = maybepush(A, store, :preget)
-            # target = guesstarget(??)
-            # Bs = [ targetcast(B, target, store, call) for B in listB ]
-            # Aex = getindex.(Ref(A), i)
-            # A = maybepush(Aex, store, :getindex)
-        end
+        throw(MacroError("indexing one array by another is not supported, sorry", call))
     end
 
     # Diagonal extraction A[i,i]
@@ -890,7 +863,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
 
     for (d,i) in enumerate(ijk)
 
-        if iscolon(i) || isrange(i)
+        if iscolon(i)
             if i isa QuoteNode && A != :_
                 str = "fixed size in $A[" * join(ijk, ", ") * "]" # DimensionMismatch("fixed size in M[i, \$(QuoteNode(5))]: size(M, 2) == 5") TODO print more nicely
                 push!(store.mustassert, :( size($A,$d)==$(i.value) || throw(ArgumentError($str))) )
@@ -977,7 +950,6 @@ function innerparse(firstA, ijk, store::NamedTuple, call::CallInfo; save=false)
     innerflat = []
     for (d,i) in enumerate(ijk)
         iscolon(i) && throw(MacroError("can't have a colon in inner index!", call))
-        isrange(i) && @capture(i, alpha_Int:omega_)  && throw(MacroError("can't have a range in inner index!", call)) # this is an imperfect check, must not be triggered by @cast R2[j]{i:3} := M[i,j]  which is another kind of range!
         istensor(i) && throw(MacroError("can't tensor product inner indices", call))
         (@capture(i, -j_) || @capture(i, ~j_)) && throw(MacroError("can't reverse or shuffle along inner indices", call))
 
@@ -1204,11 +1176,6 @@ isindexing(ex::Expr) = @capture(x, A_[ijk__])
 
 isCorI(i) = isconstant(i) || isindexing(ii)
 
-isrange(ex::Expr) = @capture(ex, alpha_:omega_) # this may be a terrible idea
-isrange(i) = false
-
-isCorR(i) = isconstant(i) || isrange(i) # ranges are treated a bit like constants!
-
 istensor(n::Int) = false
 istensor(s::Symbol) = false
 function istensor(ex::Expr)
@@ -1285,8 +1252,8 @@ function needview!(ij::Vector)
         elseif ij[k] isa Expr && ij[k].head == :($)
             ij[k] = ij[k].args[1]
             out = true
-        elseif ij[k] isa Expr && @capture(ij[k], alpha_:omega_) # i.e. isrange(ij[k])
-            out = true
+        # elseif ij[k] isa Expr && @capture(ij[k], alpha_:omega_) # i.e. isrange(ij[k])
+        #     out = true
         else
             error("this should never happen! needview! got ", ij[k])
         end
@@ -1412,7 +1379,6 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
     isempty(parsed.reversed) || throw(MacroError("can't reverse along indices on LHS right now", call))
     isempty(parsed.shuffled) || throw(MacroError("can't shuffle along on LHS right now", call))
     any(iscolon, parsed.outer) && throw(MacroError("can't have colons on the LHS right now", call))
-    any(isrange, parsed.outer) && throw(MacroError("can't have ranges on the LHS right now", call))
 
     # Is there a reduction?
     if :reduce in call.flags
