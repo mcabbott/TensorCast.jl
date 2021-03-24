@@ -3,17 +3,14 @@ using TensorCast
 
 using Test
 using LinearAlgebra
-using StaticArrays
 using Logging
 
+using StaticArrays
 using OffsetArrays
 using Einsum
 using Strided
 using LazyArrays
-using Compat
-if VERSION >= v"1.1"
-    using LoopVectorization
-end
+using LoopVectorization
 
 @testset "ex-@shape" begin include("shape.jl") end
 @testset "@reduce" begin include("reduce.jl")  end
