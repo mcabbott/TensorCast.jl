@@ -186,8 +186,8 @@ function _macro(exone, extwo=nothing, exthree=nothing; call::CallInfo=CallInfo()
     # First pass over RHS just to read sizes, prewalk sees A[i][j] before A[i]
     MacroTools.prewalk(x -> rightsizes(x, store, call), parsed.right)
 
-    # To look for recursion, we need another prewalk:
-    right2 = MacroTools.prewalk(x -> recursemacro(x, store, call), parsed.right)
+    # To look for recursion, we need another prewalk. To find naked indices, this one stops early:
+    right2 = recursemacro(parsed.right, canon, store, call)
 
     # Third pass to standardise & then glue, postwalk sees A[i] before A[i][j]
     right3 = MacroTools.postwalk(x -> standardglue(x, canon, store, call), right2)
@@ -630,10 +630,9 @@ pushing calculation steps into store.
 
 Also a convenient place to tidy all indices, including e.g. `fun(M[:,j],N[j]).same[i']`.
 """
-function recursemacro(ex, store::NamedTuple, call::CallInfo)
-    @nospecialize ex
+function recursemacro(ex::Expr, canon, store::NamedTuple, call::CallInfo)
 
-    # Actually look for recursion
+    # The original purpose was to look for recursion, meaning @reduce within @cast etc:
     if @capture(ex, @reduce(subex__) )
         subcall = CallInfo(call.mod, call.src,
             TensorCast.unparse("innder @reduce", subex...), Set([:reduce, :recurse]))
@@ -658,12 +657,40 @@ function recursemacro(ex, store::NamedTuple, call::CallInfo)
 
     # Tidy up indices, A[i,j][k] will be hit on different rounds...
     if @capture(ex, A_[ijk__])
+        if !(A isa Symbol)  # this check allows some tests which have c[c] etc.
+            A = recursemacro(A, canon, store, call)
+        end
         return :( $A[$(tensorprimetidy(ijk)...)] )
     elseif @capture(ex, A_{ijk__})
+        if !(A isa Symbol)
+            A = recursemacro(A, canon, store, call)
+        end
         return :( $A{$(tensorprimetidy(ijk)...)} )
+
+    # Walk inwards: not handled by prewalk, as we do NOT want to walk inside indexing
+    elseif Meta.isexpr(ex, :$)
+        return only(ex.args)
+    elseif ex isa Expr && ex.head in [:call, Symbol("'")]
+        return Expr(ex.head, map(x -> recursemacro(x, canon, store, call), ex.args)...)
+    elseif ex isa Expr
+        @warn "not a call, what is it?:" ex
+        return Expr(ex.head, map(x -> recursemacro(x, canon, store, call), ex.args)...)
     else
         return ex
     end
+end
+
+function recursemacro(i, canon, store::NamedTuple, call::CallInfo)
+    @nospecialize i
+
+    i in canon || return i
+
+    # For naked indices, replace i with axes(A,1)[i] etc:
+    push!(store.need, i)
+    sz = szwrap(i)
+    axname = gensym(:axis)
+    push!(store.main, :( local $axname = Base.OneTo($sz) ))
+    return :( $axname[$i] )
 end
 
 """

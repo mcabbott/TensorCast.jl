@@ -49,3 +49,16 @@ end
     @test CNT[] == 12
     @test size(zs) == (3, 4)
 end
+
+@testset "naked indices" begin
+    @cast A[i,j] := i+10j  (i in 1:3, j in 1:4)  # explicit size
+    @test A == (1:3) .+ (10:10:40)'
+
+    j = 99
+    @cast A[i,j] = div(i, j)  # inferred from LHS
+    @test A[3,1] == 3
+
+    @reduce B[i] := sum(j) A[i,j] + i + $j  # interpolate j
+    @test B[3] > 400
+end
+

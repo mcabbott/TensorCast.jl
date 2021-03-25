@@ -236,6 +236,42 @@ julia> colwise == Int.(reduce(hcat, vec.(list)))
 true
 ```
 
+## Index values
+
+Mostly the indices appearing in `@cast` expressions are just notation, to indicate what permutation / reshape is required. 
+But if an index appears outside of square brackets, this is understood as a value, implemented by broadcasting over a range (appropriately permuted):
+
+```jldoctest
+julia> @cast rat[i,j] := 0 * M[i,j] + i // j
+3×4 Array{Rational{Int64},2}:
+ 1//1  1//2  1//3  1//4
+ 2//1  1//1  2//3  1//2
+ 3//1  3//2  1//1  3//4
+
+julia> rat == @cast _[i,j] := axes(M,1)[i] // axes(M,2)[j]
+true
+
+julia> rat == axes(M,1) .// transpose(axes(M,2))
+true
+
+julia> @cast _[r,c] := r + 10c  (r in 1:2, c in 1:7)
+2×7 Array{Int64,2}:
+ 11  21  31  41  51  61  71
+ 12  22  32  42  52  62  72
+```
+
+Writing `$i` will interpolate the variable `i`, distinct from the index `i`:
+
+```jldoctest
+julia> i, k = 10, 100;
+
+julia> @cast ones(3)[i] = i + $i + k
+3-element Vector{Float64}:
+ 111.0
+ 112.0
+ 113.0
+```
+
 ## Reverse & shuffle
 
 A minus in front of an index will reverse that direction, and a tilde will shuffle it. 
@@ -248,6 +284,9 @@ julia> @cast M2[i,j] := M[i,-j]
  11  8  5  2
  12  9  6  3
 
+julia> all(M2[i,j] == M[i, end+begin-j] for i in 1:3, j in 1:4)
+true
+
 julia> using Random; Random.seed!(42); 
 
 julia> @cast M3[i,j] |= M[i,~j]
@@ -256,6 +295,9 @@ julia> @cast M3[i,j] |= M[i,~j]
  8  5  2  11
  9  6  3  12
 ```
+
+Note that the minus is a slight deviation from the rule that left equals right for all indices,
+it should really be `M[i, end+1-j]`.
 
 ## Primes `'`
 
