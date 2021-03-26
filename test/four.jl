@@ -81,6 +81,16 @@ end
     @test E ≈ sum((1:2) ./ (1:4)')
 end
 
+@testset "offset handling" begin
+    using OffsetArrays
+    @cast A[i,j] := i+10j  (i in 0:1, j in 7:15)
+    @test axes(A) == (0:1, 7:15)
+    @test A[1,7] == 71
+
+    @cast B[(i,k),j] := A[i,(j,k)]  k in 1:3
+    @test axes(B) === (Base.OneTo(6), Base.OneTo(3))
+end
+
 @testset "tuples" begin
     x = rand(3, 5)
     @cast vi[j,k] := findmax(x[:, k])[j]

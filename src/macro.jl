@@ -691,9 +691,9 @@ function recursemacro(i, canon, store::NamedTuple, call::CallInfo)
 
     # For naked indices, replace i with roughly axes(A,1)[i] etc:
     push!(store.need, i)
-    sz = szwrap(i)
+    ax = axwrap(i)
     axname = gensym(:axis)
-    push!(store.main, :( local $axname = Base.OneTo($sz) ))
+    push!(store.main, :( local $axname = $ax ))
     return :( $axname[$i] )
 end
 
@@ -848,7 +848,7 @@ function reduceparse(ex1, ex2, store::NamedTuple, call::CallInfo)
     # Then parse redlist, decoding ranges like sum(i:10,j) which specify sizes
     reduced = []
     for item in tensorprimetidy(redlist) # normalise θ'
-        i = @capture(item, j_:s_) ? saveonesize(j, s, store) : item
+        i = @capture(item, j_:s_) ? saveonesize(j, :(Base.OneTo($s)), store) : item
         push!(reduced, i)
     end
     checknorepeats(reduced, call, " in the reduction") # catches sum(i,i) B[i,j,k]
@@ -918,7 +918,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
             stripminustilde!(ii, reversed, shuffled)
             append!(flat, ii)
             push!(outaxes, axwrap(ii))
-            save && A != :_ && saveonesize(ii, :(size($A, $d)), store)
+            save && A != :_ && saveonesize(ii, :(axes($A, $d)), store)
 
         elseif @capture(i, B_[klm__])
             innerparse(B, klm, store, call) # called just for error on tensor/colon/constant
@@ -928,7 +928,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
         elseif i isa Symbol
             push!(flat, i)
             push!(outaxes, axwrap(i))
-            save && A != :_ && saveonesize(i, :(size($A, $d)), store)
+            save && A != :_ && saveonesize(i, :(axes($A, $d)), store)
         else
             throw(MacroError("don't understand index $i", call))
         end
@@ -988,13 +988,13 @@ function innerparse(firstA, ijk, store::NamedTuple, call::CallInfo; save=false)
 
         if @capture(i, j_:s_)
             push!(innerflat, j)
-            saveonesize(j, s, store) # save=true on LHS only for in-place, save this anyway
+            saveonesize(j, :(Base.OneTo($s)), store) # save=true on LHS only for in-place, save this anyway
         elseif isconstant(i)
             i == :_ && save && push!(store.mustassert, :(size($firstA, $d)==1 || throw(ArgumentError("inner underscore"))) )
         else
             push!(innerflat, i)
         end
-        save && saveonesize(i, :(size($firstA, $d)), store)
+        save && saveonesize(i, :(axes($firstA, $d)), store)
     end
 
     checknorepeats(innerflat, call)
@@ -1012,18 +1012,29 @@ function optionparse(opt, store::NamedTuple, call::CallInfo)
 
     if @capture(opt, i_ in ax_) || @capture(opt, i_ ∈ ax_)
         if @capture(ax, 1:s_)
-            saveonesize(tensorprimetidy(i), s, store)
+            saveonesize(tensorprimetidy(i), :(Base.OneTo($s)), store)
+        elseif ax isa Number
+            @warn "did you mean `$i in 1:$ax`, not `$i in $ax`?"
+            saveonesize(tensorprimetidy(i), :(Base.OneTo($ax)), store)
         else
-            ax isa Number && @warn "did you mean `$i in $ax`, not `$i in 1:$ax`?"
-            # ax1 = maybepush(ax, store, :axis) # this pushes to main, too late!
-            saveonesize(tensorprimetidy(i), :(TensorCast.onetolength($ax)), store)
+            ax1 = maybepushtop(ax, store, :axis)
+            push!(store.top, :($ax1 isa AbstractUnitRange || throw(ArgumentError("index ranges must have step 1"))))
+            if isdefined(call.mod, :OffsetArrays)
+                ax2, off = gensym(:axis), gensym(:offset)
+                push!(store.top, :(local $off = first($ax1)-1))
+                push!(store.top, :(local $ax2 = $ax1 isa Base.OneTo ? $ax1 : OffsetArrays.IdOffsetRange($ax1 .- $off, $off)))
+                saveonesize(tensorprimetidy(i), ax2, store)
+            else
+                push!(store.top, :(first($ax1)==1 || throw(ArgumentError("you must load OffsetArrays to allow index ranges not starting at 1"))))
+                saveonesize(tensorprimetidy(i), :(Base.OneTo($ax1)), store)
+            end
         end
         push!(call.flags, :assert)
     elseif @capture(opt, lazy = val_Number) && 0 <= val <= 2
         push!(call.flags, Symbol(:lazy_, Int(val)))
     elseif @capture(opt, i_:s_)
         @warn "please replace index ranges like `i:3` with `i in 1:3` or `i ∈ 1:3`" call.string maxlog=3 
-        saveonesize(tensorprimetidy(i), s, store)
+        saveonesize(tensorprimetidy(i), :(Base.OneTo($s)), store)
         push!(call.flags, :assert)
     elseif opt in (:strided, :avx)
         @warn "postfix option $opt is deprecated, please write @cast @$opt A[i] := ..." call.string maxlog=3 
@@ -1046,19 +1057,19 @@ end
 #==================== Smaller Helper Functions ====================#
 
 """
-    saveonesize(:i, size(A,3), store) -> :i
+    saveonesize(:i, axes(A,3), store) -> :i
 
 Saves sizes for indices `:i` or products like  `[:i,:j]` to `store`.
 It it already has a size for this single index,
 then save an assertion that new size is equal to old.
 """
-function saveonesize(ind, long, store::NamedTuple)
+function saveonesize(ind, ax, store::NamedTuple)
     if !haskey(store.dict, ind)
         store.dict[ind] = long
     elseif store.dict[ind] != long  # no need to save identical expressions
         if isa(ind, Symbol)
             str = "range of index $ind must agree"
-            push!(store.assert, :( $(store.dict[ind]) == $long || throw(ArgumentError($str))) )
+            push!(store.assert, :( $(store.dict[ind]) == $ax || throw(ArgumentError($str))) )
         end
     end
     ind
@@ -1096,21 +1107,21 @@ function sizeinfer(store::NamedTuple, call::CallInfo)
             known = [ haskey(store.dict, j) for j in pair.first ]
 
             if sum(.!known) == 1 # bingo! now work out its size:
-                num = pair.second
+                num = :(length($(pair.second)))
+
                 denfacts = [ store.dict[i] for i in pair.first[known] ]
                 if length(denfacts) > 1
-                    den = :( *($(denfacts...)) )
+                    den = :( prod(length, ($(denfacts...),)) )
                 else
-                    den = :( $(denfacts[1]) )
+                    den = :( length($(denfacts[1])) )
                 end
-                rat = :( $num ÷ $den )
+                rat = :( Base.OneTo(div($num, $den)) )
 
                 i = pair.first[.!known][1]
-
                 d = findfirst(isequal(i), store.need)
                 d != nothing && (sizes[d] = rat)
 
-                str = "inferring range of $i from range of $(join(pair.first, " ⊗ "))"
+                str = "expected integer multiples, when calculating range of $i from range of $(join(pair.first, " ⊗ "))"
                 push!(store.mustassert, :( rem($num, $den)==0 || throw(ArgumentError($str))) )
             end
         end
@@ -1151,7 +1162,8 @@ function maybestaticsizes(ijk::Vector, code::Tuple, store::NamedTuple, call::Cal
     staticsize = []
     for d=1:countcolons(code)
         if haskey(store.dict, ijk[d])
-            push!(staticsize, store.dict[ijk[d]])
+            ax = store.dict[ijk[d]]
+            push!(staticsize, :(length($ax)))
         else
             return code
         end
@@ -1171,6 +1183,13 @@ function maybepush(ex::Expr, store::NamedTuple, name::Symbol=:A)
     end
     Asym = gensym(name)
     push!(store.main, :( local $Asym = $ex ) )
+    return Asym
+end
+
+maybepushtop(s::Symbol, any...) = s
+function maybepushtop(ex::Expr, store::NamedTuple, name::Symbol=:top)
+    Asym = gensym(name)
+    push!(store.top, :( local $Asym = $ex ) )
     return Asym
 end
 
