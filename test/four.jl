@@ -48,6 +48,14 @@ end
     @cast zs[i,j] := iseven(xs[i⊗j]+1) ? add(ys[j⊗i] / 2) : ((1:3)[i] + 100)
     @test CNT[] == 12
     @test size(zs) == (3, 4)
+
+    rs = randn(10,10)
+    @reduce ps[i,_] := sum(j) if rs[i,j] > 0
+        sqrt(rs[i,j])
+    else
+        0 * cbrt(rs[i,j])
+    end
+    @test ps ≈ sum(x -> x>0 ? sqrt(x) : 0.0, rs, dims=2)
 end
 
 @testset "naked indices" begin
@@ -60,5 +68,16 @@ end
 
     @reduce B[i] := sum(j) A[i,j] + i + $j  # interpolate j
     @test B[3] > 400
+
+    @test [1, 4, 9] .- im == @cast _[i'] := i'^2 + im'  (i' in 1:3)  # primes
+
+    @cast C[i,j,k] := 0 * A[i,(j,k)] + j  (k in 1:2)  # used to infer sz_j = (:)
+    @test all(==(2), C[:,2,:])
 end
 
+@testset "tuples" begin
+    x = rand(3, 5)
+    @cast vi[j,k] := findmax(x[:, k])[j]
+    @test vi[1,1] == maximum(x[:,1])
+    @test vi[2,2] == argmax(x[:,2])
+end

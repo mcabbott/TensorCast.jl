@@ -243,7 +243,6 @@ end
     @test mat[1,2] != 99
 
 end
-@static if VERSION >= v"1.1"
 @testset "@avx" begin
 
     using LoopVectorization
@@ -254,7 +253,10 @@ end
     @test exp.(A') ≈ @cast @avx B[i,j] := exp(A[j,i])
     @test exp.(A.+1) ≈ @cast @avx B[i,j] := exp(A[i,j]+1)
 
-end
+    if isdefined(LoopVectorization, Symbol("@avxt"))  # LV version 0.12
+        @test exp.(A.+1) ≈ @cast @avxt B[i,j] := exp(A[i,j]+1)
+    end
+
 end
 @testset "OffsetArrays" begin
 

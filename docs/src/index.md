@@ -19,6 +19,10 @@ Version 0.4 has significant changes:
 - It uses [LazyStack.jl](https://github.com/mcabbott/LazyStack.jl) to combine handles slices, simplifying earlier code. This is lazier by default, write `@cast A[i,k] := log(B[k][i]) lazy=false` (with a new keyword option) to glue into an `Array` before broadcasting.
 - It uses [TransmuteDims.jl](https://github.com/mcabbott/TransmuteDims.jl) to handle all permutations & many reshapes. This is lazier by default -- the earlier code sometimes copied to avoid reshaping a `PermutedDimsArray`. This isn't always faster, though, and can be disabled by `lazy=false`.
 
+New features in 0.4:
+- Indices can appear ouside of indexing: `@cast A[i,j] = i+j` translates to `A .= axes(A,1) .+ axes(A,2)'`
+- The ternary operator `? :` can appear on the right, and will be broadcast correctly. 
+
 ## Pages
 
 1. Use of `@cast` for broadcasting, dealing with arrays of arrays, and generalising `mapslices`

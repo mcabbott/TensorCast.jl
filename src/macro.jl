@@ -625,10 +625,11 @@ end
 """
     recursemacro(@reduce sum(i) A[i,j]) -> G[j]
 
-Walked over RHS to look for `@reduce ...`, and replace with result,
+Walks itself over RHS to look for `@reduce ...`, and replace with result,
 pushing calculation steps into store.
 
 Also a convenient place to tidy all indices, including e.g. `fun(M[:,j],N[j]).same[i']`.
+And to handle naked indices, `i` => `axes(M,1)[i]` but not exactly like that.
 """
 function recursemacro(ex::Expr, canon, store::NamedTuple, call::CallInfo)
 
@@ -668,6 +669,8 @@ function recursemacro(ex::Expr, canon, store::NamedTuple, call::CallInfo)
         return :( $A{$(tensorprimetidy(ijk)...)} )
 
     # Walk inwards: not handled by prewalk, as we do NOT want to walk inside indexing
+    elseif isprimedindex(ex, canon)
+        return recursemacro(tensorprimetidy(ex), canon, store, call)
     elseif Meta.isexpr(ex, :$)
         return only(ex.args)
     elseif ex isa Expr && ex.head in [:call, Symbol("'")]
@@ -685,7 +688,7 @@ function recursemacro(i, canon, store::NamedTuple, call::CallInfo)
 
     i in canon || return i
 
-    # For naked indices, replace i with axes(A,1)[i] etc:
+    # For naked indices, replace i with roughly axes(A,1)[i] etc:
     push!(store.need, i)
     sz = szwrap(i)
     axname = gensym(:axis)
@@ -1074,7 +1077,6 @@ function findsizes(store::NamedTuple, call::CallInfo)
 end
 
 function sizeinfer(store::NamedTuple, call::CallInfo)
-    allowedcolons = :strided in call.flags ? 0 : 1
 
     sort!(unique!(store.need))
     sizes = Any[ (:) for i in store.need ]
@@ -1086,8 +1088,6 @@ function sizeinfer(store::NamedTuple, call::CallInfo)
             d != nothing && (sizes[d] = pair.second)
         end
     end
-
-    count(isequal(:), sizes) <= allowedcolons && return sizes
 
     # Second pass looks for tuples where exactly one entry has unknown length
     for pair in store.dict
@@ -1117,7 +1117,7 @@ function sizeinfer(store::NamedTuple, call::CallInfo)
 
     unknown = store.need[sizes .== (:)]
     str = join(unknown, ", ")
-    length(unknown) <= allowedcolons || throw(MacroError("unable to infer ranges for indices $str", call))
+    isempty(unknown) || throw(MacroError("unable to infer ranges for indices $str", call))
 
     return sizes
 end
@@ -1185,6 +1185,14 @@ function tensorprimetidy(ex)
         x
     end
 end
+
+function isprimedindex(ex::Expr, canon)
+    ex.head == Symbol("'") || return false
+    t = tensorprimetidy(ex)  # this may not be a symbol
+    return t in canon
+end
+isprimedindex(s::Symbol, canon) = s in canon
+isprimedindex(any, canon) = false
 
 szwrap(i::Symbol) = Symbol(:sz_,i)
 function szwrap(ijk::Vector)

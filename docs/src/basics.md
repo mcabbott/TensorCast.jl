@@ -248,13 +248,13 @@ julia> @cast rat[i,j] := 0 * M[i,j] + i // j
  2//1  1//1  2//3  1//2
  3//1  3//2  1//1  3//4
 
-julia> rat == @cast _[i,j] := axes(M,1)[i] // axes(M,2)[j]
+julia> rat == @cast _[i,j] := axes(M,1)[i] // axes(M,2)[j]  # more verbose @cast
 true
 
-julia> rat == axes(M,1) .// transpose(axes(M,2))
+julia> rat == axes(M,1) .// transpose(axes(M,2))  # what it aims to generate
 true
 
-julia> @cast _[r,c] := r + 10c  (r in 1:2, c in 1:7)
+julia> @cast _[r,c] := r + 10c  (r in 1:2, c in 1:7)  # no array for range inference
 2×7 Array{Int64,2}:
  11  21  31  41  51  61  71
  12  22  32  42  52  62  72

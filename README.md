@@ -6,8 +6,9 @@
 [![Build Status](https://github.com/mcabbott/TensorCast.jl/workflows/CI/badge.svg)](https://github.com/mcabbott/TensorCast.jl/actions?query=workflow%3ACI)
 
 This package lets you work with multi-dimensional arrays in index notation, 
-by defining a few macros. The first is `@cast`, which deals both with "casting" into 
-new shapes (including going to and from an array-of-arrays) and with broadcasting:
+by defining a few macros. 
+
+The first is `@cast`, which deals both with "casting" into new shapes (including going to and from an array-of-arrays) and with broadcasting:
 
 ```julia
 @cast A[row][col] := B[row, col]       # slice a matrix B into rows, also @cast A[r] := B[r,:]
@@ -15,6 +16,8 @@ new shapes (including going to and from an array-of-arrays) and with broadcastin
 @cast C[(i,j), (k,ℓ)] := D.x[i,j,k,ℓ]  # reshape a 4-tensor D.x to give a matrix
 
 @cast E[φ,γ] = F[φ]^2 * exp(G[γ])      # broadcast E .= F.^2 .* exp.(G') into existing E
+
+@cast _[i] := isodd(i) ? log(i) : V[i] # broadcast a function of the index values
 
 @cast T[x,y,n] := outer(M[:,n])[x,y]   # generalised mapslices, vector -> matrix function
 ```
