@@ -18,8 +18,8 @@ or call `static_slice(A, sizes, false)` to omit the reshape.
     end
     IT = SArray{Tuple{tup...}, T, IN, prod(tup)}
     if N-IN>1 && finalshape
-        finalsize = size(A)[1+IN:end]
-        reshape(reinterpret(IT, vec(A)), finalsize)
+        finalaxes = axes(A)[1+IN:end]
+        reshape(reinterpret(IT, vec(A)), finalaxes)
     else
         reinterpret(IT, vec(A)) # always a vector
     end

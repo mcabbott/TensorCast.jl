@@ -87,8 +87,25 @@ end
     @test axes(A) == (0:1, 7:15)
     @test A[1,7] == 71
 
+    # reshape
     @cast B[(i,k),j] := A[i,(j,k)]  k in 1:3
     @test axes(B) === (Base.OneTo(6), Base.OneTo(3))
+
+    # reduction
+    @reduce C[_,j] := sum(i) A[i,j]
+    @test axes(C) == (1:1, 7:15)  # but perhaps the wrong answer!
+
+    # slicing
+    @test axes(@cast _[j] := A[:,j]) == (7:15,)
+    @test axes(@cast _[j][i] := A[i,j]) == (7:15,)
+    @test axes(first(@cast _[j] := A[:,j])) == (0:1,)
+    @test axes(first(@cast _[j][i] := A[i,j])) == (0:1,)
+
+    using StaticArrays
+    @test_broken axes(@cast _[j] := A{:,j}) == (7:15,)  # drops offset from container?
+    @test first(@cast _[j] := A{:,j}) === SVector(70,71)  # ignores offset, to make static slice?
+    @test first(@cast _[j] := A{:2,j}) === SVector(70,71)
+    # note that reinterpret(reshape, SVector{2,Int}, A) gives an error, but it only insists on 1st axis
 end
 
 @testset "tuples" begin
