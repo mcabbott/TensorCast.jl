@@ -673,10 +673,11 @@ function recursemacro(ex::Expr, canon, store::NamedTuple, call::CallInfo)
         return recursemacro(tensorprimetidy(ex), canon, store, call)
     elseif Meta.isexpr(ex, :$)
         return only(ex.args)
-    elseif ex isa Expr && ex.head in [:call, Symbol("'")]
-        return Expr(ex.head, map(x -> recursemacro(x, canon, store, call), ex.args)...)
     elseif ex isa Expr
-        @warn "not a call, what is it?:" ex
+    #     && ex.head in [:call, Symbol("'")]
+    #     return Expr(ex.head, map(x -> recursemacro(x, canon, store, call), ex.args)...)
+    # elseif ex isa Expr
+    #     @warn "not a call, what is it?:" ex
         return Expr(ex.head, map(x -> recursemacro(x, canon, store, call), ex.args)...)
     else
         return ex
@@ -789,7 +790,7 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
     if @capture(left, Z_[outer__][inner__] | [outer__][inner__] | Z_[outer__]{inner__} | [outer__]{inner__} )
         if isnothing(Z)
             (:inplace in call.flags) && throw(MacroError("can't write into a nameless tensor", call))
-            @warn "please write `@cast _[i][k] := ...` to omit a name, instead of `@cast [i][k] := ...`"
+            @warn "please write `@cast _[i][k] := ...` to omit a name, instead of `@cast [i][k] := ...`" call.string maxlog=3 
             Z = :_ # gensym(:output)
         end
         Z = (Z == :_) ? gensym(:output) : Z
@@ -801,8 +802,8 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
     elseif @capture(left, Z_[outer__] | [outer__] )
         if isnothing(Z)
             (:inplace in call.flags) && throw(MacroError("can't write into a nameless tensor", call))
-            @warn "please write `@cast _[i] := ...` to omit a name, instead of `@cast [i] := ...`"
-            Z = :_ # gensym(:output)
+            @warn "please write `@cast _[i] := ...` to omit a name, instead of `@cast [i] := ...`" call.string maxlog=3 
+            Z = :_ 
         end
         Z = (Z == :_) ? gensym(:output) : Z
         parsed = indexparse(Z, outer, store, call, save=(:inplace in call.flags))
@@ -1022,22 +1023,22 @@ function optionparse(opt, store::NamedTuple, call::CallInfo)
     elseif @capture(opt, lazy = val_Number) && 0 <= val <= 2
         push!(call.flags, Symbol(:lazy_, Int(val)))
     elseif @capture(opt, i_:s_)
-        @warn "please replace index ranges like `i:3` with `i in 1:3` or `i ∈ 1:3`"
+        @warn "please replace index ranges like `i:3` with `i in 1:3` or `i ∈ 1:3`" call.string maxlog=3 
         saveonesize(tensorprimetidy(i), s, store)
         push!(call.flags, :assert)
     elseif opt in (:strided, :avx)
-        @warn "postfix option $opt is deprecated, please write @cast @$opt A[i] := ..."
+        @warn "postfix option $opt is deprecated, please write @cast @$opt A[i] := ..." call.string maxlog=3 
         push!(call.flags, opt)
     elseif opt == :lazy
-        @warn "postfix option lazy is deprecated, please write " * 
-            "@lazy A[i] := ... for LazyArrays broadcasting, or " * 
-            "lazy=true to use for PermutedDimsArray etc. (the default)"
+        @warn "postfix option `lazy` is deprecated, please write " * 
+            "`@lazy A[i] := ...` for LazyArrays broadcasting, or " * 
+            "`lazy=true` to use PermutedDimsArray-like arrays (the default)" call.string maxlog=3 
         push!(call.flags, :lazy, :lazy_1)
     elseif opt == :nolazy
-        @warn "option `nolazy` is deprecated, please write keyword style `lazy=false` to disable PermutedDimsArray etc."
+        @warn "option `nolazy` is deprecated, please write keyword style `lazy=false` to disable PermutedDimsArray etc." call.string maxlog=3 
         push!(call.flags, :lazy_0)
     elseif opt in (:assert, :(!))
-        @warn "option 'assert' is no longer needed, this is the default" call.string maxlog=1
+        @warn "option `assert` is no longer needed, this is the default" call.string maxlog=3 
     else
         throw(MacroError("don't understand option $opt", call))
     end
