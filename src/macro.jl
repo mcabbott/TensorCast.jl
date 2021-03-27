@@ -582,8 +582,8 @@ function matmultarget(ex, target, parsed, store::NamedTuple, call::CallInfo)
     @capture(ex, A_ * B_ * C__ | *(A_, B_, C__) ) || throw(MacroError("can't @matmul that!", call))
 
     # Figure out what to sum over, and make A,B into matrices ready for *
-    iA = guesstarget(A)
-    iB = guesstarget(B)
+    iA = guesstarget(A, [], [])
+    iB = guesstarget(B, [], [])
 
     isum = sort(intersect(iA, iB, parsed.reduced),
         by = i -> findfirst(isequal(i), target)) # or target? parsed.reduced
@@ -857,11 +857,14 @@ function reduceparse(ex1, ex2, store::NamedTuple, call::CallInfo)
         canon = vcat(leftcanon, reduced)
     else
         # But for Z = sum(A, dims=...) can try to avoid permutedims, not sure it matters.
-        guess = guesstarget(ex2) # TODO make guess smarter, use leftcanon as a target
-        # @show guess reduced
-        [ deleteat!(guess, findcheck(i, guess, call, " on the right")) for i in reduced ]
-        if leftcanon == guess
-            canon = guesstarget(ex2)
+        guess = guesstarget(ex2, leftcanon, reduced)
+        guessminus = copy(guess)
+        for i in reduced
+            deleteat!(guessminus, findcheck(i, guessminus, call, " on the right"))
+        end
+        if leftcanon == guessminus  # i.e. leftcanon is an ordered subset of guess
+            canon = guess
+            # canon == vcat(leftcanon, reduced) || @info "guesstarget did something!" repr(leftcanon) repr(reduced) repr(guess) ex2
         else
             canon = vcat(leftcanon, reduced)
         end
@@ -1254,16 +1257,26 @@ function listindices(ex::Expr)
     list
 end
 
-function guesstarget(ex::Expr)
+listsymbols(s::Symbol, target) = s in target ? [s] : Symbol[]
+listsymbols(any, target) = Symbol[]
+function listsymbols(ex::Expr, target)
+    ex.head == :vec && return Symbol[]
+    return union((listsymbols(a, target) for a in ex.args)...)
+end
+
+function guesstarget(ex::Expr, left, red)
     list = sort(listindices(ex), by=length, rev=true)
-    shortlist = unique(reduce(vcat, list))
+    naked = listsymbols(ex, vcat(left, red))
+    unique(vcat(list..., naked))  # TODO make a smarter version which tries to fit to left + red?  
 end
 
 # function overlapsorted(x,y) # works fine but not in use yet
 #     z = intersect(x,y)
 #     length(z) ==0 && return true
 #     xi = map(i -> findfirst(isequal(i),x), z)
+#     @assert xi == indexin(z, x)
 #     yi = map(i -> findfirst(isequal(i),y), z)
+#     @assert xi == indexin(z, y)
 #     return sortperm(xi) == sortperm(yi)
 # end
 

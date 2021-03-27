@@ -73,6 +73,12 @@ end
 
     @cast C[i,j,k] := 0 * A[i,(j,k)] + j  (k in 1:2)  # used to infer sz_j = (:)
     @test all(==(2), C[:,2,:])
+
+    @reduce D[k] := sum(i) B[i]/k (k in 1:4)  # no indexing by k on RHS 
+    @test D ≈ vec(sum(B ./ (1:4)', dims=1))
+
+    @reduce E := sum(i,k) i/k (i in 1:2, k in 1:4)  # no indexing on RHS of reduction
+    @test E ≈ sum((1:2) ./ (1:4)')
 end
 
 @testset "tuples" begin
