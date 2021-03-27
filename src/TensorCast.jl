@@ -18,6 +18,7 @@ include("string.jl")
 
 module Fast # shield non-macro code from @optlevel 1
     using LinearAlgebra, StaticArrays, Compat
+    using ..TensorCast: pretty
 
     include("slice.jl")     # slice, glue, etc
     export sliceview, slicecopy, glue, glue!, red_glue, cat_glue, copy_glue, lazy_glue, iscodesorted, countcolons
