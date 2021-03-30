@@ -309,16 +309,15 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     # Combined indices A[i,(j,k)]
     if any(istensor, ijk)
         flatsize = map(axwrap, flat)
-        A = :( reshape($A, ($(flatsize...),)) )
+        A = :( Base.reshape($A, ($(flatsize...),)) )
         append!(store.need, flat)
-        # push!(store.mustassert, :( TensorCast.@assert_ !(A isa OffsetArray) "can't combine indices of an OffsetArray") ) # ??
     end
 
     # Reversed A[-i,j] and shuffled A[i,~j]
     if !isempty(reversed)
         A = maybepush(A, store, :prereverse)
         rind = map(1:length(flat)) do d
-            flat[d] in reversed ? :($reverse($axes($A,$d))) : (:)
+            flat[d] in reversed ? :($reverse(Base.axes($A,$d))) : (:)
         end
         rdims = Tuple(indexin(reversed, flat))
         if (:lazy_0 in call.flags) && !LHS
@@ -339,7 +338,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
     if !isempty(shuffled)
         A = maybepush(A, store, :preshuffle)
         sind = map(1:length(flat)) do d
-            flat[d] in shuffled ? :($shuffle($axes($A,$d))) : (:)
+            flat[d] in shuffled ? :($shuffle(Base.axes($A,$d))) : (:)
         end
         if (:lazy_0 in call.flags) && !LHS
             if length(flat) == 1
@@ -636,14 +635,14 @@ function recursemacro(ex::Expr, canon, store::NamedTuple, call::CallInfo)
     # The original purpose was to look for recursion, meaning @reduce within @cast etc:
     if @capture(ex, @reduce(subex__) )
         subcall = CallInfo(call.mod, call.src,
-            TensorCast.unparse("innder @reduce", subex...), Set([:reduce, :recurse]))
+            TensorCast.unparse("inner @reduce", subex...), Set([:reduce, :recurse]))
         name, ind, scalar, steps = _macro(subex...; call=subcall, dict=store.dict)
         append!(store.main, steps)
         ex = scalar ? :($name) :  :($name[$(ind...)])
 
     elseif @capture(ex, @matmul(subex__) )
         subcall = CallInfo(call.mod, call.src,
-            TensorCast.unparse("innder @matmul", subex...), Set([:matmul, :recurse]))
+            TensorCast.unparse("inner @matmul", subex...), Set([:matmul, :recurse]))
         name, ind, scalar, steps = _macro(subex...; call=subcall, dict=store.dict)
         append!(store.main, steps)
         ex = scalar ? :($name) :  :($name[$(ind...)])
@@ -900,7 +899,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
         if iscolon(i)
             if i isa QuoteNode && A != :_
                 str = "fixed size in $A[" * join(ijk, ", ") * "]" # DimensionMismatch("fixed size in M[i, \$(QuoteNode(5))]: size(M, 2) == 5") TODO print more nicely
-                push!(store.mustassert, :( size($A,$d)==$(i.value) || throw(ArgumentError($str))) )
+                push!(store.mustassert, :( Base.size($A,$d)==$(i.value) || throw(ArgumentError($str))) )
             end
             continue
         end
@@ -909,7 +908,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
             push!(outaxes, Base.OneTo(1))
             if i == :_ && A != :_ && save
                 str = "underscore in $A[" * join(ijk, ", ") * "]"
-                push!(store.mustassert, :( size($A,$d)==1 || throw(ArgumentError($str))) )
+                push!(store.mustassert, :( Base.size($A,$d)==1 || throw(ArgumentError($str))) )
             end
             continue
         end
@@ -918,7 +917,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
             stripminustilde!(ii, reversed, shuffled)
             append!(flat, ii)
             push!(outaxes, axwrap(ii))
-            save && A != :_ && saveonesize(ii, :(axes($A, $d)), store)
+            save && A != :_ && saveonesize(ii, :(Base.axes($A, $d)), store)
 
         elseif @capture(i, B_[klm__])
             innerparse(B, klm, store, call) # called just for error on tensor/colon/constant
@@ -928,7 +927,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
         elseif i isa Symbol
             push!(flat, i)
             push!(outaxes, axwrap(i))
-            save && A != :_ && saveonesize(i, :(axes($A, $d)), store)
+            save && A != :_ && saveonesize(i, :(Base.axes($A, $d)), store)
         else
             throw(MacroError("don't understand index $i", call))
         end
@@ -937,7 +936,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
     if save && length(ijk)>0 && A != :_
         N = length(ijk)
         str = "expected a $N-tensor $A[" * join(ijk, ", ") * "]"
-        push!(store.assert, :( ndims($A)==$N || throw(ArgumentError($str))) )
+        push!(store.assert, :( Base.ndims($A)==$N || throw(ArgumentError($str))) )
     end
 
     if length(flat)==2 && flat[1]==flat[2] # allow for diag, A[i,i]
@@ -994,7 +993,7 @@ function innerparse(firstA, ijk, store::NamedTuple, call::CallInfo; save=false)
         else
             push!(innerflat, i)
         end
-        save && saveonesize(i, :(axes($firstA, $d)), store)
+        save && saveonesize(i, :(Base.axes($firstA, $d)), store)
     end
 
     checknorepeats(innerflat, call)
@@ -1355,16 +1354,16 @@ function matrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call::C
     # Deal with simple matrix, and with empty right of V in M*V
     length(left) == 1 && length(right) <= 1 && return ex
     # and empty right because it's M * vec(T)
-    isempty(right) && return :( reshape($ex, :) )
+    isempty(right) && return :( Base.reshape($ex, :) )
 
     # Deal with empty left of V in V'*M, or perhaps V=vec(T) first
     if isempty(left)
         if length(right) == 1
             # return :( TensorCast.PermuteDims($ex) )
-            return :( transpose($ex) )
+            return :( Base.transpose($ex) )
         else
             # return :( TensorCast.PermuteDims(reshape($ex, :)) )
-            return :( transpose(reshape($ex, :)) )
+            return :( Base.transpose(Base.reshape($ex, :)) )
         end
     end
 
@@ -1374,7 +1373,7 @@ function matrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call::C
     append!(store.need, left)
     append!(store.need, right)
     # push!(call.flags, :reshaped)
-    return :( reshape($ex, ($left_sz,$right_sz)) )
+    return :( Base.reshape($ex, ($left_sz,$right_sz)) )
 end
 
 function unmatrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call::CallInfo)
@@ -1384,7 +1383,7 @@ function unmatrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call:
     # For V' * V, did we want a scalar or not? What we will get is unknown to the macro:
     if length(left) == 0 && length(right) == 0
         if :scalar in call.flags
-            return :( first($ex) )
+            return :( Base.first($ex) )
             # If you had arrays of arrays, then PermuteDims would have permutedims-ed, and * would make an array, so this is still OK.
         else
             return :( Base.fill($ex) ) # zero-dim array
@@ -1393,7 +1392,6 @@ function unmatrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call:
 
     # For V'*M, you may get a Transpose row-vector, for which this is .parent:
     if length(left) == 0
-        # ex = :( TensorCast.rview($ex, 1,:) )
         ex = :( TensorCast.transmute($ex, (2,)) )
         length(right) == 1 && return ex # literally V'*M done,
         # but for V'*T we should reshape this .parent
@@ -1404,7 +1402,7 @@ function unmatrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call:
     append!(store.need, left)
     append!(store.need, right)
     # push!(call.flags, :reshaped)
-    return :( reshape($ex, ($(sizes...),)) )
+    return :( Base.reshape($ex, ($(sizes...),)) )
 end
 
 function increasing_or_zero(tup::Tuple, prev=0)  # strictly increasing, allows nothing or 0
@@ -1505,16 +1503,16 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
             perm = Tuple(map(i -> isconstant(i) ? nothing : (_d+=1), parsed.inner))
             # ex = :(TensorCast.orient.($Asafe, Ref($code)) ) # @. would need a dollar
             # refperm = maybepush(:( Ref() ), store, :zzz)
-            ex = :(TensorCast.transmute.($Asafe, Ref($perm)) )
+            ex = :(TensorCast.transmute.($Asafe, Base.Ref($perm)) )
         end
     end
 
     # Must we collect? Do this now, as reshape(TransmutedDimsArray(...)) is awful.
     if :collect in call.flags
         if :strided in call.flags
-            ex = :( collect($ex) )
+            ex = :( Base.collect($ex) )
         elseif !(:collected in call.flags)
-            ex = :( identity.($ex) )
+            ex = :( Base.identity.($ex) )
         end
     end
 
@@ -1522,7 +1520,7 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
     if any(i -> istensor(i) || isconstant(i), parsed.outer)
         any(i -> isconstant(i) && !(i == :_ || i == 1), parsed.outer) && throw(MacroError("can't fix output index to $i, only to 1", call))
         if any(istensor, parsed.outer)
-            ex = :( reshape($ex, ($(parsed.outaxes...),)) )
+            ex = :( Base.reshape($ex, ($(parsed.outaxes...),)) )
             append!(store.need, parsed.flat)
         else
             _d = 0
@@ -1559,7 +1557,7 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         zed isa Symbol || @capture(zed, ZZ_.field_) || error("wtf")
         newleft = parsed.left
         str = "expected a 0-tensor $zed[]"
-        push!(store.mustassert, :( ndims($zed)==0 || throw(ArgumentError($str))) )
+        push!(store.mustassert, :( Base.ndims($zed)==0 || throw(ArgumentError($str))) )
     else
         newleft = standardise(parsed.left, store, call)
         @capture(newleft, zed_[ijk__]) || throw(MacroError("failed to parse LHS correctly, $(parsed.left) -> $newleft"))
