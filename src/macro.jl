@@ -1080,9 +1080,9 @@ function findsizes(store::NamedTuple, call::CallInfo)
     append!(out, store.assert)
     empty!(store.assert)
     if length(store.need) > 0
-        sizes = sizeinfer(store, call)
-        sz_list = map(axwrap, store.need)
-        push!(out, :( local ($(sz_list...),) = ($(sizes...),) ) )
+        inferred = sizeinfer(store, call)
+        ax_list = map(axwrap, store.need)
+        push!(out, :( local ($(ax_list...),) = ($(inferred...),) ) )
     end
     append!(out, store.mustassert) # NB do this after calling sizeinfer()
     unique!(out)
@@ -1107,22 +1107,24 @@ function sizeinfer(store::NamedTuple, call::CallInfo)
             known = [ haskey(store.dict, j) for j in pair.first ]
 
             if sum(.!known) == 1 # bingo! now work out its size:
-                num = :(length($(pair.second)))
+                num = takelength(pair.second)
 
                 denfacts = [ store.dict[i] for i in pair.first[known] ]
                 if length(denfacts) > 1
-                    den = :( prod(length, ($(denfacts...),)) )
+                    # den = :( prod(length, ($(denfacts...),)) )
+                    longs = map(takelength, denfacts)
+                    den = :( Base.:*($(longs...)) )
                 else
-                    den = :( length($(denfacts[1])) )
+                    den = takelength(denfacts[1])
                 end
-                rat = :( Base.OneTo(div($num, $den)) )
+                rat = :( Base.OneTo($num ÷ $den) )
 
                 i = pair.first[.!known][1]
                 d = findfirst(isequal(i), store.need)
                 d != nothing && (sizes[d] = rat)
 
                 str = "expected integer multiples, when calculating range of $i from range of $(join(pair.first, " ⊗ "))"
-                push!(store.mustassert, :( rem($num, $den)==0 || throw(ArgumentError($str))) )
+                push!(store.mustassert, :( ($num % $den)==0 || throw(ArgumentError($str))) )
             end
         end
     end
@@ -1132,6 +1134,21 @@ function sizeinfer(store::NamedTuple, call::CallInfo)
     isempty(unknown) || throw(MacroError("unable to infer ranges for indices $str", call))
 
     return sizes
+end
+
+"""
+    takelength(OntTo(n)) -> n
+    takelength(axes(A,2)) -> size(A,2)
+"""
+function takelength(ex)
+    if Meta.isexpr(ex, :call) && ex.args[1] in (Base.OneTo, :(Base.OneTo))
+        ex.args[2]
+    elseif Meta.isexpr(ex, :call) && ex.args[1] in (:axes, axes, :(Base.axes))
+        @assert length(ex.args) == 3
+        :(Base.size($(ex.args[2:end]...)))
+    else
+        :(Base.length($ex))
+    end
 end
 
 """
