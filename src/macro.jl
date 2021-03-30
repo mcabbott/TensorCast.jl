@@ -1056,7 +1056,7 @@ then save an assertion that new size is equal to old.
 function saveonesize(ind, long, store::NamedTuple)
     if !haskey(store.dict, ind)
         store.dict[ind] = long
-    else
+    elseif store.dict[ind] != long  # no need to save identical expressions
         if isa(ind, Symbol)
             str = "range of index $ind must agree"
             push!(store.assert, :( $(store.dict[ind]) == $long || throw(ArgumentError($str))) )
@@ -1067,17 +1067,15 @@ end
 
 function findsizes(store::NamedTuple, call::CallInfo)
     out = []
-    # if :assert in call.flags
     append!(out, store.assert)
     empty!(store.assert)
-    # end
     if length(store.need) > 0
         sizes = sizeinfer(store, call)
         sz_list = map(szwrap, store.need)
         push!(out, :( local ($(sz_list...),) = ($(sizes...),) ) )
     end
     append!(out, store.mustassert) # NB do this after calling sizeinfer()
-    out
+    unique!(out)
 end
 
 function sizeinfer(store::NamedTuple, call::CallInfo)
@@ -1165,10 +1163,13 @@ end
 """
     A = maybepush(ex, store, :name)
 If `ex` is not just a symbol, then it pushes `:(Asym = ex)` into `store.main`
-and returns `Asym`.
+and returns `Asym`. Unless this already has a name, in which case it returns that.
 """
 maybepush(s::Symbol, any...) = s
-function maybepush(ex::Expr, store::NamedTuple, name::Symbol=:A) # TODO make this look for same?
+function maybepush(ex::Expr, store::NamedTuple, name::Symbol=:A)
+    for prev in store.main
+        @capture(prev, local sym_ = $ex) && return sym
+    end
     Asym = gensym(name)
     push!(store.main, :( local $Asym = $ex ) )
     return Asym
