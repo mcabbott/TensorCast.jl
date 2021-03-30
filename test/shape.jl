@@ -1,5 +1,3 @@
-usingstatic =   isdefined(TensorCast, :StaticArray)
-
 @testset "scope" begin
 
     bc = rand(2,3)

@@ -11,24 +11,21 @@ but if given code instead it will do what it can.
 Typically produces `reshape(reinterpret(SArray...`; copy this to get `Array{SArray}`,
 or call `static_slice(A, sizes, false)` to omit the reshape.
 """
-@inline function static_slice(A::AbstractArray{T,N}, sizes::Size{tup}, finalshape::Bool=true) where {T,N,tup}
+@inline function static_slice(A::AbstractArray{T,N}, sizes::Size{tup}) where {T,N,tup}
     IN = length(tup)
     for d in 1:IN
         size(A,d) == tup[d] || throw(DimensionMismatch("cannot slice array of size $(size(A)) using Size$tup"))
+        first(axes(A,d)) == 1 || throw(ArgumentError("cannot creat static slices with offset indices"))
     end
     IT = SArray{Tuple{tup...}, T, IN, prod(tup)}
-    if N-IN>1 && finalshape
-        finalsize = size(A)[1+IN:end]
-        reshape(reinterpret(IT, vec(A)), finalsize)
-    else
-        reinterpret(IT, vec(A)) # always a vector
-    end
+    finalaxes = axes(A)[1+IN:end]
+    reshape(reinterpret(IT, vec(A)), finalaxes)
 end
 
-function static_slice(A::AbstractArray, code::Tuple, finalshape::Bool=true)
+function static_slice(A::AbstractArray, code::Tuple)
     iscodesorted(code) || error("expected to make slices of left-most dimensions")
     tup = ntuple(d -> size(A,d), countcolons(code))
-    static_slice(A, Size(tup), finalshape)
+    static_slice(A, Size(tup))
 end
 
 """
@@ -37,17 +34,13 @@ end
 Glues the output of `static_slice` back into one array, again with `code = (:,:,...,*,*)`.
 For `MArray` slices, which can't be reinterpreted, this reverts to `red_glue`.
 """
-@inline function static_glue(A::AbstractArray{IT}, finalshape=true) where {IT<:SArray}
-    if finalshape
-        finalsize = (size(IT)..., size(A)...)
-        reshape(reinterpret(eltype(IT), A), finalsize)
-    else
-        reinterpret(eltype(eltype(A)), A)
-    end
+@inline function static_glue(A::AbstractArray{IT}) where {IT<:SArray}
+    finalaxes = (axes(IT)..., axes(A)...)
+    reshape(reinterpret(eltype(IT), A), finalaxes)
 end
 
-function static_glue(A::AbstractArray{IT}, finalshape=true) where {IT<:MArray}
-    stack(A)
+function static_glue(A::AbstractArray{IT}) where {IT<:MArray}
+    LazyStack.stack(A)
 end
 
 # This is now used only by maybestaticsizes...

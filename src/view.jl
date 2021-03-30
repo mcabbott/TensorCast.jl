@@ -28,18 +28,7 @@ mul!(Z::AbstractArray{T,0}, A,B) where {T} = copyto!(Z, A * B)
 """
     star(x,y,...)
 
-Like `*` but intended for multiplying sizes, and understands that `:` is a wildcard.
+Used for multiplying axes now, not sizes.
 """
-star(x,y) = *(x,y)
-star(::Colon,y) = Colon()
-star(x,::Colon) = Colon()
+star(x, y) = Base.OneTo(length(x) * length(y))
 star(x,y,zs...) = star(star(x,y), zs...)
-
-"""
-    onetolength(1:10) == 10
-
-Used to digest options `i in 1:10`, size calculation for reshaping only allows ranges starting at 1 for now.
-"""
-onetolength(ax::Base.OneTo) = length(ax)
-onetolength(ax::AbstractUnitRange) = first(ax) == 1 ? length(ax) : error("ranges have to start at 1, for now")
-onetolength(ax) = error("ranges must be AbstractUnitRange")
