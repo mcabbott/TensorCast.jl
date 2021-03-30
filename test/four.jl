@@ -93,7 +93,8 @@ end
 
     # reduction
     @reduce C[_,j] := sum(i) A[i,j]
-    @test axes(C) == (1:1, 7:15)  # but perhaps the wrong answer!
+    @test axes(C) == (1:1, 7:15)
+    @test extrema(C) == (141, 301)  # was reading out of bounds, TransmuteDims bug
 
     # slicing
     @test axes(@cast _[j] := A[:,j]) == (7:15,)
@@ -102,10 +103,12 @@ end
     @test axes(first(@cast _[j][i] := A[i,j])) == (0:1,)
 
     using StaticArrays
-    @test_broken axes(@cast _[j] := A{:,j}) == (7:15,)  # drops offset from container?
-    @test first(@cast _[j] := A{:,j}) === SVector(70,71)  # ignores offset, to make static slice?
-    @test first(@cast _[j] := A{:2,j}) === SVector(70,71)
-    # note that reinterpret(reshape, SVector{2,Int}, A) gives an error, but it only insists on 1st axis
+    @test_throws Exception @cast _[j] := A{:,j}  # similar error to reinterpret(reshape, SVector{2,Int}, A)
+    @cast D[i,j] := i+10j  (i in 1:3, j in 7:15)
+    @test axes(@cast _[j] := D{:,j}) == (7:15,)
+    @test first(@cast _[j] := D{:,j}) === SVector(71, 72, 73)
+    @test first(@cast _[j] := D{:3,j}) === SVector(71, 72, 73)
+    @test_throws Exception @cast _[j] := D{:2,j}  # wrong size
 end
 
 @testset "tuples" begin

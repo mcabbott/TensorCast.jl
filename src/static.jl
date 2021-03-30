@@ -15,14 +15,16 @@ or call `static_slice(A, sizes, false)` to omit the reshape.
     IN = length(tup)
     for d in 1:IN
         size(A,d) == tup[d] || throw(DimensionMismatch("cannot slice array of size $(size(A)) using Size$tup"))
+        first(axes(A,d)) == 1 || throw(ArgumentError("cannot creat static slices with offset indices"))
     end
     IT = SArray{Tuple{tup...}, T, IN, prod(tup)}
-    if N-IN>1 && finalshape
+    @assert finalshape
+    # if N-IN>1 && finalshape
         finalaxes = axes(A)[1+IN:end]
         reshape(reinterpret(IT, vec(A)), finalaxes)
-    else
-        reinterpret(IT, vec(A)) # always a vector
-    end
+    # else
+    #     reinterpret(IT, vec(A)) # always a vector
+    # end
 end
 
 function static_slice(A::AbstractArray, code::Tuple, finalshape::Bool=true)
