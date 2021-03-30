@@ -1065,8 +1065,8 @@ then save an assertion that new size is equal to old.
 """
 function saveonesize(ind, ax, store::NamedTuple)
     if !haskey(store.dict, ind)
-        store.dict[ind] = long
-    elseif store.dict[ind] != long  # no need to save identical expressions
+        store.dict[ind] = ax
+    elseif store.dict[ind] != ax  # no need to save identical expressions
         if isa(ind, Symbol)
             str = "range of index $ind must agree"
             push!(store.assert, :( $(store.dict[ind]) == $ax || throw(ArgumentError($str))) )
