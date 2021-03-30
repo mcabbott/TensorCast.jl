@@ -1436,8 +1436,9 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
             ex = :( $(parsed.redfun)($ex) )
         else
             dims = length(parsed.rdims)>1 ? Tuple(parsed.rdims) : parsed.rdims[1]
-            perm = Tuple(filter(d -> !(d in parsed.rdims), 1:length(canon)))
-            ex = :( TensorCast.transmute($(parsed.redfun)($ex, dims=$dims), $perm) )
+            # perm = Tuple(filter(d -> !(d in parsed.rdims), 1:length(canon)))
+            # ex = :( TensorCast.transmute($(parsed.redfun)($ex, dims=$dims), $perm) )
+            ex = :( Base.dropdims($(parsed.redfun)($ex, dims=$dims), dims=$dims) )
             if :strided in call.flags
                 pop!(call.flags, :collected, :ok) # makes stridedview(...
             end

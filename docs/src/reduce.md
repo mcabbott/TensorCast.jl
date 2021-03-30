@@ -17,7 +17,8 @@ julia> @reduce S[i] := sum(j) M[i,j] + 1000
 
 julia> @pretty @reduce S[i] := sum(j) M[i,j] + 1000
 begin
-    S = transmute(sum(@__dot__(M + 1000), dims = 2), (1,))
+    ndims(M) == 2 || throw(ArgumentError("expected a 2-tensor M[i, j]"))
+    S = dropdims(sum(@__dot__(M + 1000), dims = 2), dims=2)
 end
 ```
 
@@ -25,9 +26,6 @@ Note that:
 * You must always specify the index to be summed over. 
 * The sum applies to the whole right side (including the 1000 here). 
 * And the summed dimensions are always dropped (unless you explicitly say `S[i,_] := ...`).
-
-Here `transmute(..., (1,))` is equivalent to `dropdims(..., dims=2)`, 
-keeping just the first dimension by reshaping.
 
 ## Not just `sum`
 
@@ -112,10 +110,10 @@ There is no need to name the intermediate array, here `termite[x]`, but you must
 ```julia-repl
 julia> @pretty @reduce sum(x,θ) L[x,θ] * p[θ] * log(L[x,θ] / @reduce _[x] := sum(θ′) L[x,θ′] * p[θ′])
 begin
-    local fish = transmute(p, (nothing, 1))
-    termite = transmute(sum(@__dot__(L * fish), dims = 2), (1,))
-    local wallaby = transmute(p, (nothing, 1))
-    rat = sum(@__dot__(L * wallaby * log(L / termite)))
+    ndims(L) == 2 || error()  # etc, some checks
+    local goshawk = transmute(p, (nothing, 1))
+    sandpiper = dropdims(sum(@__dot__(L * goshawk), dims = 2), dims = 2)  # inner sum
+    bison = sum(@__dot__(L * goshawk * log(L / sandpiper)))
 end
 ```
 
@@ -131,8 +129,9 @@ before summing over one index:
 ```julia-repl
 julia> @pretty @reduce R[i,k] := sum(j) M[i,j] * N[j,k]
 begin
-    local fish = transmute(N, (nothing, 1, 2))                # fish = reshape(N, 1, size(N)...)
-    R = transmute(sum(@__dot__(M * fish), dims = 2), (1, 3))  # R = dropdims(sum(...), dims=2)
+    size(M, 2) == size(N, 1) || error()  # etc, some checks
+    local fish = transmute(N, (nothing, 1, 2))   # fish = reshape(N, 1, size(N)...)
+    R = dropdims(sum(@__dot__(M * fish), dims = 2), dims = 2)
 end
 ```
 
