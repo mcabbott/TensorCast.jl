@@ -186,8 +186,8 @@ function _macro(exone, extwo=nothing, exthree=nothing; call::CallInfo=CallInfo()
     # First pass over RHS just to read sizes, prewalk sees A[i][j] before A[i]
     MacroTools.prewalk(x -> rightsizes(x, store, call), parsed.right)
 
-    # To look for recursion, we need another prewalk:
-    right2 = MacroTools.prewalk(x -> recursemacro(x, store, call), parsed.right)
+    # To look for recursion, we need another prewalk. To find naked indices, this one stops early:
+    right2 = recursemacro(parsed.right, canon, store, call)
 
     # Third pass to standardise & then glue, postwalk sees A[i] before A[i][j]
     right3 = MacroTools.postwalk(x -> standardglue(x, canon, store, call), right2)
@@ -582,8 +582,8 @@ function matmultarget(ex, target, parsed, store::NamedTuple, call::CallInfo)
     @capture(ex, A_ * B_ * C__ | *(A_, B_, C__) ) || throw(MacroError("can't @matmul that!", call))
 
     # Figure out what to sum over, and make A,B into matrices ready for *
-    iA = guesstarget(A)
-    iB = guesstarget(B)
+    iA = guesstarget(A, [], [])
+    iB = guesstarget(B, [], [])
 
     isum = sort(intersect(iA, iB, parsed.reduced),
         by = i -> findfirst(isequal(i), target)) # or target? parsed.reduced
@@ -625,15 +625,15 @@ end
 """
     recursemacro(@reduce sum(i) A[i,j]) -> G[j]
 
-Walked over RHS to look for `@reduce ...`, and replace with result,
+Walks itself over RHS to look for `@reduce ...`, and replace with result,
 pushing calculation steps into store.
 
 Also a convenient place to tidy all indices, including e.g. `fun(M[:,j],N[j]).same[i']`.
+And to handle naked indices, `i` => `axes(M,1)[i]` but not exactly like that.
 """
-function recursemacro(ex, store::NamedTuple, call::CallInfo)
-    @nospecialize ex
+function recursemacro(ex::Expr, canon, store::NamedTuple, call::CallInfo)
 
-    # Actually look for recursion
+    # The original purpose was to look for recursion, meaning @reduce within @cast etc:
     if @capture(ex, @reduce(subex__) )
         subcall = CallInfo(call.mod, call.src,
             TensorCast.unparse("innder @reduce", subex...), Set([:reduce, :recurse]))
@@ -658,12 +658,43 @@ function recursemacro(ex, store::NamedTuple, call::CallInfo)
 
     # Tidy up indices, A[i,j][k] will be hit on different rounds...
     if @capture(ex, A_[ijk__])
+        if !(A isa Symbol)  # this check allows some tests which have c[c] etc.
+            A = recursemacro(A, canon, store, call)
+        end
         return :( $A[$(tensorprimetidy(ijk)...)] )
     elseif @capture(ex, A_{ijk__})
+        if !(A isa Symbol)
+            A = recursemacro(A, canon, store, call)
+        end
         return :( $A{$(tensorprimetidy(ijk)...)} )
+
+    # Walk inwards: not handled by prewalk, as we do NOT want to walk inside indexing
+    elseif isprimedindex(ex, canon)
+        return recursemacro(tensorprimetidy(ex), canon, store, call)
+    elseif Meta.isexpr(ex, :$)
+        return only(ex.args)
+    elseif ex isa Expr
+    #     && ex.head in [:call, Symbol("'")]
+    #     return Expr(ex.head, map(x -> recursemacro(x, canon, store, call), ex.args)...)
+    # elseif ex isa Expr
+    #     @warn "not a call, what is it?:" ex
+        return Expr(ex.head, map(x -> recursemacro(x, canon, store, call), ex.args)...)
     else
         return ex
     end
+end
+
+function recursemacro(i, canon, store::NamedTuple, call::CallInfo)
+    @nospecialize i
+
+    i in canon || return i
+
+    # For naked indices, replace i with roughly axes(A,1)[i] etc:
+    push!(store.need, i)
+    sz = szwrap(i)
+    axname = gensym(:axis)
+    push!(store.main, :( local $axname = Base.OneTo($sz) ))
+    return :( $axname[$i] )
 end
 
 """
@@ -759,7 +790,7 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
     if @capture(left, Z_[outer__][inner__] | [outer__][inner__] | Z_[outer__]{inner__} | [outer__]{inner__} )
         if isnothing(Z)
             (:inplace in call.flags) && throw(MacroError("can't write into a nameless tensor", call))
-            @warn "please write `@cast _[i][k] := ...` to omit a name, instead of `@cast [i][k] := ...`"
+            @warn "please write `@cast _[i][k] := ...` to omit a name, instead of `@cast [i][k] := ...`" call.string maxlog=3 
             Z = :_ # gensym(:output)
         end
         Z = (Z == :_) ? gensym(:output) : Z
@@ -771,8 +802,8 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
     elseif @capture(left, Z_[outer__] | [outer__] )
         if isnothing(Z)
             (:inplace in call.flags) && throw(MacroError("can't write into a nameless tensor", call))
-            @warn "please write `@cast _[i] := ...` to omit a name, instead of `@cast [i] := ...`"
-            Z = :_ # gensym(:output)
+            @warn "please write `@cast _[i] := ...` to omit a name, instead of `@cast [i] := ...`" call.string maxlog=3 
+            Z = :_ 
         end
         Z = (Z == :_) ? gensym(:output) : Z
         parsed = indexparse(Z, outer, store, call, save=(:inplace in call.flags))
@@ -827,11 +858,14 @@ function reduceparse(ex1, ex2, store::NamedTuple, call::CallInfo)
         canon = vcat(leftcanon, reduced)
     else
         # But for Z = sum(A, dims=...) can try to avoid permutedims, not sure it matters.
-        guess = guesstarget(ex2) # TODO make guess smarter, use leftcanon as a target
-        # @show guess reduced
-        [ deleteat!(guess, findcheck(i, guess, call, " on the right")) for i in reduced ]
-        if leftcanon == guess
-            canon = guesstarget(ex2)
+        guess = guesstarget(ex2, leftcanon, reduced)
+        guessminus = copy(guess)
+        for i in reduced
+            deleteat!(guessminus, findcheck(i, guessminus, call, " on the right"))
+        end
+        if leftcanon == guessminus  # i.e. leftcanon is an ordered subset of guess
+            canon = guess
+            # canon == vcat(leftcanon, reduced) || @info "guesstarget did something!" repr(leftcanon) repr(reduced) repr(guess) ex2
         else
             canon = vcat(leftcanon, reduced)
         end
@@ -989,22 +1023,22 @@ function optionparse(opt, store::NamedTuple, call::CallInfo)
     elseif @capture(opt, lazy = val_Number) && 0 <= val <= 2
         push!(call.flags, Symbol(:lazy_, Int(val)))
     elseif @capture(opt, i_:s_)
-        @warn "please replace index ranges like `i:3` with `i in 1:3` or `i ∈ 1:3`"
+        @warn "please replace index ranges like `i:3` with `i in 1:3` or `i ∈ 1:3`" call.string maxlog=3 
         saveonesize(tensorprimetidy(i), s, store)
         push!(call.flags, :assert)
     elseif opt in (:strided, :avx)
-        @warn "postfix option $opt is deprecated, please write @cast @$opt A[i] := ..."
+        @warn "postfix option $opt is deprecated, please write @cast @$opt A[i] := ..." call.string maxlog=3 
         push!(call.flags, opt)
     elseif opt == :lazy
-        @warn "postfix option lazy is deprecated, please write " * 
-            "@lazy A[i] := ... for LazyArrays broadcasting, or " * 
-            "lazy=true to use for PermutedDimsArray etc. (the default)"
+        @warn "postfix option `lazy` is deprecated, please write " * 
+            "`@lazy A[i] := ...` for LazyArrays broadcasting, or " * 
+            "`lazy=true` to use PermutedDimsArray-like arrays (the default)" call.string maxlog=3 
         push!(call.flags, :lazy, :lazy_1)
     elseif opt == :nolazy
-        @warn "option `nolazy` is deprecated, please write keyword style `lazy=false` to disable PermutedDimsArray etc."
+        @warn "option `nolazy` is deprecated, please write keyword style `lazy=false` to disable PermutedDimsArray etc." call.string maxlog=3 
         push!(call.flags, :lazy_0)
     elseif opt in (:assert, :(!))
-        @warn "option 'assert' is no longer needed, this is the default" call.string maxlog=1
+        @warn "option `assert` is no longer needed, this is the default" call.string maxlog=3 
     else
         throw(MacroError("don't understand option $opt", call))
     end
@@ -1022,7 +1056,7 @@ then save an assertion that new size is equal to old.
 function saveonesize(ind, long, store::NamedTuple)
     if !haskey(store.dict, ind)
         store.dict[ind] = long
-    else
+    elseif store.dict[ind] != long  # no need to save identical expressions
         if isa(ind, Symbol)
             str = "range of index $ind must agree"
             push!(store.assert, :( $(store.dict[ind]) == $long || throw(ArgumentError($str))) )
@@ -1033,21 +1067,18 @@ end
 
 function findsizes(store::NamedTuple, call::CallInfo)
     out = []
-    # if :assert in call.flags
     append!(out, store.assert)
     empty!(store.assert)
-    # end
     if length(store.need) > 0
         sizes = sizeinfer(store, call)
         sz_list = map(szwrap, store.need)
         push!(out, :( local ($(sz_list...),) = ($(sizes...),) ) )
     end
     append!(out, store.mustassert) # NB do this after calling sizeinfer()
-    out
+    unique!(out)
 end
 
 function sizeinfer(store::NamedTuple, call::CallInfo)
-    allowedcolons = :strided in call.flags ? 0 : 1
 
     sort!(unique!(store.need))
     sizes = Any[ (:) for i in store.need ]
@@ -1059,8 +1090,6 @@ function sizeinfer(store::NamedTuple, call::CallInfo)
             d != nothing && (sizes[d] = pair.second)
         end
     end
-
-    count(isequal(:), sizes) <= allowedcolons && return sizes
 
     # Second pass looks for tuples where exactly one entry has unknown length
     for pair in store.dict
@@ -1090,7 +1119,7 @@ function sizeinfer(store::NamedTuple, call::CallInfo)
 
     unknown = store.need[sizes .== (:)]
     str = join(unknown, ", ")
-    length(unknown) <= allowedcolons || throw(MacroError("unable to infer ranges for indices $str", call))
+    isempty(unknown) || throw(MacroError("unable to infer ranges for indices $str", call))
 
     return sizes
 end
@@ -1134,10 +1163,13 @@ end
 """
     A = maybepush(ex, store, :name)
 If `ex` is not just a symbol, then it pushes `:(Asym = ex)` into `store.main`
-and returns `Asym`.
+and returns `Asym`. Unless this already has a name, in which case it returns that.
 """
 maybepush(s::Symbol, any...) = s
-function maybepush(ex::Expr, store::NamedTuple, name::Symbol=:A) # TODO make this look for same?
+function maybepush(ex::Expr, store::NamedTuple, name::Symbol=:A)
+    for prev in store.main
+        @capture(prev, local sym_ = $ex) && return sym
+    end
     Asym = gensym(name)
     push!(store.main, :( local $Asym = $ex ) )
     return Asym
@@ -1158,6 +1190,14 @@ function tensorprimetidy(ex)
         x
     end
 end
+
+function isprimedindex(ex::Expr, canon)
+    ex.head == Symbol("'") || return false
+    t = tensorprimetidy(ex)  # this may not be a symbol
+    return t in canon
+end
+isprimedindex(s::Symbol, canon) = s in canon
+isprimedindex(any, canon) = false
 
 szwrap(i::Symbol) = Symbol(:sz_,i)
 function szwrap(ijk::Vector)
@@ -1219,16 +1259,26 @@ function listindices(ex::Expr)
     list
 end
 
-function guesstarget(ex::Expr)
+listsymbols(s::Symbol, target) = s in target ? [s] : Symbol[]
+listsymbols(any, target) = Symbol[]
+function listsymbols(ex::Expr, target)
+    ex.head == :vec && return Symbol[]
+    return union((listsymbols(a, target) for a in ex.args)...)
+end
+
+function guesstarget(ex::Expr, left, red)
     list = sort(listindices(ex), by=length, rev=true)
-    shortlist = unique(reduce(vcat, list))
+    naked = listsymbols(ex, vcat(left, red))
+    unique(vcat(list..., naked))  # TODO make a smarter version which tries to fit to left + red?  
 end
 
 # function overlapsorted(x,y) # works fine but not in use yet
 #     z = intersect(x,y)
 #     length(z) ==0 && return true
 #     xi = map(i -> findfirst(isequal(i),x), z)
+#     @assert xi == indexin(z, x)
 #     yi = map(i -> findfirst(isequal(i),y), z)
+#     @assert xi == indexin(z, y)
 #     return sortperm(xi) == sortperm(yi)
 # end
 
@@ -1386,8 +1436,9 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
             ex = :( $(parsed.redfun)($ex) )
         else
             dims = length(parsed.rdims)>1 ? Tuple(parsed.rdims) : parsed.rdims[1]
-            perm = Tuple(filter(d -> !(d in parsed.rdims), 1:length(canon)))
-            ex = :( TensorCast.transmute($(parsed.redfun)($ex, dims=$dims), $perm) )
+            # perm = Tuple(filter(d -> !(d in parsed.rdims), 1:length(canon)))
+            # ex = :( TensorCast.transmute($(parsed.redfun)($ex, dims=$dims), $perm) )
+            ex = :( Base.dropdims($(parsed.redfun)($ex, dims=$dims), dims=$dims) )
             if :strided in call.flags
                 pop!(call.flags, :collected, :ok) # makes stridedview(...
             end
