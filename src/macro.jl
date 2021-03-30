@@ -156,7 +156,7 @@ end
 #==================== The Main Functions ====================#
 
 function _macro(exone, extwo=nothing, exthree=nothing; call::CallInfo=CallInfo(), dict=Dict())
-    store = (dict=dict, assert=[], mustassert=[], seen=[], need=[], top=[], main=[])
+    store = DotDict(dict=dict, assert=[], mustassert=[], seen=[], need=[], top=[], main=[])
     # TODO use OrderedDict() for main? To allow duplicate removal
 
     if Meta.isexpr(exone, :macrocall)
@@ -231,7 +231,7 @@ end
 This mostly aims to re-work the given expression into `some(steps(A))[i,j]`,
 but also pushes `A = f(x)` into `store.top`.
 """
-function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
+function standardise(ex, store::DotDict, call::CallInfo; LHS=false)
     @nospecialize ex
 
     # This acts only on single indexing expressions:
@@ -370,7 +370,7 @@ This gets walked over the RHS and:
 target dims not correctly handled yet -- what do I want? TODO
 Simple glue / stand. does not permutedims, but broadcasting may have to... avoid twice?
 """
-function standardglue(ex, target, store::NamedTuple, call::CallInfo)
+function standardglue(ex, target, store::DotDict, call::CallInfo)
     @nospecialize ex
 
     # The sole target here is indexing expressions:
@@ -449,7 +449,7 @@ end
 This brings the expression to have target indices,
 by permutedims and if necessary broadcasting, always using `readycast()`.
 """
-function targetcast(ex, target, store::NamedTuple, call::CallInfo)
+function targetcast(ex, target, store::DotDict, call::CallInfo)
     @nospecialize ex
 
     # If just one naked expression, then we won't broadcast:
@@ -488,7 +488,7 @@ end
 
 This is walked over the expression to prepare for `@__dot__` etc, by `targetcast()`.
 """
-function readycast(ex, target, store::NamedTuple, call::CallInfo)
+function readycast(ex, target, store::DotDict, call::CallInfo)
     @nospecialize ex
 
     # Scalar functions can be protected entirely from broadcasting:
@@ -552,7 +552,7 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
     return A
 end
 
-function ternarycast(cond, yes, no, target, store::NamedTuple, call::CallInfo)
+function ternarycast(cond, yes, no, target, store::DotDict, call::CallInfo)
     args = []
     cond, yes, no = map((cond, yes, no)) do expr
         MacroTools.prewalk(expr) do ex
@@ -575,7 +575,7 @@ For inplace, instead it returns tuple `(A,B)`, which `inplaceoutput()` can use.
 If there are more than two factors, it recurses, and you get `(A*B) * C`,
 or perhaps tuple `(A*B, C)`. But I'm going to remove this as I never got it working perfectly?
 """
-function matmultarget(ex, target, parsed, store::NamedTuple, call::CallInfo)
+function matmultarget(ex, target, parsed, store::DotDict, call::CallInfo)
     @nospecialize ex
 
     @capture(ex, A_ * B_ * C__ | *(A_, B_, C__) ) || throw(MacroError("can't @matmul that!", call))
@@ -630,7 +630,7 @@ pushing calculation steps into store.
 Also a convenient place to tidy all indices, including e.g. `fun(M[:,j],N[j]).same[i']`.
 And to handle naked indices, `i` => `axes(M,1)[i]` but not exactly like that.
 """
-function recursemacro(ex::Expr, canon, store::NamedTuple, call::CallInfo)
+function recursemacro(ex::Expr, canon, store::DotDict, call::CallInfo)
 
     # The original purpose was to look for recursion, meaning @reduce within @cast etc:
     if @capture(ex, @reduce(subex__) )
@@ -683,7 +683,7 @@ function recursemacro(ex::Expr, canon, store::NamedTuple, call::CallInfo)
     end
 end
 
-function recursemacro(i, canon, store::NamedTuple, call::CallInfo)
+function recursemacro(i, canon, store::DotDict, call::CallInfo)
     @nospecialize i
 
     i in canon || return i
@@ -705,7 +705,7 @@ This saves to `store` the sizes of all input tensors, and their sub-slices if an
 * But for `fun(M[:,j],N[j]).same[i]` it can't save `sz_i` as this isn't calculated yet,
   however it should not destroy this so that `sz_j` can be got later.
 """
-function rightsizes(ex, store::NamedTuple, call::CallInfo)
+function rightsizes(ex, store::DotDict, call::CallInfo)
     @nospecialize ex
 
     :recurse in call.flags && return nothing # outer version took care of this
@@ -748,7 +748,7 @@ For `@cast`, this digests the LHS.
 `parsed.outer` is the indices exactly as given, `parsed.flat` cleans up,
 and `canon` prepends inner indices too.
 """
-function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
+function castparse(ex, store::DotDict, call::CallInfo; reduce=false)
     Z = gensym(:left)
 
     # Do we make a new array? With or without collecting:
@@ -821,7 +821,7 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
         throw(MacroError("don't know what to do with left = $left", call))
     end
 
-    return canon, (parsed..., name=Z, outer=outer, inner=inner, innerflat=innerflat,
+    return canon, DotDict(; parsed..., name=Z, outer=outer, inner=inner, innerflat=innerflat,
         static=static, left=left, right=right)
 end
 
@@ -832,7 +832,7 @@ Similar to `castparse()`, which it uses before adding on what `@reduce` needs.
 Tries to be smart about the order of `canon` in the hope that reduction over `parsed.rdims`
 can be done without `permutedims`.
 """
-function reduceparse(ex1, ex2, store::NamedTuple, call::CallInfo)
+function reduceparse(ex1, ex2, store::DotDict, call::CallInfo)
 
     # Parse the LHS if there is one, else only @reduce sum(i,j) A[i,j]
     leftcanon, parsed = castparse(ex1, store, call; reduce=true)
@@ -876,7 +876,7 @@ function reduceparse(ex1, ex2, store::NamedTuple, call::CallInfo)
     # Finally, record positions in canon of reductions
     rdims = sort([ findfirst(isequal(i), canon) for i in reduced ])
 
-    return canon, (parsed..., redfun=redfun, reduced=reduced, rdims=rdims, right=ex2) # this replaces parsed.right
+    return canon, DotDict(; parsed..., redfun=redfun, reduced=reduced, rdims=rdims, right=ex2) # this replaces parsed.right
 end
 
 """
@@ -974,7 +974,7 @@ Checks that inner indices are kosher, and returns the list.
 If `save=true` then it now expects expr. `first(A)` to allow `first(A).field` too,
 otherwise it ignores first arg.
 """
-function innerparse(firstA, ijk, store::NamedTuple, call::CallInfo; save=false)
+function innerparse(firstA, ijk, store::DotDict, call::CallInfo; save=false)
     isnothing(ijk) && return []
 
     ijk = tensorprimetidy(ijk) # only for primes really
@@ -1001,11 +1001,13 @@ function innerparse(firstA, ijk, store::NamedTuple, call::CallInfo; save=false)
     return innerflat
 end
 
-function optionparse(opt, store::NamedTuple, call::CallInfo)
+function optionparse(opt, store::DotDict, call::CallInfo)
     if isnothing(opt)
         return
     elseif @capture(opt, (opts__,) )
-        [ optionparse(o, store, call) for o in opts ]
+        for o in opts
+            optionparse(o, store, call)
+        end
         return
     end
 
@@ -1062,7 +1064,7 @@ Saves sizes for indices `:i` or products like  `[:i,:j]` to `store`.
 It it already has a size for this single index,
 then save an assertion that new size is equal to old.
 """
-function saveonesize(ind, ax, store::NamedTuple)
+function saveonesize(ind, ax, store::DotDict)
     if !haskey(store.dict, ind)
         store.dict[ind] = ax
     elseif store.dict[ind] != ax  # no need to save identical expressions
@@ -1074,7 +1076,7 @@ function saveonesize(ind, ax, store::NamedTuple)
     ind
 end
 
-function findsizes(store::NamedTuple, call::CallInfo)
+function findsizes(store::DotDict, call::CallInfo)
     out = []
     append!(out, store.assert)
     empty!(store.assert)
@@ -1087,7 +1089,7 @@ function findsizes(store::NamedTuple, call::CallInfo)
     unique!(out)
 end
 
-function sizeinfer(store::NamedTuple, call::CallInfo)
+function sizeinfer(store::DotDict, call::CallInfo)
 
     sort!(unique!(store.need))
     sizes = Any[ (:) for i in store.need ]
@@ -1171,7 +1173,7 @@ end
     maybestaticsizes([:i,:j,:k], (:,:,*), store) -> Size(3,4)
 Produces the 2nd argument of `static_slice()`, using sizes from `store.dict` if available.
 """
-function maybestaticsizes(ijk::Vector, code::Tuple, store::NamedTuple, call::CallInfo)
+function maybestaticsizes(ijk::Vector, code::Tuple, store::DotDict, call::CallInfo)
     iscodesorted(code) || throw(MacroError("static slices need all colons to the left, " *
             "got {$(pretty(ijk))} hence code = $(pretty(code))", call))
     length(ijk) == length(code) || error("wrong length of code!")
@@ -1193,7 +1195,7 @@ If `ex` is not just a symbol, then it pushes `:(Asym = ex)` into `store.main`
 and returns `Asym`. Unless this already has a name, in which case it returns that.
 """
 maybepush(s::Symbol, any...) = s
-function maybepush(ex::Expr, store::NamedTuple, name::Symbol=:A)
+function maybepush(ex::Expr, store::DotDict, name::Symbol=:A)
     for prev in store.main
         @capture(prev, local sym_ = $ex) && return sym
     end
@@ -1203,7 +1205,7 @@ function maybepush(ex::Expr, store::NamedTuple, name::Symbol=:A)
 end
 
 maybepushtop(s::Symbol, any...) = s
-function maybepushtop(ex::Expr, store::NamedTuple, name::Symbol=:top)
+function maybepushtop(ex::Expr, store::DotDict, name::Symbol=:top)
     Asym = gensym(name)
     push!(store.top, :( local $Asym = $ex ) )
     return Asym
@@ -1350,7 +1352,7 @@ end
     matrixshape(A, [], [k,l]) -> reshape(A, 1, sz_k * sz_l) # rowvector * something
     matrixshape(A, [i,j], []) -> reshape(A, sz_i * sz_j)    # something * vector
 """
-function matrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call::CallInfo)
+function matrixshape(ex, left::Vector, right::Vector, store::DotDict, call::CallInfo)
     # Deal with simple matrix, and with empty right of V in M*V
     length(left) == 1 && length(right) <= 1 && return ex
     # and empty right because it's M * vec(T)
@@ -1376,7 +1378,7 @@ function matrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call::C
     return :( Base.reshape($ex, ($left_sz,$right_sz)) )
 end
 
-function unmatrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call::CallInfo)
+function unmatrixshape(ex, left::Vector, right::Vector, store::DotDict, call::CallInfo)
     # Easy cases M*M and M*V
     length(left) == 1 && length(right) <= 1 && return ex
 
@@ -1458,7 +1460,7 @@ findcheck(i, flat, call=nothing, msg=nothing) =
 
 #==================== The Output Functions ====================#
 
-function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
+function newoutput(ex, canon, parsed, store::DotDict, call::CallInfo)
     isempty(parsed.reversed) || throw(MacroError("can't reverse along indices on LHS right now", call))
     isempty(parsed.shuffled) || throw(MacroError("can't shuffle along on LHS right now", call))
     any(iscolon, parsed.outer) && throw(MacroError("can't have colons on the LHS right now", call))
@@ -1541,7 +1543,7 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
     return ex
 end
 
-function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
+function inplaceoutput(ex, canon, parsed, store::DotDict, call::CallInfo)
     if !(parsed.static)
         isempty(parsed.inner) || throw(MacroError("can't write in-place into slices right now",call))
         any(iscolon, parsed.outer) && throw(MacroError("can't have colons on the LHS right now",call))

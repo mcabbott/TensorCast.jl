@@ -16,6 +16,7 @@ using MacroTools, StaticArrays
 using TransmuteDims, LazyStack
 using LazyStack: stack_iter
 
+include("tools.jl")
 include("macro.jl")
 include("pretty.jl")
 
