@@ -6,20 +6,20 @@
 [![Build Status](https://github.com/mcabbott/TensorCast.jl/workflows/CI/badge.svg)](https://github.com/mcabbott/TensorCast.jl/actions?query=workflow%3ACI)
 
 This package lets you work with multi-dimensional arrays in index notation, 
-by defining a few macros. 
+by defining a few macros which translate this to broadcasting, permuting, and reducing operations.
 
 The first is `@cast`, which deals both with "casting" into new shapes (including going to and from an array-of-arrays) and with broadcasting:
 
 ```julia
-@cast A[row][col] := B[row, col]       # slice a matrix B into rows, also @cast A[r] := B[r,:]
+@cast A[row][col] := B[row, col]        # slice a matrix B into rows, also @cast A[r] := B[r,:]
 
-@cast C[(i,j), (k,ℓ)] := D.x[i,j,k,ℓ]  # reshape a 4-tensor D.x to give a matrix
+@cast C[(i,j), (k,ℓ)] := D.x[i,j,k,ℓ]   # reshape a 4-tensor D.x to give a matrix
 
-@cast E[φ,γ] = F[φ]^2 * exp(G[γ])      # broadcast E .= F.^2 .* exp.(G') into existing E
+@cast E[φ,γ] = F[φ]^2 * exp(G[γ])       # broadcast E .= F.^2 .* exp.(G') into existing E
 
-@cast _[i] := isodd(i) ? log(i) : V[i] # broadcast a function of the index values
+@cast _[i] := isodd(i) ? log(i) : V[i]  # broadcast a function of the index values
 
-@cast T[x,y,n] := outer(M[:,n])[x,y]   # generalised mapslices, vector -> matrix function
+@cast T[x,y,n] := outer(M[:,n])[x,y]    # generalised mapslices, vector -> matrix function
 ```
 
 Second, `@reduce` takes sums (or other reductions) over the indicated directions. Among such sums is 
@@ -33,7 +33,7 @@ matrix multiplication, which can be done more efficiently using `@matmul` instea
 @matmul M[i,j] := sum(k,k′) U[i,k,k′] * V[(k,k′),j]  # matrix multiplication, plus reshape
 ```
 
-This notation with `@cast` applies a function which takes the `dims` keyword, without reducing:
+The same notation with `@cast` applies a function accepting the `dims` keyword, without reducing:
 
 ```julia
 @cast W[i,j,c,n] := cumsum(c) X[c,i,j,n]^2           # permute, broadcast, cumsum(; dims=3)
@@ -43,7 +43,16 @@ All of these are converted into array commands like `reshape` and `permutedims`
 and `eachslice`, plus a [broadcasting expression](https://julialang.org/blog/2017/01/moredots) if needed, 
 and `sum` /  `sum!`, or `*` / `mul!`. This package just provides a convenient notation.
 
-It can be used with some other packages which modify broadcasting:
+From version 0.4, it relies on [TransmuteDims.jl](https://github.com/mcabbott/TransmuteDims.jl) 
+to handle re-ordering of dimensions, and [LazyStack.jl](https://github.com/mcabbott/LazyStack.jl) 
+to handle slices. It should also now work with [OffsetArrays.jl](https://github.com/JuliaArrays/OffsetArrays.jl):
+
+```julia
+using OffsetArrays
+@cast R[n,c] := n^2 + rand(3)[c]  (n in -5:5)        # arbitrary indexing
+```
+
+And it can be used with some packages which modify broadcasting:
 
 ```julia
 using Strided, LoopVectorization, LazyArrays
@@ -55,7 +64,7 @@ using Strided, LoopVectorization, LazyArrays
 ## Installation
 
 ```julia
-] add TensorCast
+using Pkg; Pkg.add("TensorCast")
 ```
 
 The current version requires [Julia 1.4](https://julialang.org/downloads/) or later.
@@ -63,7 +72,7 @@ There are a few pages of [documentation](https://mcabbott.github.io/TensorCast.j
 
 ## Elsewhere
 
-Similar notation is used by some other packages, although all of them use an implicit sum over 
+Similar notation is also used by some other packages, although all of them use an implicit sum over 
 repeated indices. [TensorOperations.jl](https://github.com/Jutho/TensorOperations.jl) performs 
 Einstein-convention contractions and traces:
 
@@ -102,4 +111,3 @@ while `@ein` & `@tensor` are closer to [`einsum`](https://numpy.org/doc/stable/r
 This was a holiday project to learn a bit of metaprogramming, originally `TensorSlice.jl`. 
 But it suffered a little scope creep. 
 
-From version 0.4, it relies on two helper packages: [TransmuteDims.jl](https://github.com/mcabbott/TransmuteDims.jl) handles permutations & reshapes, and [LazyStack.jl](https://github.com/mcabbott/LazyStack.jl) handles slices.

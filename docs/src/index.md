@@ -21,7 +21,8 @@ Version 0.4 has significant changes:
 
 New features in 0.4:
 - Indices can appear ouside of indexing: `@cast A[i,j] = i+j` translates to `A .= axes(A,1) .+ axes(A,2)'`
-- The ternary operator `? :` can appear on the right, and will be broadcast correctly. 
+- The ternary operator `? :` can appear on the right, and will be broadcast correctly.
+- All operations should now support [OffsetArrays.jl](https://github.com/JuliaArrays/OffsetArrays.jl).
 
 ## Pages
 
