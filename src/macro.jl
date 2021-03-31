@@ -128,19 +128,15 @@ the expression on the right out to a 3-tensor before summing it along one dimens
 this calls `*` or `mul!`, which is usually much faster.
 But it only works on expressions of suitable form.
 
-With more than two tensors on the right, it proceeds left to right, and each summed index
-must appear on two tensors, probably neighbours.
-
 Note that unlike `@einsum` and `@tensor`, you must explicitly specify
-what indices to sum over. Both this macro and `@reduce` could in principal infer this,
-and perhaps I will add that later... but then I find myself commenting `# sum_μ` anyway.
+what indices to sum over.
 
-    @matmul Z[a⊗b,z] = sum(i,j,k)  D[i,a][j] * E[i⊗j,_,k,b] * F[z,3,k]
+    @matmul Z[a⊗b,k] = sum(i,j)  D[i,a][j] * E[i⊗j,_,k,b]
 
 Each tensor will be pre-processed exactly as for `@cast` / `@reduce`,
-here glueing slices of `D` together, reshaping `E`, and taking a view of `F`.
-Once this is done, the right hand side must be of the form `(tensor) * (tensor) * ...`,
-which becomes `mul!(ZZ, (DD * EE), FF)`.
+here glueing slices of `D` together, reshaping `E` and the output `Z`.
+Once this is done, the right hand side must be of the form `(tensor) * (tensor)`,
+which becomes `mul!(ZZ, DD, EE)`.
 
     @reduce V[i] := sum(k) W[k] * exp(@matmul _[i,k] := sum(j) A[i,j] * B[j,k])
 
