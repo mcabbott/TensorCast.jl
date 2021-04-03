@@ -520,6 +520,13 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
     # and arrays of functions, using apply:
     @capture(ex, funs_[ijk__](args__) ) &&
         return :( Core._apply($funs[$(ijk...)], $(args...) ) )
+    # splats
+    @capture(ex, fun_(pre__, arg_...)) && containsindexing(arg) && begin
+        @gensym splat ys
+        xs = [gensym(Symbol(:x, i)) for i in 1:length(pre)]
+        push!(store.main, :( local $splat($(xs...), $ys) = $fun($(xs...), $ys...) ))
+        return :( $splat($(pre...), $arg) )
+    end
 
     # Apart from those, readycast acts only on lone tensors:
     @capture(ex, A_[ijk__]) || return ex

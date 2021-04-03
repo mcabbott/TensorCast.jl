@@ -117,3 +117,22 @@ end
     @test vi[1,1] == maximum(x[:,1])
     @test vi[2,2] == argmax(x[:,2])
 end
+
+@testset "splats" begin
+    y = rand(Int8, 5,4,3)
+
+    @cast z′[j,i] := tuple(y[i,j,:]...)
+    @test z′[3,4] == Tuple(y[4,3,:])
+
+    # with other arguments, they have to come first at the moment:
+    @cast z2[j,i] := tuple(i, j, y[i,j,:]...)
+    @test z2[4,5] == (5, 4, y[5,4,:]...)
+
+    struct Quad x; y; z; t; end
+    @cast z3[i,j] := Quad(y[i,:,j]...)
+    @test z3[2,3] == Quad(y[2,:,3]...)
+
+    # stupid operation:
+    @test_broken y == @cast _[i,j,k] := (y[i,:,k]...,)[j]  # (,) does not work with ...
+    @test y == @cast _[i,j,k] := tuple(y[i,:,k]...)[j]
+end
