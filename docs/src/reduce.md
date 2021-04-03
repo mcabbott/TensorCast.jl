@@ -168,7 +168,8 @@ julia> using LazyArrays
 julia> lazyred(A,B) = @reduce @lazy R[i,k] := sum(j) A[i,j] * B[j,k];
 
 julia> @btime lazyred($A, $B);
-  223.172 μs (26 allocations: 78.95 KiB)
+  223.172 μs (26 allocations: 78.95 KiB)  # when things worked well
+  10.186 ms (23 allocations: 78.77 KiB)   # today
 
 julia> red(A, B) ≈ mul(A, B) ≈ lazyred(A,B)
 true

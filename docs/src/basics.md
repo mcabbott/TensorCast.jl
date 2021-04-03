@@ -152,8 +152,14 @@ julia> @cast O[i,j] := (M[i,1], M[j,$col])
 ## Reshaping
 
 Sometimes it's useful to combine two (or more) indices into one, 
-which may be written  either `i⊗j` or `(i,j)`. 
-The simplest version of this is precisely what the built-in function `kron` does:
+which may be written  either `(i,j)` or `i⊗j`:
+
+```jldoctest mylabel
+julia> vec(M) == @cast _[(i,j)] := M[i,j]
+true
+```
+
+The next-simplest version of this is precisely what the built-in function `kron` does:
 
 ```jldoctest mylabel
 julia> W = 1 ./ [10,20,30,40];
@@ -184,7 +190,7 @@ julia> @cast A[i,j] := collect(1:12)[i⊗j]  i in 1:2
  1  3  5  7   9  11
  2  4  6  8  10  12
 
-julia> @cast A[i,j] := collect(1:12)[i⊗j]  i ∈ 1:4, j ∈ 1:3
+julia> @cast A[i,j] := collect(1:12)[i⊗j]  (i ∈ 1:4, j ∈ 1:3)
 4×3 Array{Int64,2}:
  1  5   9
  2  6  10
@@ -206,9 +212,9 @@ into one large grid. Notice that `x` varies faster than `i`, and so on -- the li
 agrees with that of two indices `x,i`. 
 
 ```jldoctest mylabel
-julia> list = [ i .* ones(2,2) for i=1:8 ];
+julia> list = [fill(k,2,2) for k in 1:8];
 
-julia> @cast mat[x⊗i, y⊗j] := Int(list[i⊗j][x,y])  i in 1:2
+julia> @cast mat[x⊗i, y⊗j] |= list[i⊗j][x,y]  i in 1:2
 4×8 Array{Int64,2}:
  1  1  3  3  5  5  7  7
  1  1  3  3  5  5  7  7
@@ -218,21 +224,21 @@ julia> @cast mat[x⊗i, y⊗j] := Int(list[i⊗j][x,y])  i in 1:2
 julia> vec(mat) == @cast _[xi⊗yj] := mat[xi, yj]
 true
 
-julia> mat == Int.(hvcat((4,4), transpose(reshape(list,2,4))...))
+julia> mat == hvcat((4,4), transpose(reshape(list,2,4))...)
 true
 ```
 
 Alternatively, this reshapes each matrix to a vector, and makes them columns of the output:
 
 ```jldoctest mylabel
-julia> @cast colwise[x⊗y,i] := Int(list[i][x,y])
+julia> @cast colwise[x⊗y,i] := (list[i][x,y])^2
 4×8 Array{Int64,2}:
- 1  2  3  4  5  6  7  8
- 1  2  3  4  5  6  7  8
- 1  2  3  4  5  6  7  8
- 1  2  3  4  5  6  7  8
+ 1  4  9  16  25  36  49  64
+ 1  4  9  16  25  36  49  64
+ 1  4  9  16  25  36  49  64
+ 1  4  9  16  25  36  49  64
 
-julia> colwise == Int.(reduce(hcat, vec.(list)))
+julia> colwise == reduce(hcat, vec.(list)) .^ 2
 true
 ```
 
@@ -320,6 +326,25 @@ julia> C' == @cast _[j,i] := C[i,j]'
 true
 ```
 
+## Splats
+
+You can use a slice of an array as the arguments of a function, or a `struct`:
+
+```jldoctest mylabel
+julia> struct Tri{T} x::T; y::T; z::T end;
+
+julia> @cast triples[k] := Tri(M[:,k]...)
+4-element Array{Tri{Int64},1}:
+ Tri{Int64}(1, 2, 3)
+ Tri{Int64}(4, 5, 6)
+ Tri{Int64}(7, 8, 9)
+ Tri{Int64}(10, 11, 12)
+
+julia> ans == Base.splat(Tri).(eachcol(M))
+true
+```
+
+This one can also be done as `reinterpret(reshape, Tri{Int64}, M)`. 
 ## Arrays of functions
 
 Besides arrays of numbers (and arrays of arrays) you can also broadcast an array of functions,
