@@ -112,10 +112,29 @@ end
 end
 
 @testset "tuples" begin
+    # stack acts on vectors of tuples
     x = rand(3, 5)
     @cast vi[j,k] := findmax(x[:, k])[j]
     @test vi[1,1] == maximum(x[:,1])
     @test vi[2,2] == argmax(x[:,2])
+
+    # and on tuples of vectors!
+    vs = (ones(4), rand(4), zeros(4))
+    @cast xs[i,j] := vs[j][i]
+    @test xs[4,3] == 0
+    @test (@cast _[j,i] := vs[j][i] lazy=false) isa Matrix
+
+    # construction from vectors
+    y = rand(Int8, 5,4,3)
+    @cast z[j,i] := Tuple(y[i,j,:])
+    @test z[1,2] == Tuple(y[2,1,:])
+
+    # construction with if else
+    @cast tri[i,j,c] := tuple(c==1 ? i : 0, c==2 ? j : 0)  (i in 1:3, j in 1:5, c in 1:2)
+    @test all(x -> x[2]==0, tri[:,:,1])
+    @test (x->x[2]).(tri[:,:,2]) == [1,1,1] .* (1:5)'
+    @cast tri[i,j,c] = (c==1 ? i^2 : 0, ifelse(c==2, j^2, 0))  # no "tuple", sizes inferred, ifelse
+    @test tri[3,2,1] == (3^2, 0)
 end
 
 @testset "splats" begin
