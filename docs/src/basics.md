@@ -345,6 +345,23 @@ true
 ```
 
 This one can also be done as `reinterpret(reshape, Tri{Int64}, M)`. 
+But what would be smarter in the general case is to do one splat, not many:
+
+```julia-repl
+julia> Tri.(eachrow(M)...)
+4-element Vector{Tri{Int64}}:
+ Tri{Int64}(1, 2, 3)
+ Tri{Int64}(4, 5, 6)
+ Tri{Int64}(7, 8, 9)
+ Tri{Int64}(10, 11, 12)
+
+julia> @btime Base.splat(tuple).(eachcol(m))  setup=(m=rand(4,100));
+  38.041 μs (1411 allocations: 48.33 KiB)
+
+julia> @btime tuple.(eachrow(m)...)  setup=(m=rand(4,100));
+  824.256 ns (12 allocations: 4.06 KiB)
+```
+
 ## Arrays of functions
 
 Besides arrays of numbers (and arrays of arrays) you can also broadcast an array of functions,
