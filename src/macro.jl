@@ -520,7 +520,6 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
     # and arrays of functions, using apply:
     @capture(ex, funs_[ijk__](args__) ) &&
         return :( Core._apply($funs[$(ijk...)], $(args...) ) )
-    # splats
 
     # Apart from those, readycast acts only on lone tensors:
     @capture(ex, A_[ijk__]) || return ex
@@ -653,17 +652,21 @@ function recursemacro(ex::Expr, canon, store::NamedTuple, call::CallInfo)
     end
 
     # Handle splatted slices -- need to be caught early
-    if @capture(ex, fun_(A_[ijk__]...)) && any(iscolon, ijk) && begin
-            # println("splat!")
-            revcode = map(i -> iscolon(i) ? :* : :(:), ijk)
-            fex = :( $fun.(TensorCast.sliceview($A, ($(revcode...),))...) )
-            fA = maybepush(fex, store)
-            ijknew = filter(!iscolon, ijk)
-            newex = :($fA[$(ijknew...)])
-            # @show ex newex
-            return newex
+    if @capture(ex, fun_(args__)) && any(a -> @capture(a, (A_[ijk__]...)), args) && any(iscolon, ijk)
+        newargs = map(args) do arg
+            if @capture(arg, (A_[ijk__]...)) && any(iscolon, ijk)
+                revcode = map(i -> iscolon(i) ? :* : :(:), ijk)
+                sliced = :( TensorCast.sliceview($A, ($(revcode...),)) )
+                sym = maybepush(sliced, store)
+                indpost = filter(!iscolon, ijk)
+                :(($sym[$(indpost...)])...)
+            else
+                arg
+            end
         end
+        return :( $fun($(newargs...)) )
     end
+
     # Tidy up indices, A[i,j][k] will be hit on different rounds...
     if @capture(ex, A_[ijk__])
         if !(A isa Symbol)  # this check allows some tests which have c[c] etc.

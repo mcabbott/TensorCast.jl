@@ -144,8 +144,8 @@ end
     @test z′[3,4] == Tuple(y[4,3,:])
 
     # with other arguments, they have to come first at the moment:
-    @test_skip @cast z2[j,i] := tuple(i, j, y[i,j,:]...)
-    # @test z2[4,5] == (5, 4, y[5,4,:]...)
+    @cast z2[j,i] := tuple(i, j, y[i,j,:]...)
+    @test z2[4,5] == (5, 4, y[5,4,:]...)
 
 
     struct Quad x; y; z; t; end
