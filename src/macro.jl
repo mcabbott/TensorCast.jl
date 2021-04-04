@@ -938,8 +938,13 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
 
     if save && length(ijk)>0 && A != :_
         N = length(ijk)
-        str = "expected a $N-tensor $A[" * join(ijk, ", ") * "]"
-        push!(store.assert, :( $A isa Tuple || Base.ndims($A)==$N || throw(ArgumentError($str))) )
+        if N == 1
+            str = "expected a vector or tuple $A[" * join(ijk, ", ") * "]"
+            push!(store.assert, :( $A isa Tuple || Base.ndims($A)==$N || Base.throw(ArgumentError($str))) )
+        else
+            str = "expected a $N-tensor $A[" * join(ijk, ", ") * "]"
+            push!(store.assert, :( Base.ndims($A)==$N || Base.throw(ArgumentError($str))) )
+        end
     end
 
     if length(flat)==2 && flat[1]==flat[2] # allow for diag, A[i,i]
