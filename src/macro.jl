@@ -521,12 +521,6 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
     @capture(ex, funs_[ijk__](args__) ) &&
         return :( Core._apply($funs[$(ijk...)], $(args...) ) )
     # splats
-    @capture(ex, fun_(pre__, arg_...)) && containsindexing(arg) && begin
-        @gensym splat ys
-        xs = [gensym(Symbol(:x, i)) for i in 1:length(pre)]
-        push!(store.main, :( local $splat($(xs...), $ys) = $fun($(xs...), $ys...) ))
-        return :( $splat($(pre...), $arg) )
-    end
 
     # Apart from those, readycast acts only on lone tensors:
     @capture(ex, A_[ijk__]) || return ex
@@ -658,6 +652,18 @@ function recursemacro(ex::Expr, canon, store::NamedTuple, call::CallInfo)
         ex = scalar ? :($name) :  :($name[$(ind...)])
     end
 
+    # Handle splatted slices -- need to be caught early
+    if @capture(ex, fun_(A_[ijk__]...)) && any(iscolon, ijk) && begin
+            # println("splat!")
+            revcode = map(i -> iscolon(i) ? :* : :(:), ijk)
+            fex = :( $fun.(TensorCast.sliceview($A, ($(revcode...),))...) )
+            fA = maybepush(fex, store)
+            ijknew = filter(!iscolon, ijk)
+            newex = :($fA[$(ijknew...)])
+            # @show ex newex
+            return newex
+        end
+    end
     # Tidy up indices, A[i,j][k] will be hit on different rounds...
     if @capture(ex, A_[ijk__])
         if !(A isa Symbol)  # this check allows some tests which have c[c] etc.
