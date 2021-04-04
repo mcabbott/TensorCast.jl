@@ -147,7 +147,6 @@ end
     @cast z2[j,i] := tuple(i, j, y[i,j,:]...)
     @test z2[4,5] == (5, 4, y[5,4,:]...)
 
-
     struct Quad x; y; z; t; end
     @cast z3[i,j] := Quad(y[i,:,j]...)
     @test z3[2,3] == Quad(y[2,:,3]...)

@@ -620,11 +620,13 @@ end
 """
     recursemacro(@reduce sum(i) A[i,j]) -> G[j]
 
-Walks itself over RHS to look for `@reduce ...`, and replace with result,
+Walks itself over RHS, originally to look for `@reduce ...`, and replace with result,
 pushing calculation steps into store.
 
-Also a convenient place to tidy all indices, including e.g. `fun(M[:,j],N[j]).same[i']`.
-And to handle naked indices, `i` => `axes(M,1)[i]` but not exactly like that.
+Starts from the outside and works in, which makes it useful for other things:
+* Handle naked indices, `i` => `axes(M,1)[i]` but not exactly like that, stopping before this sees `A[i]`.
+* Catch splats so that `f(M[:,c]...)` can become `f.(eachrow(M)...)` not `(splat(f)).(eachcol(M))`.
+* Tidy all indices, including e.g. `fun(M[:,j], N[j]).same[i']`.
 """
 function recursemacro(ex::Expr, canon, store::NamedTuple, call::CallInfo)
 
@@ -651,17 +653,31 @@ function recursemacro(ex::Expr, canon, store::NamedTuple, call::CallInfo)
         ex = scalar ? :($name) :  :($name[$(ind...)])
     end
 
-    # Handle splatted slices -- need to be caught early
+    # Handle splatted slices -- walking from inside outwards would slice the wrong way.
     if @capture(ex, fun_(args__)) && any(a -> @capture(a, (A_[ijk__]...)), args) && any(iscolon, ijk)
         newargs = map(args) do arg
             if @capture(arg, (A_[ijk__]...)) && any(iscolon, ijk)
-                revcode = map(i -> iscolon(i) ? :* : :(:), ijk)
-                sliced = :( TensorCast.sliceview($A, ($(revcode...),)) )
-                sym = maybepush(sliced, store)
                 indpost = filter(!iscolon, ijk)
+                if indexin(indpost, canon) == 1:length(indpost)
+                    Aperm = A
+                    revcode = map(i -> iscolon(i) ? :* : :(:), ijk)
+                else
+                    perm = indexin(canon, ijk)
+                    while isnothing(last(perm)) # trim nothings off end
+                        pop!(perm)
+                    end
+                    indpost = canon[1:length(perm)]
+                    revcode = vcat(map(_ -> :*, perm), fill(:(:), count(iscolon, ijk)))
+                    for (d,i) in enumerate(ijk) # append positions of colons
+                        iscolon(i) && push!(perm, d)
+                    end
+                    Aperm = :( TensorCast.transmute($A, $(Tuple(perm))) )
+                end
+                sliced = :( TensorCast.sliceview($Aperm, ($(revcode...),)) )
+                sym = maybepush(sliced, store)
                 :(($sym[$(indpost...)])...)
             else
-                arg
+                recursemacro(arg, canon, store, call)
             end
         end
         return :( $fun($(newargs...)) )
