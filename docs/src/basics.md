@@ -205,6 +205,26 @@ as `size(A)` is known:
 julia> @cast A[i,j] = 10 * collect(1:12)[i⊗j];
 ```
 
+If the right hand side is independent of an index, then the same result is repeated. 
+The range of the index must still be known:
+
+```jldoctest mylabel
+julia> @cast R[r,(n,c)] := M[r,c]^2  (n in 1:3)
+3×12 Array{Int64,2}:
+ 1  1  1  16  16  16  49  49  49  100  100  100
+ 4  4  4  25  25  25  64  64  64  121  121  121
+ 9  9  9  36  36  36  81  81  81  144  144  144
+
+julia> R == repeat(M .^ 2, inner=(1,3))
+true
+
+julia> @cast R[r,(c,n)] = M[r,c]  # repeat(M, outer=(1,3)), uses size(R)
+3×12 Array{Int64,2}:
+ 1  4  7  10  1  4  7  10  1  4  7  10
+ 2  5  8  11  2  5  8  11  2  5  8  11
+ 3  6  9  12  3  6  9  12  3  6  9  12
+```
+
 ## Glue & reshape
 
 As a less trivial example of these combined indices, here is one way to combine a list of matrices
@@ -248,22 +268,22 @@ Mostly the indices appearing in `@cast` expressions are just notation, to indica
 But if an index appears outside of square brackets, this is understood as a value, implemented by broadcasting over a range (appropriately permuted):
 
 ```jldoctest
-julia> @cast rat[i,j] := 0 * M[i,j] + i // j
+julia> @cast rat[i,j] := 0 * M[i,j] + i // j  # here M fixes index ranges
 3×4 Array{Rational{Int64},2}:
  1//1  1//2  1//3  1//4
  2//1  1//1  2//3  1//2
  3//1  3//2  1//1  3//4
 
-julia> rat == @cast _[i,j] := axes(M,1)[i] // axes(M,2)[j]  # more verbose @cast
-true
-
 julia> rat == axes(M,1) .// transpose(axes(M,2))  # what it aims to generate
 true
 
-julia> @cast _[r,c] := r + 10c  (r in 1:2, c in 1:7)  # no array for range inference
-2×7 Array{Int64,2}:
- 11  21  31  41  51  61  71
- 12  22  32  42  52  62  72
+julia> using OffsetArrays
+
+julia> @cast _[r,c] := r^2 + c^2  (r in -1:1, c in -7:7)
+3×15 OffsetArray(::Array{Int64,2}, -1:1, -7:7) with eltype Int64 with indices -1:1×-7:7:
+ 50  37  26  17  10  5  2  1  2  5  10  17  26  37  50
+ 49  36  25  16   9  4  1  0  1  4   9  16  25  36  49
+ 50  37  26  17  10  5  2  1  2  5  10  17  26  37  50
 ```
 
 Writing `$i` will interpolate the variable `i`, distinct from the index `i`:
@@ -324,6 +344,10 @@ julia> @cast _[i,j] := C[i,j]'
 
 julia> C' == @cast _[j,i] := C[i,j]'
 true
+
+julia> @cast cubes[1,k′] := (k')^3  (k' in 1:5)  # k' outside square brackets
+1×5 Array{Int64,2}:
+ 1  8  27  64  125
 ```
 
 ## Splats
@@ -344,7 +368,8 @@ julia> ans == Base.splat(Tri).(eachcol(M))
 true
 ```
 
-This one can also be done as `reinterpret(reshape, Tri{Int64}, M)`. 
+This one can also be done as `reinterpret(reshape, Tri{Int64}, M)`.
+
 ## Arrays of functions
 
 Besides arrays of numbers (and arrays of arrays) you can also broadcast an array of functions,
@@ -383,7 +408,7 @@ julia> D2 = @cast _[i,i] := V[i]
   ⋅   ⋅  30
 ```
 
-All indices appearing on the left must also appear on the right. 
+All indices appearing on the right must also appear on the left. 
 There is no implicit sum over repeated indices on different tensors.
 To sum over things, you need `@reduce` or `@matmul`, described on the next page.
 
