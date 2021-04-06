@@ -690,13 +690,10 @@ function recursemacro(i, canon, store::NamedTuple, call::CallInfo)
     @nospecialize i
 
     i in canon || return i
-
     # For naked indices, replace i with roughly axes(A,1)[i] etc:
     push!(store.need, i)
     ax = axwrap(i)
-    axname = gensym(:axis)
-    push!(store.main, :( local $axname = $ax ))
-    return :( $axname[$i] )
+    return :( $ax[$i] )
 end
 
 """
