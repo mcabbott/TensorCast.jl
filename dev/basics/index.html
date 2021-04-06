@@ -94,7 +94,20 @@ julia&gt; @cast A[i,j] := collect(1:12)[i⊗j]  (i ∈ 1:4, j ∈ 1:3)
  1  5   9
  2  6  10
  3  7  11
- 4  8  12</code></pre><p>Writing into a given array with <code>=</code> instead of <code>:=</code> will also remove ambiguities,  as <code>size(A)</code> is known:</p><pre><code class="language-julia-repl">julia&gt; @cast A[i,j] = 10 * collect(1:12)[i⊗j];</code></pre><h2 id="Glue-and-reshape"><a class="docs-heading-anchor" href="#Glue-and-reshape">Glue &amp; reshape</a><a id="Glue-and-reshape-1"></a><a class="docs-heading-anchor-permalink" href="#Glue-and-reshape" title="Permalink"></a></h2><p>As a less trivial example of these combined indices, here is one way to combine a list of matrices into one large grid. Notice that <code>x</code> varies faster than <code>i</code>, and so on – the linear order of index <code>x⊗i</code> agrees with that of two indices <code>x,i</code>. </p><pre><code class="language-julia-repl">julia&gt; list = [fill(k,2,2) for k in 1:8];
+ 4  8  12</code></pre><p>Writing into a given array with <code>=</code> instead of <code>:=</code> will also remove ambiguities,  as <code>size(A)</code> is known:</p><pre><code class="language-julia-repl">julia&gt; @cast A[i,j] = 10 * collect(1:12)[i⊗j];</code></pre><p>If the right hand side is independent of an index, then the same result is repeated.  The range of the index must still be known:</p><pre><code class="language-julia-repl">julia&gt; @cast R[r,(n,c)] := M[r,c]^2  (n in 1:3)
+3×12 Array{Int64,2}:
+ 1  1  1  16  16  16  49  49  49  100  100  100
+ 4  4  4  25  25  25  64  64  64  121  121  121
+ 9  9  9  36  36  36  81  81  81  144  144  144
+
+julia&gt; R == repeat(M .^ 2, inner=(1,3))
+true
+
+julia&gt; @cast R[r,(c,n)] = M[r,c]  # repeat(M, outer=(1,3)), uses size(R)
+3×12 Array{Int64,2}:
+ 1  4  7  10  1  4  7  10  1  4  7  10
+ 2  5  8  11  2  5  8  11  2  5  8  11
+ 3  6  9  12  3  6  9  12  3  6  9  12</code></pre><h2 id="Glue-and-reshape"><a class="docs-heading-anchor" href="#Glue-and-reshape">Glue &amp; reshape</a><a id="Glue-and-reshape-1"></a><a class="docs-heading-anchor-permalink" href="#Glue-and-reshape" title="Permalink"></a></h2><p>As a less trivial example of these combined indices, here is one way to combine a list of matrices into one large grid. Notice that <code>x</code> varies faster than <code>i</code>, and so on – the linear order of index <code>x⊗i</code> agrees with that of two indices <code>x,i</code>. </p><pre><code class="language-julia-repl">julia&gt; list = [fill(k,2,2) for k in 1:8];
 
 julia&gt; @cast mat[x⊗i, y⊗j] |= list[i⊗j][x,y]  i in 1:2
 4×8 Array{Int64,2}:
@@ -115,22 +128,22 @@ true</code></pre><p>Alternatively, this reshapes each matrix to a vector, and ma
  1  4  9  16  25  36  49  64
 
 julia&gt; colwise == reduce(hcat, vec.(list)) .^ 2
-true</code></pre><h2 id="Index-values"><a class="docs-heading-anchor" href="#Index-values">Index values</a><a id="Index-values-1"></a><a class="docs-heading-anchor-permalink" href="#Index-values" title="Permalink"></a></h2><p>Mostly the indices appearing in <code>@cast</code> expressions are just notation, to indicate what permutation / reshape is required.  But if an index appears outside of square brackets, this is understood as a value, implemented by broadcasting over a range (appropriately permuted):</p><pre><code class="language-julia-repl">julia&gt; @cast rat[i,j] := 0 * M[i,j] + i // j
+true</code></pre><h2 id="Index-values"><a class="docs-heading-anchor" href="#Index-values">Index values</a><a id="Index-values-1"></a><a class="docs-heading-anchor-permalink" href="#Index-values" title="Permalink"></a></h2><p>Mostly the indices appearing in <code>@cast</code> expressions are just notation, to indicate what permutation / reshape is required.  But if an index appears outside of square brackets, this is understood as a value, implemented by broadcasting over a range (appropriately permuted):</p><pre><code class="language-julia-repl">julia&gt; @cast rat[i,j] := 0 * M[i,j] + i // j  # here M fixes index ranges
 3×4 Array{Rational{Int64},2}:
  1//1  1//2  1//3  1//4
  2//1  1//1  2//3  1//2
  3//1  3//2  1//1  3//4
 
-julia&gt; rat == @cast _[i,j] := axes(M,1)[i] // axes(M,2)[j]  # more verbose @cast
-true
-
 julia&gt; rat == axes(M,1) .// transpose(axes(M,2))  # what it aims to generate
 true
 
-julia&gt; @cast _[r,c] := r + 10c  (r in 1:2, c in 1:7)  # no array for range inference
-2×7 Array{Int64,2}:
- 11  21  31  41  51  61  71
- 12  22  32  42  52  62  72</code></pre><p>Writing <code>$i</code> will interpolate the variable <code>i</code>, distinct from the index <code>i</code>:</p><pre><code class="language-julia-repl">julia&gt; i, k = 10, 100;
+julia&gt; using OffsetArrays
+
+julia&gt; @cast _[r,c] := r^2 + c^2  (r in -1:1, c in -7:7)
+3×15 OffsetArray(::Array{Int64,2}, -1:1, -7:7) with eltype Int64 with indices -1:1×-7:7:
+ 50  37  26  17  10  5  2  1  2  5  10  17  26  37  50
+ 49  36  25  16   9  4  1  0  1  4   9  16  25  36  49
+ 50  37  26  17  10  5  2  1  2  5  10  17  26  37  50</code></pre><p>Writing <code>$i</code> will interpolate the variable <code>i</code>, distinct from the index <code>i</code>:</p><pre><code class="language-julia-repl">julia&gt; i, k = 10, 100;
 
 julia&gt; @cast ones(3)[i] = i + $i + k
 3-element Vector{Float64}:
@@ -162,7 +175,11 @@ julia&gt; @cast _[i,j] := C[i,j]&#39;
  2-1im  4-1im
 
 julia&gt; C&#39; == @cast _[j,i] := C[i,j]&#39;
-true</code></pre><h2 id="Splats"><a class="docs-heading-anchor" href="#Splats">Splats</a><a id="Splats-1"></a><a class="docs-heading-anchor-permalink" href="#Splats" title="Permalink"></a></h2><p>You can use a slice of an array as the arguments of a function, or a <code>struct</code>:</p><pre><code class="language-julia-repl">julia&gt; struct Tri{T} x::T; y::T; z::T end;
+true
+
+julia&gt; @cast cubes[1,k′] := (k&#39;)^3  (k&#39; in 1:5)  # k&#39; outside square brackets
+1×5 Array{Int64,2}:
+ 1  8  27  64  125</code></pre><h2 id="Splats"><a class="docs-heading-anchor" href="#Splats">Splats</a><a id="Splats-1"></a><a class="docs-heading-anchor-permalink" href="#Splats" title="Permalink"></a></h2><p>You can use a slice of an array as the arguments of a function, or a <code>struct</code>:</p><pre><code class="language-julia-repl">julia&gt; struct Tri{T} x::T; y::T; z::T end;
 
 julia&gt; @cast triples[k] := Tri(M[:,k]...)
 4-element Array{Tri{Int64},1}:
@@ -172,7 +189,7 @@ julia&gt; @cast triples[k] := Tri(M[:,k]...)
  Tri{Int64}(10, 11, 12)
 
 julia&gt; ans == Base.splat(Tri).(eachcol(M))
-true</code></pre><p>This one can also be done as <code>reinterpret(reshape, Tri{Int64}, M)</code>. </p><h2 id="Arrays-of-functions"><a class="docs-heading-anchor" href="#Arrays-of-functions">Arrays of functions</a><a id="Arrays-of-functions-1"></a><a class="docs-heading-anchor-permalink" href="#Arrays-of-functions" title="Permalink"></a></h2><p>Besides arrays of numbers (and arrays of arrays) you can also broadcast an array of functions, which is done by calling <code>Core._apply(f, xs...) = f(xs...)</code>: </p><pre><code class="language-julia-repl">julia&gt; funs = [identity, sqrt];
+true</code></pre><p>This one can also be done as <code>reinterpret(reshape, Tri{Int64}, M)</code>.</p><h2 id="Arrays-of-functions"><a class="docs-heading-anchor" href="#Arrays-of-functions">Arrays of functions</a><a id="Arrays-of-functions-1"></a><a class="docs-heading-anchor-permalink" href="#Arrays-of-functions" title="Permalink"></a></h2><p>Besides arrays of numbers (and arrays of arrays) you can also broadcast an array of functions, which is done by calling <code>Core._apply(f, xs...) = f(xs...)</code>: </p><pre><code class="language-julia-repl">julia&gt; funs = [identity, sqrt];
 
 julia&gt; @cast applied[i,j] := funs[i](V[j])
 2×3 Array{Real,2}:
@@ -192,4 +209,4 @@ julia&gt; D2 = @cast _[i,i] := V[i]
 3×3 Diagonal{Int64,Array{Int64,1}}:
  10   ⋅   ⋅
   ⋅  20   ⋅
-  ⋅   ⋅  30</code></pre><p>All indices appearing on the left must also appear on the right.  There is no implicit sum over repeated indices on different tensors. To sum over things, you need <code>@reduce</code> or <code>@matmul</code>, described on the next page.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../reduce/">Reduction »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Sunday 4 April 2021 03:58">Sunday 4 April 2021</span>. Using Julia version 1.5.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+  ⋅   ⋅  30</code></pre><p>All indices appearing on the right must also appear on the left.  There is no implicit sum over repeated indices on different tensors. To sum over things, you need <code>@reduce</code> or <code>@matmul</code>, described on the next page.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../reduce/">Reduction »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Tuesday 6 April 2021 15:45">Tuesday 6 April 2021</span>. Using Julia version 1.5.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
