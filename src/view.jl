@@ -28,7 +28,15 @@ mul!(Z::AbstractArray{T,0}, A,B) where {T} = copyto!(Z, A * B)
 """
     star(x,y,...)
 
-Used for multiplying axes now, not sizes.
+Used for multiplying axes now, always producing a `OneTo` whose length
+is the product of the given ranges.
 """
 star(x, y) = Base.OneTo(length(x) * length(y))
 star(x,y,zs...) = star(star(x,y), zs...)
+
+"""
+    onlyfirst(x, ys...) = x
+
+Used with arguments which are there just to set the shape of broadcasting.
+"""
+onlyfirst(x, ys...) = x

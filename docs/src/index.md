@@ -23,6 +23,7 @@ New features in 0.4:
 - Indices can appear ouside of indexing: `@cast A[i,j] = i+j` translates to `A .= axes(A,1) .+ axes(A,2)'`
 - The ternary operator `? :` can appear on the right, and will be broadcast correctly.
 - All operations should now support [OffsetArrays.jl](https://github.com/JuliaArrays/OffsetArrays.jl).
+- You can `repeat` by broadcasting over indices not appearing on the right, such as `@cast r[i,(k,j)] = m[i,j]`
 
 ## Pages
 
