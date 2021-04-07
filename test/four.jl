@@ -114,6 +114,10 @@ end
     @cast E[(j,i),k] := A[i,j]^2  (k in 10:11)  # RHS indep k
     @test E[:,11] == vec(A') .^ 2
 
+    # dropdims
+    @cast F[i,k,j] := A[i,j]  k in 5:5  # a trivial dimension not indexed from 1
+    @test A == @cast _[i,j] := F[i,_,j]
+
     # reduction
     @reduce C[_,j] := sum(i) A[i,j]
     @test axes(C) == (1:1, 7:15)
