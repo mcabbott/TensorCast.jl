@@ -902,7 +902,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
         if iscolon(i)
             if i isa QuoteNode && A != :_
                 str = "fixed size in $A[" * join(ijk, ", ") * "]" # DimensionMismatch("fixed size in M[i, \$(QuoteNode(5))]: size(M, 2) == 5") TODO print more nicely
-                push!(store.mustassert, :( Base.size($A,$d)==$(i.value) || throw(ArgumentError($str))) )
+                push!(store.mustassert, :( Base.@boundscheck Base.size($A,$d)==$(i.value) || throw(DimensionMismatch($str))) )
             end
             continue
         end
@@ -911,7 +911,7 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
             push!(outaxes, Base.OneTo(1))
             if i == :_ && A != :_ && save
                 str = "underscore in $A[" * join(ijk, ", ") * "]"
-                push!(store.mustassert, :( Base.size($A,$d)==1 || throw(ArgumentError($str))) )
+                push!(store.mustassert, :( Base.@boundscheck Base.size($A,$d)==1 || throw(DimensionMismatch($str))) )
             end
             continue
         end
@@ -940,10 +940,10 @@ function indexparse(A, ijk::Vector, store=nothing, call=nothing; save=false)
         N = length(ijk)
         if N == 1
             str = "expected a vector or tuple $A[" * join(ijk, ", ") * "]"
-            push!(store.assert, :( $A isa Tuple || Base.ndims($A)==$N || Base.throw(ArgumentError($str))) )
+            push!(store.assert, :( Base.@boundscheck $A isa Tuple || Base.ndims($A)==$N || Base.throw(ArgumentError($str))) )
         else
             str = "expected a $N-tensor $A[" * join(ijk, ", ") * "]"
-            push!(store.assert, :( Base.ndims($A)==$N || Base.throw(ArgumentError($str))) )
+            push!(store.assert, :( Base.@boundscheck Base.ndims($A)==$N || Base.throw(ArgumentError($str))) )
         end
     end
 
@@ -997,7 +997,7 @@ function innerparse(firstA, ijk, store::NamedTuple, call::CallInfo; save=false)
             push!(innerflat, j)
             saveonesize(j, :(Base.OneTo($s)), store) # save=true on LHS only for in-place, save this anyway
         elseif isconstant(i)
-            i == :_ && save && push!(store.mustassert, :(size($firstA, $d)==1 || throw(ArgumentError("inner underscore"))) )
+            i == :_ && save && push!(store.mustassert, :( Base.@boundscheck size($firstA, $d)==1 || throw(DimensionMismatch("inner underscore"))) )
         else
             push!(innerflat, i)
         end
@@ -1025,14 +1025,14 @@ function optionparse(opt, store::NamedTuple, call::CallInfo)
             saveonesize(tensorprimetidy(i), :(Base.OneTo($ax)), store)
         else
             ax1 = maybepushtop(ax, store, :axis)
-            push!(store.top, :($ax1 isa AbstractUnitRange || throw(ArgumentError("index ranges must have step 1"))))
+            push!(store.top, :($ax1 isa AbstractUnitRange || Base.throw(DimensionMismatch("index ranges must have step 1"))))
             if isdefined(call.mod, :OffsetArrays)
                 ax2, off = gensym(:axis), gensym(:offset)
                 push!(store.top, :(local $off = first($ax1)-1))
                 push!(store.top, :(local $ax2 = $ax1 isa Base.OneTo ? $ax1 : OffsetArrays.IdOffsetRange($ax1 .- $off, $off)))
                 saveonesize(tensorprimetidy(i), ax2, store)
             else
-                push!(store.top, :(first($ax1)==1 || throw(ArgumentError("you must load OffsetArrays to allow index ranges not starting at 1"))))
+                push!(store.top, :(first($ax1)==1 || Base.throw(ArgumentError("you must load OffsetArrays to allow index ranges not starting at 1"))))
                 saveonesize(tensorprimetidy(i), :(Base.OneTo($ax1)), store)
             end
         end
@@ -1076,7 +1076,7 @@ function saveonesize(ind, ax, store::NamedTuple)
     elseif store.dict[ind] != ax  # no need to save identical expressions
         if isa(ind, Symbol)
             str = "range of index $ind must agree"
-            push!(store.assert, :( $(store.dict[ind]) == $ax || throw(ArgumentError($str))) )
+            push!(store.assert, :( Base.@boundscheck $(store.dict[ind]) == $ax || Base.throw(DimensionMismatch($str))) )
         end
     end
     ind
@@ -1131,7 +1131,7 @@ function sizeinfer(store::NamedTuple, call::CallInfo)
                 d != nothing && (sizes[d] = rat)
 
                 str = "expected integer multiples, when calculating range of $i from range of $(join(pair.first, " ⊗ "))"
-                push!(store.mustassert, :( ($num % $den)==0 || throw(ArgumentError($str))) )
+                push!(store.mustassert, :( Base.@boundscheck ($num % $den)==0 || Base.throw(ArgumentError($str))) )
             end
         end
     end
@@ -1565,7 +1565,7 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         zed isa Symbol || @capture(zed, ZZ_.field_) || error("wtf")
         newleft = parsed.left
         str = "expected a 0-tensor $zed[]"
-        push!(store.mustassert, :( Base.ndims($zed)==0 || throw(ArgumentError($str))) )
+        push!(store.mustassert, :( Base.@boundscheck Base.ndims($zed)==0 || Base.throw(ArgumentError($str))) )
     else
         newleft = standardise(parsed.left, store, call)
         @capture(newleft, zed_[ijk__]) || throw(MacroError("failed to parse LHS correctly, $(parsed.left) -> $newleft"))
