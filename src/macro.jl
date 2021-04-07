@@ -1600,11 +1600,8 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         newleft = standardise(parsed.left, store, call)
         @capture(newleft, zed_[ijk__]) || throw(MacroError("failed to parse LHS correctly, $(parsed.left) -> $newleft"))
 
-        if !(zed isa Symbol) # then standardise did something!
+        if newleft != parsed.left  # then standardise did something!
             push!(call.flags, :showfinal)
-            Zsym = gensym(:reverse)
-            push!(out, :( local $Zsym = $zed ) )
-            zed = Zsym
         end
     end
 
@@ -1629,7 +1626,12 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
     end
 
     if :showfinal in call.flags
-        push!(out, parsed.name)
+        A = parsed.name
+        if A isa Symbol || @capture(A, AA_.ff_)
+        else
+            A = Symbol(A,"_val") # exact same symbol is used by standardise()
+        end
+        push!(out, A)
     end
 
     return out
