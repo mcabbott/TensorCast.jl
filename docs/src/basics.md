@@ -50,7 +50,7 @@ end
 
 The function `transmute` is a generalised version of `permutedims`. It transposes `M`,
 and then places `V`'s first dimension to lie along the second dimension -- also a transpose,
-here, it allows for things like `transmute(M, (2,nothing,1))`. This is from [TransmuteDims.jl](https://github.com/mcabbott/TransmuteDims.jl).
+here, but it allows for things like `transmute(M, (2,nothing,1))`. This is from [TransmuteDims.jl](https://github.com/mcabbott/TransmuteDims.jl).
 
 Of course `@__dot__` is the full name of the broadcasting macro `@.`, 
 which simply produces `A = pelican .+ 10 .* termite`.
@@ -83,7 +83,7 @@ Combining this with slicing from `M[:,j]` is a convenient way to perform `mapsli
 
 ```jldoctest mylabel
 julia> @cast C[i,j] := cumsum(M[:,j])[i]
-3×4 Array{Int64,2}:
+ 3×4 stack(::Array{Array{Int64,1},1}) with eltype Int64:
  1   4   7  10
  3   9  15  21
  6  15  24  33
@@ -267,14 +267,14 @@ true
 Mostly the indices appearing in `@cast` expressions are just notation, to indicate what permutation / reshape is required. 
 But if an index appears outside of square brackets, this is understood as a value, implemented by broadcasting over a range (appropriately permuted):
 
-```jldoctest
-julia> @cast rat[i,j] := 0 * M[i,j] + i // j  # here M fixes index ranges
-3×4 Array{Rational{Int64},2}:
- 1//1  1//2  1//3  1//4
- 2//1  1//1  2//3  1//2
- 3//1  3//2  1//1  3//4
+```jldoctest mylabel
+julia> @cast _[i,j] := M[i,j]^2 * (i >= j)
+3×4 Array{Int64,2}:
+ 1   0   0  0
+ 4  25   0  0
+ 9  36  81  0
 
-julia> rat == axes(M,1) .// transpose(axes(M,2))  # what it aims to generate
+julia> ans == M .^2 .* (axes(M,1) .>= transpose(axes(M,2)))  # what this generates
 true
 
 julia> using OffsetArrays
@@ -288,7 +288,7 @@ julia> @cast _[r,c] := r^2 + c^2  (r in -1:1, c in -7:7)
 
 Writing `$i` will interpolate the variable `i`, distinct from the index `i`:
 
-```jldoctest
+```jldoctest mylabel
 julia> i, k = 10, 100;
 
 julia> @cast ones(3)[i] = i + $i + k

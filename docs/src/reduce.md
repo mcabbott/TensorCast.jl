@@ -18,7 +18,7 @@ julia> @reduce S[i] := sum(j) M[i,j] + 1000
 julia> @pretty @reduce S[i] := sum(j) M[i,j] + 1000
 begin
     ndims(M) == 2 || throw(ArgumentError("expected a 2-tensor M[i, j]"))
-    S = dropdims(sum(@__dot__(M + 1000), dims = 2), dims=2)
+    S = dropdims(sum(@__dot__(M + 1000), dims = 2), dims = 2)
 end
 ```
 
