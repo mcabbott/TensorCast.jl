@@ -20,7 +20,7 @@ begin
     local panda = transmute(M, (2, 1))
     local bat = transmute(V, (nothing, 1))
     A = @__dot__(panda + 10bat)
-end</code></pre><p>The function <code>transmute</code> is a generalised version of <code>permutedims</code>. It transposes <code>M</code>, and then places <code>V</code>&#39;s first dimension to lie along the second dimension – also a transpose, here, it allows for things like <code>transmute(M, (2,nothing,1))</code>. This is from <a href="https://github.com/mcabbott/TransmuteDims.jl">TransmuteDims.jl</a>.</p><p>Of course <code>@__dot__</code> is the full name of the broadcasting macro <code>@.</code>,  which simply produces <code>A = pelican .+ 10 .* termite</code>. And the animal names (in place of generated symbols) are from the indispensible <a href="https://github.com/MikeInnes/MacroTools.jl">MacroTools.jl</a>.</p><h2 id="Slicing"><a class="docs-heading-anchor" href="#Slicing">Slicing</a><a id="Slicing-1"></a><a class="docs-heading-anchor-permalink" href="#Slicing" title="Permalink"></a></h2><p>Here are two ways to slice <code>M</code> into its columns, both of these produce <code>S = sliceview(M, (:, *))</code> which is simply <code>collect(eachcol(M))</code>:</p><pre><code class="language-julia-repl">julia&gt; @cast S[j][i] := M[i,j]
+end</code></pre><p>The function <code>transmute</code> is a generalised version of <code>permutedims</code>. It transposes <code>M</code>, and then places <code>V</code>&#39;s first dimension to lie along the second dimension – also a transpose, here, but it allows for things like <code>transmute(M, (2,nothing,1))</code>. This is from <a href="https://github.com/mcabbott/TransmuteDims.jl">TransmuteDims.jl</a>.</p><p>Of course <code>@__dot__</code> is the full name of the broadcasting macro <code>@.</code>,  which simply produces <code>A = pelican .+ 10 .* termite</code>. And the animal names (in place of generated symbols) are from the indispensible <a href="https://github.com/MikeInnes/MacroTools.jl">MacroTools.jl</a>.</p><h2 id="Slicing"><a class="docs-heading-anchor" href="#Slicing">Slicing</a><a id="Slicing-1"></a><a class="docs-heading-anchor-permalink" href="#Slicing" title="Permalink"></a></h2><p>Here are two ways to slice <code>M</code> into its columns, both of these produce <code>S = sliceview(M, (:, *))</code> which is simply <code>collect(eachcol(M))</code>:</p><pre><code class="language-julia-repl">julia&gt; @cast S[j][i] := M[i,j]
 4-element Array{SubArray{Int64,1,Array{Int64,2},Tuple{Base.Slice{Base.OneTo{Int64}},Int64},true},1}:
  [1, 2, 3]
  [4, 5, 6]   
@@ -34,7 +34,7 @@ julia&gt; @cast S2[j] := M[:,j];
 
 julia&gt; S == S2
 true</code></pre><p>We can glue slices back together with the same notation, <code>M2[i,j] := S[j][i]</code>.  Combining this with slicing from <code>M[:,j]</code> is a convenient way to perform <code>mapslices</code> operations:</p><pre><code class="language-julia-repl">julia&gt; @cast C[i,j] := cumsum(M[:,j])[i]
-3×4 Array{Int64,2}:
+ 3×4 stack(::Array{Array{Int64,1},1}) with eltype Int64:
  1   4   7  10
  3   9  15  21
  6  15  24  33
@@ -128,13 +128,13 @@ true</code></pre><p>Alternatively, this reshapes each matrix to a vector, and ma
  1  4  9  16  25  36  49  64
 
 julia&gt; colwise == reduce(hcat, vec.(list)) .^ 2
-true</code></pre><h2 id="Index-values"><a class="docs-heading-anchor" href="#Index-values">Index values</a><a id="Index-values-1"></a><a class="docs-heading-anchor-permalink" href="#Index-values" title="Permalink"></a></h2><p>Mostly the indices appearing in <code>@cast</code> expressions are just notation, to indicate what permutation / reshape is required.  But if an index appears outside of square brackets, this is understood as a value, implemented by broadcasting over a range (appropriately permuted):</p><pre><code class="language-julia-repl">julia&gt; @cast rat[i,j] := 0 * M[i,j] + i // j  # here M fixes index ranges
-3×4 Array{Rational{Int64},2}:
- 1//1  1//2  1//3  1//4
- 2//1  1//1  2//3  1//2
- 3//1  3//2  1//1  3//4
+true</code></pre><h2 id="Index-values"><a class="docs-heading-anchor" href="#Index-values">Index values</a><a id="Index-values-1"></a><a class="docs-heading-anchor-permalink" href="#Index-values" title="Permalink"></a></h2><p>Mostly the indices appearing in <code>@cast</code> expressions are just notation, to indicate what permutation / reshape is required.  But if an index appears outside of square brackets, this is understood as a value, implemented by broadcasting over a range (appropriately permuted):</p><pre><code class="language-julia-repl">julia&gt; @cast _[i,j] := M[i,j]^2 * (i &gt;= j)
+3×4 Array{Int64,2}:
+ 1   0   0  0
+ 4  25   0  0
+ 9  36  81  0
 
-julia&gt; rat == axes(M,1) .// transpose(axes(M,2))  # what it aims to generate
+julia&gt; ans == M .^2 .* (axes(M,1) .&gt;= transpose(axes(M,2)))  # what this generates
 true
 
 julia&gt; using OffsetArrays
@@ -209,4 +209,4 @@ julia&gt; D2 = @cast _[i,i] := V[i]
 3×3 Diagonal{Int64,Array{Int64,1}}:
  10   ⋅   ⋅
   ⋅  20   ⋅
-  ⋅   ⋅  30</code></pre><p>All indices appearing on the right must also appear on the left.  There is no implicit sum over repeated indices on different tensors. To sum over things, you need <code>@reduce</code> or <code>@matmul</code>, described on the next page.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../reduce/">Reduction »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Tuesday 6 April 2021 15:45">Tuesday 6 April 2021</span>. Using Julia version 1.5.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+  ⋅   ⋅  30</code></pre><p>All indices appearing on the right must also appear on the left.  There is no implicit sum over repeated indices on different tensors. To sum over things, you need <code>@reduce</code> or <code>@matmul</code>, described on the next page.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../reduce/">Reduction »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Friday 16 April 2021 17:59">Friday 16 April 2021</span>. Using Julia version 1.5.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
