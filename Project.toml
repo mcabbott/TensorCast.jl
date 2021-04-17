@@ -1,7 +1,7 @@
 name = "TensorCast"
 uuid = "02d47bb6-7ce6-556a-be16-bb1710789e2b"
 authors = ["Michael Abbott"]
-version = "0.4.0"
+version = "0.4.1"
 
 [deps]
 LazyStack = "1fad7336-0346-5a1a-a56f-a06ba010965b"
