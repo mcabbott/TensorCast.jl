@@ -262,7 +262,7 @@ function standardise(ex, store::NamedTuple, call::CallInfo; LHS=false)
         else
             # A = :( TensorCast.rview($A, $(ijcolon...)) )
             perm = filter(!isnothing, ntuple(d -> ijcolon[d]==(:) ? d : nothing, length(ijcolon)))
-            A = :( TensorCast.transmute($A, $perm) )
+            A = :( TensorCast.transmute($A, Base.Val($perm)) )
         end
         ijk = filter(!isconstant, ijk)              # remove actual constants from list,
     end
@@ -409,7 +409,7 @@ function standardglue(ex, target, store::NamedTuple, call::CallInfo)
         else
             # ex = :( $Bsym = @__dot__ TensorCast.rview($B, $(ijcolon...)) )
             perm = filter(!isnothing, ntuple(d -> ijcolon[d]==(:) ? d : nothing, length(ijcolon)))
-            ex = :( $Bsym = TensorCast.transmute.($B, Ref($perm)) )
+            ex = :( $Bsym = TensorCast.transmute.($B, Base.Val($perm)) )
         end
         push!(store.main, ex)
         B = Bsym
@@ -541,7 +541,7 @@ function readycast(ex, target, store::NamedTuple, call::CallInfo)
                 A = :( TensorCast.transmutedims($A, $perm) )
                 push!(call.flags, :collected)
             else
-                A = :( TensorCast.transmute($A, $perm) )
+                A = :( TensorCast.transmute($A, Base.Val($perm)) )
                 if ! increasing_or_zero(perm) # thus not just a reshape
                     pop!(call.flags, :collected, :ok)
                 end
@@ -1414,7 +1414,7 @@ function unmatrixshape(ex, left::Vector, right::Vector, store::NamedTuple, call:
 
     # For V'*M, you may get a Transpose row-vector, for which this is .parent:
     if length(left) == 0
-        ex = :( TensorCast.transmute($ex, (2,)) )
+        ex = :( TensorCast.transmute($ex, Base.Val((2,))) )
         length(right) == 1 && return ex # literally V'*M done,
         # but for V'*T we should reshape this .parent
     end
@@ -1525,7 +1525,7 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
             perm = Tuple(map(i -> isconstant(i) ? nothing : (_d+=1), parsed.inner))
             # ex = :(TensorCast.orient.($Asafe, Ref($code)) ) # @. would need a dollar
             # refperm = maybepush(:( Ref() ), store, :zzz)
-            ex = :(TensorCast.transmute.($Asafe, Base.Ref($perm)) )
+            ex = :(TensorCast.transmute.($Asafe, Base.Val($perm)) )
         end
     end
 
@@ -1547,7 +1547,7 @@ function newoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         else
             _d = 0
             perm = Tuple(map(i -> isconstant(i) ? nothing : (_d+=1), parsed.outer))
-            ex = :( TensorCast.transmute($ex, $perm) )
+            ex = :( TensorCast.transmute($ex, Base.Val($perm)) )
         end
     end
 
