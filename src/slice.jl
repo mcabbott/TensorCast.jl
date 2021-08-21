@@ -79,12 +79,12 @@ _ndims(A::Tuple) = 1
     :( ($(list...),) )
 end
 
-using ZygoteRules # TODO add tests?
+using ChainRulesCore # TODO add tests?
 
 # Rules moved from SliceView.jl
 
-@adjoint sliceview(A::AbstractArray, code::Tuple) =
-    sliceview(A, code), Δ -> (copy_glue(Δ, code), nothing)
+ChainRulesCore.rrule(::typeof(sliceview), A::AbstractArray, code::Tuple) =
+    sliceview(A, code), Δ -> (NoTangent(), copy_glue(Δ, code), NoTangent())
 
-@adjoint copy_glue(A::AbstractArray, code::Tuple) =
-    copy_glue(A, code), Δ -> (sliceview(Δ, code), nothing)
+ChainRulesCore.rrule(::typeof(copy_glue), A::AbstractArray, code::Tuple) =
+    copy_glue(A, code), Δ -> (NoTangent(), sliceview(Δ, code), NoTangent())
