@@ -3,16 +3,16 @@
 Install and set up:
 
 ```julia-repl
-(v1.5) pkg> add TensorCast
+(v1.6) pkg> add TensorCast
 ```
 
 ```jldoctest mylabel
 julia> using TensorCast
 
-julia> V = [10,20,30];
+julia> V = [10, 20, 30];
 
-julia> M = collect(reshape(1:12, 3,4))
-3×4 Array{Int64,2}:
+julia> M = Array(reshape(1:12, 3, 4))
+3×4 Matrix{Int64}:
  1  4  7  10
  2  5  8  11
  3  6  9  12
@@ -26,7 +26,7 @@ values of the indices:
 
 ```jldoctest mylabel
 julia> @cast A[j,i] := M[i,j] + 10 * V[i]
-4×3 Array{Int64,2}:
+4×3 Matrix{Int64}:
  101  202  303
  104  205  306
  107  208  309
@@ -63,10 +63,10 @@ both of these produce `S = sliceview(M, (:, *))` which is simply `collect(eachco
 
 ```jldoctest mylabel
 julia> @cast S[j][i] := M[i,j]
-4-element Array{SubArray{Int64,1,Array{Int64,2},Tuple{Base.Slice{Base.OneTo{Int64}},Int64},true},1}:
+4-element Vector{SubArray{Int64, 1, Matrix{Int64}, Tuple{Base.Slice{Base.OneTo{Int64}}, Int64}, true}}:
  [1, 2, 3]
- [4, 5, 6]   
- [7, 8, 9]   
+ [4, 5, 6]
+ [7, 8, 9]
  [10, 11, 12]
 
 julia> all(S[j][i] == M[i,j] for i in 1:3, j in 1:4)
@@ -83,7 +83,7 @@ Combining this with slicing from `M[:,j]` is a convenient way to perform `mapsli
 
 ```jldoctest mylabel
 julia> @cast C[i,j] := cumsum(M[:,j])[i]
- 3×4 stack(::Array{Array{Int64,1},1}) with eltype Int64:
+3×4 stack(::Vector{Vector{Int64}}) with eltype Int64:
  1   4   7  10
  3   9  15  21
  6  15  24  33
@@ -143,7 +143,7 @@ to distinguish them from index names:
 julia> col = 3;
 
 julia> @cast O[i,j] := (M[i,1], M[j,$col])
-3×3 Array{Tuple{Int64,Int64},2}:
+3×3 Matrix{Tuple{Int64, Int64}}:
  (1, 7)  (1, 8)  (1, 9)
  (2, 7)  (2, 8)  (2, 9)
  (3, 7)  (3, 8)  (3, 9)
@@ -165,11 +165,11 @@ The next-simplest version of this is precisely what the built-in function `kron`
 julia> W = 1 ./ [10,20,30,40];
 
 julia> @cast K[_, i⊗j] := V[i] * W[j]
-1×12 Array{Float64,2}:
+1×12 Matrix{Float64}:
  1.0  2.0  3.0  0.5  1.0  1.5  0.333333  0.666667  1.0  0.25  0.5  0.75
 
 julia> @cast K[1, (i,j)] := V[i] * W[j]  # identical!
-1×12 Array{Float64,2}:
+1×12 Matrix{Float64}:
  1.0  2.0  3.0  0.5  1.0  1.5  0.333333  0.666667  1.0  0.25  0.5  0.75
 
 julia> K == kron(W, V)'
@@ -186,12 +186,12 @@ If an array on the right has a combined index, then it may be ambiguous how to d
 
 ```jldoctest mylabel
 julia> @cast A[i,j] := collect(1:12)[i⊗j]  i in 1:2
-2×6 Array{Int64,2}:
+2×6 Matrix{Int64}:
  1  3  5  7   9  11
  2  4  6  8  10  12
 
 julia> @cast A[i,j] := collect(1:12)[i⊗j]  (i ∈ 1:4, j ∈ 1:3)
-4×3 Array{Int64,2}:
+4×3 Matrix{Int64}:
  1  5   9
  2  6  10
  3  7  11
@@ -210,10 +210,17 @@ The range of the index must still be known:
 
 ```jldoctest mylabel
 julia> @cast R[r,(n,c)] := M[r,c]^2  (n in 1:3)
-3×12 Array{Int64,2}:
- 1  1  1  16  16  16  49  49  49  100  100  100
- 4  4  4  25  25  25  64  64  64  121  121  121
- 9  9  9  36  36  36  81  81  81  144  144  144
+ERROR: LoadError: index n appears only on the left
+    @cast R[r, (n, c)] := M[r, c] ^ 2  n in 1:3
+    @ Main none:1
+Stacktrace:
+ [1] checkallseen(canon::Vector{Any}, store::NamedTuple{(:dict, :assert, :mustassert, :seen, :need, :top, :main), Tuple{Dict{Any, Any}, Vector{Any}, Vector{Any}, Vector{Any}, Vector{Any}, Vector{Any}, Vector{Any}}}, call::TensorCast.CallInfo)
+   @ TensorCast ~/.julia/dev/TensorCast/src/macro.jl:1466
+ [2] _macro(exone::Expr, extwo::Expr, exthree::Nothing; call::TensorCast.CallInfo, dict::Dict{Any, Any})
+   @ TensorCast ~/.julia/dev/TensorCast/src/macro.jl:199
+ [3] var"@cast"(__source__::LineNumberNode, __module__::Module, exs::Vararg{Any})
+   @ TensorCast ~/.julia/dev/TensorCast/src/macro.jl:74
+in expression starting at none:1
 
 julia> R == repeat(M .^ 2, inner=(1,3))
 true
@@ -235,7 +242,7 @@ agrees with that of two indices `x,i`.
 julia> list = [fill(k,2,2) for k in 1:8];
 
 julia> @cast mat[x⊗i, y⊗j] |= list[i⊗j][x,y]  i in 1:2
-4×8 Array{Int64,2}:
+4×8 Matrix{Int64}:
  1  1  3  3  5  5  7  7
  1  1  3  3  5  5  7  7
  2  2  4  4  6  6  8  8
@@ -252,7 +259,7 @@ Alternatively, this reshapes each matrix to a vector, and makes them columns of 
 
 ```jldoctest mylabel
 julia> @cast colwise[x⊗y,i] := (list[i][x,y])^2
-4×8 Array{Int64,2}:
+4×8 Matrix{Int64}:
  1  4  9  16  25  36  49  64
  1  4  9  16  25  36  49  64
  1  4  9  16  25  36  49  64
@@ -269,7 +276,7 @@ But if an index appears outside of square brackets, this is understood as a valu
 
 ```jldoctest mylabel
 julia> @cast _[i,j] := M[i,j]^2 * (i >= j)
-3×4 Array{Int64,2}:
+3×4 Matrix{Int64}:
  1   0   0  0
  4  25   0  0
  9  36  81  0
@@ -280,7 +287,7 @@ true
 julia> using OffsetArrays
 
 julia> @cast _[r,c] := r^2 + c^2  (r in -1:1, c in -7:7)
-3×15 OffsetArray(::Array{Int64,2}, -1:1, -7:7) with eltype Int64 with indices -1:1×-7:7:
+3×15 OffsetArray(::Matrix{Int64}, -1:1, -7:7) with eltype Int64 with indices -1:1×-7:7:
  50  37  26  17  10  5  2  1  2  5  10  17  26  37  50
  49  36  25  16   9  4  1  0  1  4   9  16  25  36  49
  50  37  26  17  10  5  2  1  2  5  10  17  26  37  50
@@ -305,7 +312,7 @@ Both create views, which you may explicitly `collect` using `|=`:
 
 ```jldoctest mylabel
 julia> @cast M2[i,j] := M[i,-j]
-3×4 view(::Array{Int64,2}, :, 4:-1:1) with eltype Int64:
+3×4 view(::Matrix{Int64}, :, 4:-1:1) with eltype Int64:
  10  7  4  1
  11  8  5  2
  12  9  6  3
@@ -316,10 +323,10 @@ true
 julia> using Random; Random.seed!(42); 
 
 julia> @cast M3[i,j] |= M[i,~j]
-3×4 Array{Int64,2}:
- 7  4  1  10
- 8  5  2  11
- 9  6  3  12
+3×4 Matrix{Int64}:
+ 1  10  7  4
+ 2  11  8  5
+ 3  12  9  6
 ```
 
 Note that the minus is a slight deviation from the rule that left equals right for all indices,
@@ -333,12 +340,12 @@ If the elements are matrices, as in `C[:,:,k]'`, then  `adjoint` is conjugate tr
 
 ```jldoctest mylabel
 julia> @cast C[i,i'] := (1:4)[i⊗i′] + im  (i ∈ 1:2, i′ ∈ 1:2)
-2×2 Array{Complex{Int64},2}:
+2×2 Matrix{Complex{Int64}}:
  1+1im  3+1im
  2+1im  4+1im
 
 julia> @cast _[i,j] := C[i,j]'
-2×2 Array{Complex{Int64},2}:
+2×2 Matrix{Complex{Int64}}:
  1-1im  3-1im
  2-1im  4-1im
 
@@ -346,7 +353,7 @@ julia> C' == @cast _[j,i] := C[i,j]'
 true
 
 julia> @cast cubes[1,k′] := (k')^3  (k' in 1:5)  # k' outside square brackets
-1×5 Array{Int64,2}:
+1×5 Matrix{Int64}:
  1  8  27  64  125
 ```
 
@@ -358,7 +365,7 @@ You can use a slice of an array as the arguments of a function, or a `struct`:
 julia> struct Tri{T} x::T; y::T; z::T end;
 
 julia> @cast triples[k] := Tri(M[:,k]...)
-4-element Array{Tri{Int64},1}:
+4-element Vector{Tri{Int64}}:
  Tri{Int64}(1, 2, 3)
  Tri{Int64}(4, 5, 6)
  Tri{Int64}(7, 8, 9)
@@ -379,14 +386,16 @@ which is done by calling `Core._apply(f, xs...) = f(xs...)`:
 julia> funs = [identity, sqrt];
 
 julia> @cast applied[i,j] := funs[i](V[j])
-2×3 Array{Real,2}:
- 10        20        30      
+2×3 Matrix{Real}:
+ 10        20        30
   3.16228   4.47214   5.47723
 
 julia> @pretty @cast applied[i,j] := funs[i](V[j])
 begin
-    local pelican = transmute(V, (nothing, 1))
-    applied = @__dot__(_apply(funs, pelican))
+    @boundscheck funs isa Tuple || (ndims(funs) == 1 || throw(ArgumentError("expected a vector or tuple funs[i]")))
+    @boundscheck V isa Tuple || (ndims(V) == 1 || throw(ArgumentError("expected a vector or tuple V[j]")))
+    local octopus = transmute(V, Val((nothing, 1)))
+    applied = @__dot__(_apply(funs, octopus))
 end
 ```
 
@@ -397,12 +406,12 @@ extract the diagonal of a matrix, or create a diagonal matrix:
 
 ```jldoctest mylabel
 julia> @cast D[i] |= C[i,i]
-2-element Array{Complex{Int64},1}:
+2-element Vector{Complex{Int64}}:
  1 + 1im
  4 + 1im
 
 julia> D2 = @cast _[i,i] := V[i]
-3×3 Diagonal{Int64,Array{Int64,1}}:
+3×3 Diagonal{Int64, Vector{Int64}}:
  10   ⋅   ⋅
   ⋅  20   ⋅
   ⋅   ⋅  30

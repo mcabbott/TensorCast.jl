@@ -10,14 +10,14 @@ This is the basic syntax to sum over one index:
 
 ```jldoctest mylabel; filter = r"begin\n.*\nend"
 julia> @reduce S[i] := sum(j) M[i,j] + 1000
-3-element Array{Int64,1}:
+3-element Vector{Int64}:
  4022
  4026
  4030
 
 julia> @pretty @reduce S[i] := sum(j) M[i,j] + 1000
 begin
-    ndims(M) == 2 || throw(ArgumentError("expected a 2-tensor M[i, j]"))
+    @boundscheck ndims(M) == 2 || throw(ArgumentError("expected a 2-tensor M[i, j]"))
     S = dropdims(sum(@__dot__(M + 1000), dims = 2), dims = 2)
 end
 ```
@@ -36,7 +36,7 @@ For example:
 julia> using Statistics
 
 julia> @reduce A[j] := mean(i) M[i,j]^2
-4-element Array{Float64,1}:
+4-element Vector{Float64}:
    4.666666666666667
   25.666666666666668
   64.66666666666667
@@ -61,11 +61,11 @@ and keep the maximum of each set -- equivalent to the maximum of each column bel
 julia> R = collect(0:5:149);
 
 julia> @reduce Rmax[_,c] := maximum(r) R[(r,c)]  r in 1:3
-1×10 Array{Int64,2}:
+1×10 Matrix{Int64}:
  10  25  40  55  70  85  100  115  130  145
 
 julia> reshape(R, 3,:)
-3×10 Array{Int64,2}:
+3×10 Matrix{Int64}:
   0  15  30  45  60  75   90  105  120  135
   5  20  35  50  65  80   95  110  125  140
  10  25  40  55  70  85  100  115  130  145
@@ -93,11 +93,11 @@ julia> Z = @reduce sum(i,j) M[i,j]
 78
 
 julia> @reduce Z0[] := sum(i,j) M[i,j]   # Z0 = dropdims(sum(M, dims=(1, 2)), dims=(1, 2))
-0-dimensional Array{Int64,0}:
+0-dimensional Array{Int64, 0}:
 78
 
 julia> @reduce Z1[_] := sum(i,j) M[i,j]
-1-element Array{Int64,1}:
+1-element Vector{Int64}:
  78
 ```
 
@@ -186,7 +186,7 @@ take a `dims` keyword, but do not produce trivial dimensions.
 julia> normalise(p; dims) = p ./ sum(p; dims=dims);
 
 julia> @cast N[x,y] := normalise(x) M[x,y]
-3×4 Array{Float64,2}:
+3×4 Matrix{Float64}:
  0.166667  0.266667  0.291667  0.30303
  0.333333  0.333333  0.333333  0.333333
  0.5       0.4       0.375     0.363636
