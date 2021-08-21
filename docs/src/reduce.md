@@ -118,7 +118,7 @@ end
 ```
 
 Notice that the inner sum here is a matrix-vector product, so it will be more efficient to 
-write `@matmul [x] := sum(θ') L[x,θ′] * p[θ′]` to call `L * p` instead of broadcasting. 
+write `@matmul _[x] := sum(θ') L[x,θ′] * p[θ′]` to call `L * p` instead of broadcasting. 
 
 ## Matrix multiplication
 

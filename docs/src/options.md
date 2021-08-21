@@ -53,8 +53,8 @@ The second notation (with `M{:,k}`) is useful for mapslices. Continuing the exam
 ```julia
 M10 = rand(10,1000); 
 mapslices(cumsum, M10, dims=1)          # 630 μs using @btime
-@cast [i,j] := cumsum(M10[:,j])[i]      #  64 μs
-@cast [i,j] := cumsum(M10{:10,j})[i]    #  38 μs
+@cast _[i,j] := cumsum(M10[:,j])[i]      #  64 μs
+@cast _[i,j] := cumsum(M10{:10,j})[i]    #  38 μs
 ```
 
 ## Better broadcasting
@@ -71,15 +71,15 @@ A = randn(4000,4000); B = similar(A);
 ```
 
 The package [LoopVectorization.jl](https://github.com/chriselrod/LoopVectorization.jl) provides 
-a macro `@avx` which modifies broadcasting to use vectorised instructions. 
+a macro `@turbo` which modifies broadcasting to use vectorised instructions. 
 This can be used as follows:
 
 ```julia
 using LoopVectorization, BenchmarkTools
 C = randn(40,40); 
 
-D = @btime @cast [i,j] := exp($C[i,j]);         # 13 μs
-D′ = @btime @cast @avx [i,j] := exp($C[i,j]);   #  3 μs
+D = @btime @cast _[i,j] := exp($C[i,j]);          # 13 μs
+D′ = @btime @cast @turbo _[i,j] := exp($C[i,j]);  #  3 μs
 D ≈ D′
 ```
 
