@@ -249,6 +249,8 @@ end
 
     A = rand(4,5)
     @test exp.(A) ≈ @cast @avx B[i,j] := exp(A[i,j])
+    @test exp.(A) ≈ @cast @turbo B[i,j] := exp(A[i,j])
+    @test exp.(A) ≈ @cast @tturbo B[i,j] := exp(A[i,j])
 
     @test exp.(A') ≈ @cast @avx B[i,j] := exp(A[j,i])
     @test exp.(A.+1) ≈ @cast @avx B[i,j] := exp(A[i,j]+1)

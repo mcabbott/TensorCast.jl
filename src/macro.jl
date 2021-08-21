@@ -60,7 +60,7 @@ Options specified at the end (if several, separated by `,`) are:
 
 Some modifications to broadcasting are possible, after loading the corresponding package:
 * `@cast @strided Z[i,j] := ...` uses Strided.jl's macro, for multi-threaded broadcasting.
-* `@cast @avx Z[i,j] := ...` uses LoopVectorization.jl's macro, for SIMD acceleration.
+* `@cast @turbo Z[i,j] := ...` uses LoopVectorization.jl's macro, for SIMD acceleration.
 * `@cast @lazy Z[i,j] := ...` uses LazyArrays.jl's BroadcastArray type, although there is no such macro.
 
 To create static slices `D[k]{i,j}` you should give all slice dimensions explicitly.
@@ -104,7 +104,7 @@ The option `@lazy` replaces the broadcast expression with a `BroadcastArray`,
 to avoid `materialize`ing the entire array before summing. In the example this is of size `N^3`.
 This needs `using LazyArrays` to work.
 
-The options `@strided` and `@avx` will alter broadcasting operations, 
+The options `@strided` and `@turbo` will alter broadcasting operations, 
 and need `using Strided` or `using LoopVectorization` to work.
 
     @reduce sum(i) A[i] * log(@reduce _[i] := sum(j) A[j] * exp(B[i,j]))
@@ -157,7 +157,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; call::CallInfo=CallInfo()
 
     if Meta.isexpr(exone, :macrocall)
         # New style @cast @avx A[i] := B[i]
-        string(exone.args[1]) in ("@lazy", "@strided", "@avx", "@avxt") || throw(MacroError(
+        string(exone.args[1]) in ("@lazy", "@strided", "@avx", "@avxt", "@turbo", "@tturbo") || throw(MacroError(
             "the macro $(exone.args[1]) isn't one of the ones this understands", call))
         push!(call.flags, Symbol(string(exone.args[1])[2:end]), :premacro)
         return _macro(exone.args[3:end]...; call=call, dict=dict)

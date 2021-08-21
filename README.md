@@ -57,7 +57,7 @@ And it can be used with some packages which modify broadcasting:
 ```julia
 using Strided, LoopVectorization, LazyArrays
 @cast @strided E[φ,γ] = F[φ]^2 * exp(G[γ])           # multi-threaded
-@reduce @avx S[i] := sum(n) -P[i,n] * log(P[i,n])    # SIMD-enhanced
+@reduce @turbo S[i] := sum(n) -P[i,n] * log(P[i,n])  # SIMD-enhanced
 @reduce @lazy M[i,j] := sum(k) U[i,k] * V[j,k]       # non-materialised
 ```
 
