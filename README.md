@@ -89,8 +89,7 @@ More general contractions are allowed by
 Z = ein" ikξ,jkξ -> ijξ "(X,Y)              # numpy-style notation
 ```
 
-Instead [Einsum.jl](https://github.com/ahwillia/Einsum.jl) and [Tullio.jl](https://github.com/mcabbott/Tullio.jl) 
-sum the entire right hand side, but also allow arbitrary (element-wise) functions:
+[Einsum.jl](https://github.com/ahwillia/Einsum.jl) and [Tullio.jl](https://github.com/mcabbott/Tullio.jl) allow arbitrary (element-wise) functions:
 
 ```julia
 @einsum S[i] := -P[i,n] * log(P[i,n]/Q[n])  # sum over n, for each i (also with @reduce above)
@@ -98,13 +97,18 @@ sum the entire right hand side, but also allow arbitrary (element-wise) function
 @tullio Z[i,j] := abs(A[i+x, j+y] * K[x,y]) # convolution, summing over x and y
 ```
 
+Notice that `@einsum` and `@tullio` sum the entire right hand side, like `@reduce` does,
+while `@tensor` sums individual terms.
+
 These produce very different code for actually doing what you request:
-The macros `@tensor` and `@ein` work out a sequence of basic operations (like contraction and traces),
+The macros `@tensor` and `@ein` work out a sequence of basic tensor operations (like contraction and traces),
 while `@einsum` and `@tullio` write the necessary set of nested loops directly (plus optimisations).
+This package's macros `@cast`, `@reduce` and `@matmul` instead write everything in terms of
+whole-array operations (like `reshape`, `permutedims` and broadcasting).
 
 For those who speak Python, `@cast` and `@reduce` allow similar operations to 
 [`einops`](https://github.com/arogozhnikov/einops) (minus the cool video, but plus broadcasting)
-while `@ein` & `@tensor` are closer to [`einsum`](https://numpy.org/doc/stable/reference/generated/numpy.einsum.html).
+while `@ein`, `@tensor` and `@matmul` are closer to [`einsum`](https://numpy.org/doc/stable/reference/generated/numpy.einsum.html).
 
 ## About
 
