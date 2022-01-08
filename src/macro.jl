@@ -1448,7 +1448,7 @@ wherecalled(call::CallInfo) = "@ " * string(call.mod) * " " * string(call.src.fi
 function Base.showerror(io::IO, err::MacroError)
     print(io, err.msg)
     if err.call isa CallInfo
-        printstyled(io, "\n    ", err.call.string; color = :blue)
+        printstyled(io, "\n    ", err.call.string; color = :red)
         printstyled(io, "\n    ", wherecalled(err.call); color = :normal)
     end
 end
