@@ -107,8 +107,9 @@ This package's macros `@cast`, `@reduce` and `@matmul` instead write everything 
 whole-array operations (like `reshape`, `permutedims` and broadcasting).
 
 For those who speak Python, `@cast` and `@reduce` allow similar operations to 
+[`einshape`](https://github.com/deepmind/einshape) or
 [`einops`](https://github.com/arogozhnikov/einops) (minus the cool video, but plus broadcasting)
-while `@ein`, `@tensor` and `@matmul` are closer to [`einsum`](https://numpy.org/doc/stable/reference/generated/numpy.einsum.html).
+while `@matmul` and (from other packages) `@ein`, `@tensor` are closer to [`einsum`](https://numpy.org/doc/stable/reference/generated/numpy.einsum.html).
 
 ## About
 
