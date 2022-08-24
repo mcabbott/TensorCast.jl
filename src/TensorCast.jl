@@ -7,6 +7,10 @@ if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@optle
     @eval Base.Experimental.@optlevel 1
 end
 
+if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_methods"))
+     @eval Base.Experimental.@max_methods 1
+ end
+
 export @cast, @reduce, @matmul, @pretty
 
 using LinearAlgebra, Random
@@ -15,6 +19,7 @@ using MacroTools, StaticArrays
 
 using TransmuteDims, LazyStack
 using LazyStack: stack_iter
+const stack = LazyStack.stack  # since Base exports stack on 1.9
 
 include("macro.jl")
 include("pretty.jl")
