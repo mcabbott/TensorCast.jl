@@ -61,6 +61,9 @@ using Strided, LoopVectorization, LazyArrays
 @reduce @lazy M[i,j] := sum(k) U[i,k] * V[j,k]       # non-materialised
 ```
 
+It should work automatically with most array types.
+This includes GPU arrays such as those from [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl), whose broadcasting is executed on the device.
+
 ## Installation
 
 ```julia
