@@ -155,3 +155,9 @@ end
     @test_broken y == @cast _[i,j,k] := (y[i,:,k]...,)[j]  # (,) does not work with ...
     @test y == @cast _[i,j,k] := tuple(y[i,:,k]...)[j]
 end
+
+@testset "bugs" begin
+    # scatter not handled, previously ignored -- https://github.com/mcabbott/TensorCast.jl/issues/49
+    @test_throws TensorCast.MacroError @pretty @reduce v[ixs[j]] := mean(i) vs[i][j]
+    @test_throws TensorCast.MacroError @pretty @cast v[i][ixs[j]] := vs[j][i]
+end

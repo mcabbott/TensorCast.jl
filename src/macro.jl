@@ -787,6 +787,9 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
     static = @capture(left, ZZ_{ii__})
 
     if @capture(left, Z_[outer__][inner__] | [outer__][inner__] | Z_[outer__]{inner__} | [outer__]{inner__} )
+        if any(containsindexing, outer) || any(containsindexing, inner)
+            throw(MacroError("can't perform scatter by indexing within output arrays's indices", call))
+        end
         if isnothing(Z)
             (:inplace in call.flags) && throw(MacroError("can't write into a nameless tensor", call))
             @warn "please write `@cast _[i][k] := ...` to omit a name, instead of `@cast [i][k] := ...`" call.string maxlog=3 
@@ -799,6 +802,9 @@ function castparse(ex, store::NamedTuple, call::CallInfo; reduce=false)
         checknorepeats(canon, call, " on the left")
 
     elseif @capture(left, Z_[outer__] | [outer__] )
+        if any(containsindexing, outer)  # https://github.com/mcabbott/TensorCast.jl/issues/49
+            throw(MacroError("can't perform scatter by indexing within output arrays's indices", call))
+        end
         if isnothing(Z)
             (:inplace in call.flags) && throw(MacroError("can't write into a nameless tensor", call))
             @warn "please write `@cast _[i] := ...` to omit a name, instead of `@cast [i] := ...`" call.string maxlog=3 
