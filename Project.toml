@@ -10,12 +10,13 @@ LazyStack = "1fad7336-0346-5a1a-a56f-a06ba010965b"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SnoopPrecompile = "66db9d55-30c0-4569-8b51-7e840670fc0c"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 TransmuteDims = "24ddb15e-299a-5cc3-8414-dbddc482d9ca"
 
 [compat]
 ChainRulesCore = "1.11"
-Compat = "3.46, 4.2"  # for stack
+Compat = "3.46, 4.2"
 LazyArrays = "0.21, 0.22"
 LazyStack = "0.1.0"
 MacroTools = "0.5"
