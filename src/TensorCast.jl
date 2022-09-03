@@ -17,9 +17,9 @@ using LinearAlgebra, Random
 
 using MacroTools, StaticArrays
 
-using TransmuteDims, LazyStack
-using LazyStack: stack_iter
-const stack = LazyStack.stack  # since Base exports stack on 1.9
+using TransmuteDims, LazyStack, Compat
+using LazyStack: lazystack
+const eagerstack = Compat.stack  # in Base on 1.9
 
 include("macro.jl")
 include("pretty.jl")

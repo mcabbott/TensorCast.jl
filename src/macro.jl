@@ -428,10 +428,10 @@ function standardglue(ex, target, store::NamedTuple, call::CallInfo)
         AB = :( TensorCast.static_glue($B) )
         pop!(call.flags, :collected, :ok)
     elseif :lazy_0 in call.flags
-        AB = :( TensorCast.stack_iter($B) ) # really from LazyStack
+        AB = :( TensorCast.eagerstack($B) ) # really from Base/Compat
         push!(call.flags, :collected)
     else # if :lazy in call.flags
-        AB = :( TensorCast.stack($B) )
+        AB = :( TensorCast.lazystack($B) ) # really from LazyStack
         pop!(call.flags, :collected, :ok)
     end
 
