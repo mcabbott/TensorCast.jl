@@ -1,7 +1,7 @@
 name = "TensorCast"
 uuid = "02d47bb6-7ce6-556a-be16-bb1710789e2b"
 authors = ["Michael Abbott"]
-version = "0.4.5"
+version = "0.4.6"
 
 [deps]
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
