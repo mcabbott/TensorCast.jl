@@ -83,7 +83,7 @@ Combining this with slicing from `M[:,j]` is a convenient way to perform `mapsli
 
 ```jldoctest mylabel
 julia> @cast C[i,j] := cumsum(M[:,j])[i]
-3×4 stack(::Vector{Vector{Int64}}) with eltype Int64:
+3×4 lazystack(::Vector{Vector{Int64}}) with eltype Int64:
  1   4   7  10
  3   9  15  21
  6  15  24  33
@@ -205,28 +205,23 @@ as `size(A)` is known:
 julia> @cast A[i,j] = 10 * collect(1:12)[i⊗j];
 ```
 
+## Repeating
+
 If the right hand side is independent of an index, then the same result is repeated. 
 The range of the index must still be known:
 
 ```jldoctest mylabel
 julia> @cast R[r,(n,c)] := M[r,c]^2  (n in 1:3)
-ERROR: LoadError: index n appears only on the left
-    @cast R[r, (n, c)] := M[r, c] ^ 2  n in 1:3
-    @ Main none:1
-Stacktrace:
- [1] checkallseen(canon::Vector{Any}, store::NamedTuple{(:dict, :assert, :mustassert, :seen, :need, :top, :main), Tuple{Dict{Any, Any}, Vector{Any}, Vector{Any}, Vector{Any}, Vector{Any}, Vector{Any}, Vector{Any}}}, call::TensorCast.CallInfo)
-   @ TensorCast ~/.julia/dev/TensorCast/src/macro.jl:1466
- [2] _macro(exone::Expr, extwo::Expr, exthree::Nothing; call::TensorCast.CallInfo, dict::Dict{Any, Any})
-   @ TensorCast ~/.julia/dev/TensorCast/src/macro.jl:199
- [3] var"@cast"(__source__::LineNumberNode, __module__::Module, exs::Vararg{Any})
-   @ TensorCast ~/.julia/dev/TensorCast/src/macro.jl:74
-in expression starting at none:1
+3×12 Matrix{Int64}:
+ 1  1  1  16  16  16  49  49  49  100  100  100
+ 4  4  4  25  25  25  64  64  64  121  121  121
+ 9  9  9  36  36  36  81  81  81  144  144  144
 
 julia> R == repeat(M .^ 2, inner=(1,3))
 true
 
-julia> @cast R[r,(c,n)] = M[r,c]  # repeat(M, outer=(1,3)), uses size(R)
-3×12 Array{Int64,2}:
+julia> @cast similar(R)[r,(c,n)] = M[r,c]  # repeat(M, outer=(1,3)), uses size(R)
+3×12 Matrix{Int64}:
  1  4  7  10  1  4  7  10  1  4  7  10
  2  5  8  11  2  5  8  11  2  5  8  11
  3  6  9  12  3  6  9  12  3  6  9  12

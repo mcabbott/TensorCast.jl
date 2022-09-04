@@ -183,8 +183,9 @@ end
     @test y == @cast _[i,j,k] := tuple(y[i,:,k]...)[j]
 end
 
+using TensorCast: MacroError, _macro, CallInfo
 @testset "bugs" begin
     # scatter not handled, previously ignored -- https://github.com/mcabbott/TensorCast.jl/issues/49
-    @test_throws TensorCast.MacroError @pretty @reduce v[ixs[j]] := mean(i) vs[i][j]
-    @test_throws TensorCast.MacroError @pretty @cast v[i][ixs[j]] := vs[j][i]
+    @test_throws MacroError _macro(:(  v[ixs[j]] := mean(i) ),:(  vs[i][j] ), call=CallInfo(:reduce))
+    @test_throws MacroError _macro(:(  v[i][ixs[j]] := vs[j][i] ), call=CallInfo())
 end

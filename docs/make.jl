@@ -1,10 +1,10 @@
 
 using Documenter
-using TensorCast
+using TensorCast, OffsetArrays
 
 makedocs(
     sitename = "TensorCast",
-    modules = [TensorCast],
+    modules = [TensorCast, OffsetArrays],
     pages = [
         "Home" => "index.md",
         "Basics" => "basics.md",
