@@ -22,12 +22,12 @@ M = rand(1:99, 3,4)
 @cast S[k][i] := M[i,k] lazy=false  # the same
 ```
 
-The default way of un-slicing is `reduce(hcat, ...)`, which creates a new array. 
-But there are other options, controlled by keywords after the expression:
+The default way of un-slicing uses [LazyStack.jl](https://github.com/mcabbott/LazyStack.jl) to create a view.
+The keyword `lazy=false` after the expression will turn this off, to make a solid array using Base's code:
 
 ```julia
-@cast A[i,k] := S[k][i] lazy=false  # A = reduce(hcat, B)
 @cast A[i,k] := S[k][i]             # A = LazyStack.stack(B)
+@cast A[i,k] := S[k][i] lazy=false  # A = reduce(hcat, B)
 
 size(A) == (3, 4) # true
 ```

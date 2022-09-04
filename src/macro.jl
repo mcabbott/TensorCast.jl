@@ -187,6 +187,7 @@ function _macro(exone, extwo=nothing, exthree=nothing; call::CallInfo=CallInfo()
 
     # Third pass to standardise & then glue, postwalk sees A[i] before A[i][j]
     right3 = MacroTools.postwalk(x -> standardglue(x, canon, store, call), right2)
+    right3 = checkallseen(right3, canon, store, call)
 
     if !(:matmul in call.flags)
         # Then finally broadcasting if necc (or just permutedims etc. if not):
@@ -195,8 +196,6 @@ function _macro(exone, extwo=nothing, exthree=nothing; call::CallInfo=CallInfo()
         # or, for matmul, can I change just this? outputinplace is also going to need changing.
         right4 = matmultarget(right3, canon, parsed, store, call)
     end
-
-    checkallseen(canon, store, call) # this must be run before inplaceoutput()
 
     # Return to LHS, build up what it requested:
     if :inplace in call.flags
@@ -1345,6 +1344,25 @@ end
 # end
 
 """
+    checkallseen(rhs, ...)
+
+Now not just a check, but also inserts trivial broadcasting, if needed, 
+over indices omitted from the rhs.
+"""
+function checkallseen(ex, canon, store, call)
+    right = setdiff(store.seen, canon)
+    length(right) > 0 && throw(MacroError("index $(right[1]) appears only on the right", call))
+    left = setdiff(canon, unique!(store.seen))
+    # length(left) > 0 && throw(MacroError("index $(left[1]) appears only on the left", call))
+    if isempty(left)
+        ex
+    else
+        fake = map(i -> recursemacro(i, canon, store, call), left)
+        :( TensorCast.onlyfirst($ex, $(fake...)) )
+    end
+end
+
+"""
     needview!([:, 3, A])   # true, need view(A, :,3,:)
     needview!([:, :_, :])  # false, can use rview(A, :,1,:)
 
@@ -1467,14 +1485,6 @@ function checknorepeats(flat, call=nothing, msg=nothing)
     end
 end
 
-function checkallseen(canon, store, call)
-    left = setdiff(canon, unique!(store.seen))
-    length(left) > 0 && throw(MacroError("index $(left[1]) appears only on the left", call))
-    right = setdiff(store.seen, canon)
-    length(right) > 0 && throw(MacroError("index $(right[1]) appears only on the right", call))
-end
-
-# this may never be necessary with checkallseen?
 function findcheck(i::Symbol, flat::Vector, call=nothing, msg=nothing)
     msg == nothing && (msg = " in " * string(:( [$(flat...)] )))
     res = findfirst(isequal(i), flat)
@@ -1590,11 +1600,8 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
         newleft = standardise(parsed.left, store, call)
         @capture(newleft, zed_[ijk__]) || throw(MacroError("failed to parse LHS correctly, $(parsed.left) -> $newleft"))
 
-        if !(zed isa Symbol) # then standardise did something!
+        if newleft != parsed.left  # then standardise did something!
             push!(call.flags, :showfinal)
-            Zsym = gensym(:reverse)
-            push!(out, :( local $Zsym = $zed ) )
-            zed = Zsym
         end
     end
 
@@ -1619,7 +1626,12 @@ function inplaceoutput(ex, canon, parsed, store::NamedTuple, call::CallInfo)
     end
 
     if :showfinal in call.flags
-        push!(out, parsed.name)
+        A = parsed.name
+        if A isa Symbol || @capture(A, AA_.ff_)
+        else
+            A = Symbol(A,"_val") # exact same symbol is used by standardise()
+        end
+        push!(out, A)
     end
 
     return out

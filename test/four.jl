@@ -81,6 +81,26 @@ end
     @test E ≈ sum((1:2) ./ (1:4)')
 end
 
+@testset "repeats" begin
+    @test [1,1,1] == @cast _[i] := 1  (i in 1:3)
+    @test [1,1,1] == @cast rand(3)[i] = 1
+
+    M = reshape(1:12, 3,4)
+    repeat(M, inner=(1,3)) == @cast _[i, (r,j)] := M[i,j]  r in 1:3
+    repeat(M, outer=(1,3)) == @cast _[i, (j,r)] := M[i,j]  r in 1:3
+
+    @cast T[i,r,j] := M[i,j]  r in 1:3
+    @test T[:,3,:] == M
+
+    @test 100 .+ sum(M, dims=2) == @cast _[i,k] := sum(M[i,:])+100  k in 1:1
+    @test 4 .+ sum(M, dims=2) == @reduce _[i,k] := sum(j) M[i,j]+1  k in 1:1
+    @test repeat(sum(M, dims=2), inner=(1,2)) == @reduce _[i,k] := sum(j) M[i,j]  k in 1:2
+    @test repeat(M, inner=(1,2)) == @cast rand(3,8)[i,(k,j)] = M[i,j]
+
+    @test_throws Exception @macroexpand @cast _[i] := A[i,j]  # j doesn't appear on left
+    # @test_throws Exception @macroexpand @cast _[i] := i+j  (i in 1:2, j in 1:3)
+end
+
 @testset "offset handling" begin
     using OffsetArrays
     @cast A[i,j] := i+10j  (i in 0:1, j in 7:15)
@@ -90,6 +110,13 @@ end
     # reshape
     @cast B[(i,k),j] := A[i,(j,k)]  k in 1:3
     @test axes(B) === (Base.OneTo(6), Base.OneTo(3))
+
+    @cast E[(j,i),k] := A[i,j]^2  (k in 10:11)  # RHS indep k
+    @test E[:,11] == vec(A') .^ 2
+
+    # dropdims
+    @cast F[i,k,j] := A[i,j]  k in 5:5  # a trivial dimension not indexed from 1
+    @test A == @cast _[i,j] := F[i,_,j]
 
     # reduction
     @reduce C[_,j] := sum(i) A[i,j]
@@ -156,8 +183,9 @@ end
     @test y == @cast _[i,j,k] := tuple(y[i,:,k]...)[j]
 end
 
+using TensorCast: MacroError, _macro, CallInfo
 @testset "bugs" begin
     # scatter not handled, previously ignored -- https://github.com/mcabbott/TensorCast.jl/issues/49
-    @test_throws TensorCast.MacroError @pretty @reduce v[ixs[j]] := mean(i) vs[i][j]
-    @test_throws TensorCast.MacroError @pretty @cast v[i][ixs[j]] := vs[j][i]
+    @test_throws MacroError _macro(:(  v[ixs[j]] := mean(i) ),:(  vs[i][j] ), call=CallInfo(:reduce))
+    @test_throws MacroError _macro(:(  v[i][ixs[j]] := vs[j][i] ), call=CallInfo())
 end
