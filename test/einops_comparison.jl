@@ -5,6 +5,8 @@ published at ICLR 2022'; Listing 1.
 https://openreview.net/pdf?id=oapKSVM2bcj
 """
 
+using TensorCast, Test, Statistics, Compat
+
 @testset "Einops paper - Listing 1" begin
 
   # Format:
@@ -17,8 +19,9 @@ https://openreview.net/pdf?id=oapKSVM2bcj
   @testset "Test 1" begin
     x = rand(3, 4, 5, 6)
     @test (
-      permutedims(x, [1, 4, 2, 3]) 
-      == @cast _[b, c, h, w] := x[b, h, w, c])
+      permutedims(x, [1, 4, 2, 3]) ==
+      @cast _[b, c, h, w] := x[b, h, w, c]
+    )
   end
 
   # 2 np.reshape(x, [x.shape[0]*x.shape[1], x.shape[2]]) 
@@ -37,7 +40,9 @@ https://openreview.net/pdf?id=oapKSVM2bcj
     x = rand(1, 2, 3, 4)
     @test (
       reshape(x, 2, 3, 4) ==
-      @cast _[h, w, c] := x[_, h, w, c])
+      dropdims(x, dims=1) ==
+      @cast _[h, w, c] := x[_, h, w, c]
+    )
   end
 
   # 4 np.expand_dims(x, -1) 
@@ -46,7 +51,8 @@ https://openreview.net/pdf?id=oapKSVM2bcj
     x = rand(2, 3, 4)
     @test (
       reshape(x, 2, 3, 4, 1) ==
-      @cast _[h, w, c, 1] := x[h, w, c])
+      @cast _[h, w, c, 1] := x[h, w, c]
+    )
   end
 
   # 5 np.stack([r, g, b], axis=2) 
@@ -55,7 +61,9 @@ https://openreview.net/pdf?id=oapKSVM2bcj
     xs = [rand(2, 2) for _ in 1:3]
     @test (
       cat(xs..., dims=3) ==
-      @cast _[h, w, i] := xs[i][h, w])
+      stack(xs) ==
+      @cast _[h, w, i] := xs[i][h, w]
+    )
   end
 
   # 6 np.concatenate([r, g, b], axis=0) 
@@ -74,7 +82,8 @@ https://openreview.net/pdf?id=oapKSVM2bcj
   @testset "Test 7" begin
     x = rand(3, 4, 5)
     @test (
-      x[:] == 
+      x[:] ==
+      vec(x) ==
       @cast _[(b, t, c)] := x[b, t, c]
     )
   end
@@ -114,7 +123,8 @@ https://openreview.net/pdf?id=oapKSVM2bcj
   @testset "Test 11" begin
     x = rand(2, 2, 3, 4)
     @test (
-      maximum(x, dims=[2, 3])[:, 1, 1, :] == 
+      maximum(x, dims=[2, 3])[:, 1, 1, :] ==
+      dropdims(maximum(x, dims=(2, 3)), dims=(2, 3)) ==
       @reduce _[b, c] := maximum(h, w) x[b, h, w, c]
     )
   end
@@ -124,10 +134,13 @@ https://openreview.net/pdf?id=oapKSVM2bcj
   @testset "Test 12" begin
     x = rand(2, 2, 3, 4)
     @test (
-      [mean(x)] == 
-      @reduce _[_] := mean(b, h, w, c) x[b, h, w, c]
+      [mean(x)] ==
+      @reduce _[_] := mean(b, h, w, c) x[b, h, w, c]  # reduce to a 1-element vector
     )
-  end
+    @test (
+      mean(x) ==
+      @reduce _ := mean(b, h, w, c) x[b, h, w, c]  # reduce to a number
+    )  end
 
   # 13 np.mean(x, axis=(1, 2), keepdims=True) 
   #    reduce(x, 'b h w c -> b () () c', 'mean') 
