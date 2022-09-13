@@ -5,7 +5,10 @@ published at ICLR 2022'; Listing 1.
 https://openreview.net/pdf?id=oapKSVM2bcj
 """
 
-using TensorCast, Test, Statistics, Compat
+using TensorCast: @cast, @reduce
+using Test: @test, @testset
+using Statistics: mean
+using Compat: stack
 
 @testset "Einops paper - Listing 1" begin
 
