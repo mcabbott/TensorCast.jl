@@ -111,8 +111,9 @@ whole-array operations (like `reshape`, `permutedims` and broadcasting).
 
 For those who speak Python, `@cast` and `@reduce` allow similar operations to 
 [`einshape`](https://github.com/deepmind/einshape) or
-[`einops`](https://github.com/arogozhnikov/einops) (minus the cool video, but plus broadcasting)
-while `@matmul` and (from other packages) `@ein`, `@tensor` are closer to [`einsum`](https://numpy.org/doc/stable/reference/generated/numpy.einsum.html).
+[`einops`](https://github.com/arogozhnikov/einops) (minus the cool video, but plus broadcasting).
+In the tests, [this file](https://github.com/mcabbott/TensorCast.jl/blob/master/test/einops_comparison.jl) translates many examples.
+Python's [`einsum`](https://numpy.org/doc/stable/reference/generated/numpy.einsum.html) is closer `OMEinsum.@ein` and  `TensorOperations.@tensor`, and this package's `@matmul`.
 
 ## About
 
