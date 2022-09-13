@@ -21,3 +21,4 @@ using LoopVectorization
 @testset "old readmes" begin include("old.jl") end
 @testset "new in 0.2"  begin include("two.jl") end
 @testset "new in 0.4" begin include("four.jl") end
+@testset "einops comp" begin include("einops_comparison.jl") end
