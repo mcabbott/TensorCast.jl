@@ -25,7 +25,7 @@ include("macro.jl")
 include("pretty.jl")
 
 module Fast # shield non-macro code from @optlevel 1
-    using ..TensorCast: pretty
+    using TensorCast: pretty
     using LinearAlgebra, StaticArrays
 
     include("slice.jl")
