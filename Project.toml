@@ -1,7 +1,7 @@
 name = "TensorCast"
 uuid = "02d47bb6-7ce6-556a-be16-bb1710789e2b"
 authors = ["Michael Abbott"]
-version = "0.4.6"
+version = "0.4.7"
 
 [deps]
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
@@ -20,7 +20,7 @@ LazyArrays = "0.21, 0.22"
 LazyStack = "0.1.0"
 MacroTools = "0.5"
 StaticArrays = "1.3"
-Strided = "1.1"
+Strided = "1.1, 2"
 TransmuteDims = "0.1.13"
 julia = "1.6"
 
