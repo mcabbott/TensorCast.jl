@@ -16,7 +16,7 @@ TransmuteDims = "24ddb15e-299a-5cc3-8414-dbddc482d9ca"
 [compat]
 ChainRulesCore = "1.11"
 Compat = "3.46, 4.2"  # for stack
-LazyArrays = "0.21, 0.22"
+LazyArrays = "0.21, 0.22, 1"
 LazyStack = "0.1.0"
 MacroTools = "0.5"
 StaticArrays = "1.3"
