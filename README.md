@@ -43,6 +43,11 @@ All of these are converted into array commands like `reshape` and `permutedims`
 and `eachslice`, plus a [broadcasting expression](https://julialang.org/blog/2017/01/moredots) if needed, 
 and `sum` /  `sum!`, or `*` / `mul!`. This package just provides a convenient notation.
 
+> [!WARNING]
+> Writing `@reduce C[i,j] := sum(k) A[i,k] * B[k,j]` is terrible way to perform matrix multiplication.
+> This creates a huge array `A .* reshape(B, 1, size(B)...)` before summing, which is much slower than the built-in `A * B`.
+> [See below]([#Elsewhere](#elsewhere)) for other packages which aim to be good at such operations.
+
 From version 0.4, it relies on [TransmuteDims.jl](https://github.com/mcabbott/TransmuteDims.jl) 
 to handle re-ordering of dimensions, and [LazyStack.jl](https://github.com/mcabbott/LazyStack.jl) 
 to handle slices. It should also now work with [OffsetArrays.jl](https://github.com/JuliaArrays/OffsetArrays.jl):
