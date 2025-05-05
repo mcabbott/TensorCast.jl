@@ -243,9 +243,9 @@ end
     @test mat[1,2] != 99
 
 end
-@testset "@avx" begin
+VERSION < v"1.12-" && @testset "@avx" begin
 
-    using LoopVectorization
+    using LoopVectorization  # supports 1.10 and maybe 1.11, likely to be broken on master
 
     A = rand(4,5)
     @test exp.(A) ≈ @cast @avx B[i,j] := exp(A[i,j])

@@ -1,4 +1,4 @@
-
+if !isdefined(LinearAlgebra, :diagview)  # trying to solve error on 1.12
 """
     diagview(M) = view(M, diagind(M))
 
@@ -7,6 +7,7 @@ Like `diag(M)` but makes a view.
 diagview(A::AbstractMatrix) = view(A, diagind(A))
 
 diagview(A::LinearAlgebra.Diagonal) = A.diag
+end
 
 """
     rvec(x) = [x]
