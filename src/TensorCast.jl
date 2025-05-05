@@ -40,6 +40,7 @@ module Fast # shield non-macro code from @optlevel 1
 end
 using .Fast
 const mul! = Fast.mul!
+const diagview = Fast.diagview  # trying to solve error with Hint: a global variable of this name also exists in LinearAlgebra.
 
 include("warm.jl") # saves 3s in my test
 
